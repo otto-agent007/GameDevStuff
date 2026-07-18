@@ -427,6 +427,16 @@ test('workflow policy is pinned, least-privileged, native, locked and publish ne
   assert.match(attributes, /^skills\/pixel-sprite-animation-pipeline\/references\/pixel-snapper-upstream\.LICENSE -text$/m);
 });
 
+test('release workflow verifies committed license bytes independent of checkout line endings', async () => {
+  const workflowFile = path.join(ROOT, '.github', 'workflows', 'pixel-snapper-release.yml');
+  const source = await fs.readFile(workflowFile, 'utf8');
+  const referencePath = 'skills/pixel-sprite-animation-pipeline/references/pixel-snapper-upstream.LICENSE';
+
+  assert.doesNotMatch(source, /cmp upstream\/LICENSE/);
+  assert.match(source, /git -C upstream rev-parse "\$\{UPSTREAM_COMMIT\}:LICENSE"/);
+  assert.match(source, new RegExp(`git -C release-tools rev-parse "HEAD:${referencePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`));
+});
+
 test('approved release documents pin immutable v1.0.0 commit and retain the former README-only commit only as history', async () => {
   const approvedCommit = '5743009265051098831ad7298092072325d1149b';
   const releaseTag = 'pixel-snapper-v1.0.0-commit.5743009';
