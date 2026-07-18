@@ -117,7 +117,12 @@ function jsonEqual(left, right) {
 }
 
 async function readRawImage(file, animated = false) {
-  const pipeline = sharp(file, animated ? { animated: true } : undefined).ensureAlpha().raw();
+  // Let Node own and close the file handle before libvips sees the image.  Passing
+  // a path directly to Sharp can keep that path locked on Windows until libvips
+  // releases its native image, which prevents the correction staging directory
+  // from being renamed or removed even after the read has completed.
+  const input = await fs.readFile(file);
+  const pipeline = sharp(input, animated ? { animated: true } : undefined).ensureAlpha().raw();
   try {
     const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
     return { data, info };
@@ -125,7 +130,8 @@ async function readRawImage(file, animated = false) {
 }
 
 async function readImageMetadata(file, options) {
-  const pipeline = sharp(file, options);
+  const input = await fs.readFile(file);
+  const pipeline = sharp(input, options);
   try { return await pipeline.metadata(); }
   finally { pipeline.destroy(); }
 }
