@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import {
   canonicalPath,
+  canonicalRelativePath,
   isPathContained,
   sameCanonicalPath
 } from '../scripts/lib/path-security.mjs';
@@ -32,4 +33,12 @@ test('canonical containment accepts an aliased child but rejects an aliased sibl
 
   assert.equal(isPathContained(root, child, path.win32), true);
   assert.equal(isPathContained(root, sibling, path.win32), false);
+});
+
+test('canonical relative paths serialize a Windows short-name child portably', async () => {
+  assert.equal(await canonicalRelativePath(
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\run',
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\run\\frames\\idle.png',
+    { fsImpl, pathApi: path.win32 }
+  ), 'frames/idle.png');
 });

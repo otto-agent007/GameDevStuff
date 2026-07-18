@@ -23,3 +23,13 @@ export async function sameCanonicalPath(left, right, options = {}) {
   ]);
   return comparisonKey(canonicalLeft, pathApi) === comparisonKey(canonicalRight, pathApi);
 }
+
+export async function canonicalRelativePath(root, candidate, options = {}) {
+  const pathApi = options.pathApi ?? path;
+  const [canonicalRoot, canonicalCandidate] = await Promise.all([
+    canonicalPath(root, options),
+    canonicalPath(candidate, options)
+  ]);
+  if (!isPathContained(canonicalRoot, canonicalCandidate, pathApi)) throw new Error('canonical path escaped its root');
+  return pathApi.relative(canonicalRoot, canonicalCandidate).split(pathApi.sep).join('/');
+}

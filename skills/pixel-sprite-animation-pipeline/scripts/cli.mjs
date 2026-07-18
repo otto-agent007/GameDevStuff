@@ -19,7 +19,7 @@ import { readRgba, sha256 } from './lib/image.mjs';
 import { validateRun } from './lib/validate.mjs';
 import { repairValidationRun } from './lib/repair.mjs';
 import { createCorrectionContract, loadCorrectionContext, sealCorrectionContract } from './lib/contract.mjs';
-import { isPathContained } from './lib/path-security.mjs';
+import { canonicalRelativePath, isPathContained } from './lib/path-security.mjs';
 
 const EXIT = Object.freeze({ success: 0, error: 1, handoff: 2, objectiveFailure: 3, review: 4 });
 const REVIEW_CORRECTIONS = new Set(['palette-remap-review', 'stop-for-regeneration', 'stop-for-review', 'timing-or-transition-review']);
@@ -150,10 +150,9 @@ function sameFailure(left, right) {
   return left?.code === right?.code && ['stage', 'frame', 'target'].every((key) => right[key] === undefined || left[key] === right[key]);
 }
 
-function portablePath(runDir, file) {
-  const relative = path.relative(runDir, file).replaceAll('\\', '/');
-  if (relative === '..' || relative.startsWith('../') || path.isAbsolute(relative)) throw new Error('run artifact escaped the versioned run directory');
-  return relative;
+async function portablePath(runDir, file) {
+  try { return await canonicalRelativePath(runDir, file); }
+  catch { throw new Error('run artifact escaped the versioned run directory'); }
 }
 
 function portableValue(value, runDir) {
@@ -484,10 +483,10 @@ async function initialRun(options) {
     manifestSha256: run.manifestSha256,
     configSha256: stableHash(config),
     transition: { secretSha256: await sha256(transitionSecretPath) },
-    anchor: { path: portablePath(run.runDir, anchor.path), sha256: anchor.sha256 },
+    anchor: { path: await portablePath(run.runDir, anchor.path), sha256: anchor.sha256 },
     references: {
-      anchor: { path: portablePath(run.runDir, prepared.generationPlate), sha256: prepared.hashes.generationPlate },
-      matrix: { path: portablePath(run.runDir, prepared.pixelMatrix), sha256: prepared.hashes.pixelMatrix, blockSize: generationScale, usage: 'constraint-only-not-composited' },
+      anchor: { path: await portablePath(run.runDir, prepared.generationPlate), sha256: prepared.hashes.generationPlate },
+      matrix: { path: await portablePath(run.runDir, prepared.pixelMatrix), sha256: prepared.hashes.pixelMatrix, blockSize: generationScale, usage: 'constraint-only-not-composited' },
       ...(contractReference ? { animationContract: contractReference } : {})
     },
     ...(animationContract ? { animationContractSha256: animationContract.sha256 } : {}),
@@ -577,7 +576,7 @@ async function loadResume(options) {
     for (const frameRecord of handoff.frames) {
       if (path.isAbsolute(frameRecord.path) || path.win32.isAbsolute(frameRecord.path) || frameRecord.path.includes('\\') || frameRecord.path === '..' || frameRecord.path.startsWith('../') || path.posix.normalize(frameRecord.path) !== frameRecord.path) throw new Error('frame approval handoff output path is invalid');
       const physical = path.join(path.dirname(snapReceiptArtifact.path), ...frameRecord.path.split('/'));
-      await safeRunArtifact(runDir, portablePath(runDir, physical), frameRecord.sha256, `frame approval output ${frameRecord.index}`);
+      await safeRunArtifact(runDir, await portablePath(runDir, physical), frameRecord.sha256, `frame approval output ${frameRecord.index}`);
     }
   }
   return { projectDir, runDir, handoffPath: handoffArtifact.path, handoffSha256: handoffArtifact.sha256, handoff, manifest, config: manifest.config, animationContract, anchorArtifact, transitionSecret };
@@ -587,7 +586,7 @@ async function writeSnapperResume(context, generated, snapResult) {
   const handoffPath = path.join(context.runDir, 'snapper-handoff.json');
   const sourceFrames = await Promise.all(generated.map(async (file, index) => {
     const image = await readRgba(file);
-    return { index, path: portablePath(context.runDir, file), sha256: await sha256(file), width: image.width, height: image.height };
+    return { index, path: await portablePath(context.runDir, file), sha256: await sha256(file), width: image.width, height: image.height };
   }));
   const requiredOutputs = generated.map((file, index) => ({ index, path: `snapped/frame-${String(index).padStart(2, '0')}-snapped.png`, sourceSha256: sourceFrames[index].sha256 }));
   const handoff = {
@@ -637,7 +636,7 @@ async function writeApprovalResume(context, snapProvenance) {
     sha256: output.sha256,
     landmarkSemantic: definitions[index].landmarkSemantic
   }));
-  const snapReceipt = { path: portablePath(context.runDir, receiptPath), sha256: selectedReceipt.sha256 };
+  const snapReceipt = { path: await portablePath(context.runDir, receiptPath), sha256: selectedReceipt.sha256 };
   const contractPath = context.handoff.references?.animationContract?.path ?? 'animation-contract.json';
   const handoffPath = path.join(context.runDir, 'frame-approval-handoff.json');
   const handoff = {
@@ -710,7 +709,7 @@ async function acquireApprovalTransition(context, selection) {
   return {
     async fail() { await release(); },
     async complete(reportPath) {
-      await writeJsonNew(finalPath, { version: 1, from: context.handoffSha256, frameApprovalSha256: selection.sha256, approvalVersion: selection.version, report: portablePath(context.runDir, reportPath) });
+      await writeJsonNew(finalPath, { version: 1, from: context.handoffSha256, frameApprovalSha256: selection.sha256, approvalVersion: selection.version, report: await portablePath(context.runDir, reportPath) });
       await release();
     }
   };
@@ -801,9 +800,9 @@ async function finishRun(context, snappedFrames, snapProvenance = { toolProvenan
   const artifactFiles = contracted
     ? [exported.metadata, ...Object.values(exported.clips).flatMap((clip) => [...clip.runtimeFrames, clip.sheet, clip.metadata, clip.preview])]
     : [...exported.runtimeFrames, exported.sheet, exported.metadata, exported.preview];
-  const artifacts = await Promise.all(artifactFiles.map(async (file) => ({ path: portablePath(context.runDir, file), sha256: await sha256(file) })));
+  const artifacts = await Promise.all(artifactFiles.map(async (file) => ({ path: await portablePath(context.runDir, file), sha256: await sha256(file) })));
   const correctionManifest = automaticCorrection?.correction?.manifest
-    ? { path: portablePath(context.runDir, automaticCorrection.correction.manifest), sha256: await sha256(automaticCorrection.correction.manifest) }
+    ? { path: await portablePath(context.runDir, automaticCorrection.correction.manifest), sha256: await sha256(automaticCorrection.correction.manifest) }
     : null;
   const lessons = correctionManifest ? automaticCorrection.correction.actions.flatMap((action, actionIndex) => action.approved && LEARNABLE_FAILURES.has(action.code) && action.evidenceVerification?.afterValidation?.passed === true ? [{
     failureCode: action.code,
@@ -818,7 +817,7 @@ async function finishRun(context, snappedFrames, snapProvenance = { toolProvenan
     runId: context.handoff.runId,
     manifestSha256: context.handoff.manifestSha256,
     validation: { ...portableValue(validation, context.runDir), artifacts },
-    correctionContract: { path: portablePath(context.runDir, correctionContract.path), sha256: correctionContract.sha256 },
+    correctionContract: { path: await portablePath(context.runDir, correctionContract.path), sha256: correctionContract.sha256 },
     ...(provenance ?? {}),
     toolProvenanceVerified: snapProvenance.toolProvenanceVerified === true,
     snapReceipt: snapProvenance.receipt ? { path: snapProvenance.receipt.path, sha256: snapProvenance.receipt.sha256 } : null,
@@ -840,8 +839,8 @@ async function finishRun(context, snappedFrames, snapProvenance = { toolProvenan
   };
   const recorded = await recordRunResultIdempotent({ context, report });
   const correctionReceipt = await sealCorrectionContract({ projectDir: context.projectDir, runDir: context.runDir, runId: context.handoff.runId, contract: correctionContract });
-  if (validation.passed && context.handoff.kind !== 'frame-approval') await writeJsonIdempotent(path.join(context.runDir, `transition-${context.handoff.kind}.json`), { version: 1, from: context.handoffSha256, report: portablePath(context.runDir, recorded.reportPath) }, 'completion transition receipt');
-  const result = { state: 'complete', runId: context.handoff.runId, normalized, exported, validation, correction: automaticCorrection?.correction ?? null, correctionReceipt: { path: portablePath(context.runDir, correctionReceipt.path), sha256: correctionReceipt.sha256, signature: correctionReceipt.signature }, report: { ...report, ...recorded }, recorded, profilePromotion: report.profilePromotion };
+  if (validation.passed && context.handoff.kind !== 'frame-approval') await writeJsonIdempotent(path.join(context.runDir, `transition-${context.handoff.kind}.json`), { version: 1, from: context.handoffSha256, report: await portablePath(context.runDir, recorded.reportPath) }, 'completion transition receipt');
+  const result = { state: 'complete', runId: context.handoff.runId, normalized, exported, validation, correction: automaticCorrection?.correction ?? null, correctionReceipt: { path: await portablePath(context.runDir, correctionReceipt.path), sha256: correctionReceipt.sha256, signature: correctionReceipt.signature }, report: { ...report, ...recorded }, recorded, profilePromotion: report.profilePromotion };
   setValidationExit(validation);
   return result;
 }
@@ -852,7 +851,7 @@ async function resumeRun(options, { manifestPath = packagedToolManifest() } = {}
   if (context.handoff.kind === 'frame-approval') {
     if (!options.frameApproval || !options.approvalVersion) throw new Error('an explicitly selected numbered signed frame approval is required before normalization');
     const approvalPath = path.resolve(options.frameApproval);
-    const approvalArtifact = await safeRunArtifact(context.runDir, portablePath(context.runDir, approvalPath), undefined, 'selected frame approval');
+    const approvalArtifact = await safeRunArtifact(context.runDir, await portablePath(context.runDir, approvalPath), undefined, 'selected frame approval');
     const receiptArtifact = await safeRunArtifact(context.runDir, context.handoff.snapReceipt.path, undefined, 'selected snap receipt');
     const verified = await verifyFrameApproval({
       projectDir: context.projectDir,
@@ -874,7 +873,7 @@ async function resumeRun(options, { manifestPath = packagedToolManifest() } = {}
       const result = await finishRun(context, snappedFrames, {
         toolProvenanceVerified: context.handoff.toolProvenanceVerified,
         receipt: context.handoff.snapReceipt,
-        approval: { path: portablePath(context.runDir, verified.path), sha256: verified.sha256, version: options.approvalVersion, document: verified.document }
+        approval: { path: await portablePath(context.runDir, verified.path), sha256: verified.sha256, version: options.approvalVersion, document: verified.document }
       });
       await transition.complete(result.recorded.reportPath);
       return result;
@@ -893,7 +892,7 @@ async function resumeRun(options, { manifestPath = packagedToolManifest() } = {}
       projectDir: context.projectDir, run: { id: context.handoff.runId, outputDir: context.runDir, manifestSha256: context.handoff.manifestSha256 },
       handoff: context.handoffPath, inputs: context.handoff.sourceFrames.map((source) => path.join(context.runDir, ...source.path.split('/'))), outputs: snappedFrames
     });
-    const snapReceipt = { path: portablePath(context.runDir, manualReceipt.path), sha256: manualReceipt.sha256, signature: manualReceipt.document.signature };
+    const snapReceipt = { path: await portablePath(context.runDir, manualReceipt.path), sha256: manualReceipt.sha256, signature: manualReceipt.document.signature };
     if (context.animationContract) return writeApprovalResume(context, { toolProvenanceVerified: false, receipt: snapReceipt });
     return { ...(await finishRun(context, snappedFrames, { toolProvenanceVerified: false, receipt: snapReceipt })), snapReceipt };
   }
@@ -919,12 +918,12 @@ async function resumeRun(options, { manifestPath = packagedToolManifest() } = {}
     }
     if (snapped.outputs.length !== generated.length) throw new Error('Pixel Snapper output count does not match source frame count');
     if (snapped.recoveredExistingReceipt) {
-      const provenance = { toolProvenanceVerified: true, receipt: { ...snapped.receipt, path: portablePath(context.runDir, snapped.receipt.path) } };
+      const provenance = { toolProvenanceVerified: true, receipt: { ...snapped.receipt, path: await portablePath(context.runDir, snapped.receipt.path) } };
       return context.animationContract ? writeApprovalResume(context, provenance) : finishRun(context, snapped.outputs, provenance);
     }
     await publishDirectory(snapStage, snappedDir, 'snapped frame batch');
     const outputs = snapped.outputs.map((file) => path.join(snappedDir, path.basename(file)));
-    const provenance = { toolProvenanceVerified: true, receipt: { ...snapped.receipt, path: portablePath(context.runDir, path.join(snappedDir, path.basename(snapped.receipt.path))) } };
+    const provenance = { toolProvenanceVerified: true, receipt: { ...snapped.receipt, path: await portablePath(context.runDir, path.join(snappedDir, path.basename(snapped.receipt.path))) } };
     return context.animationContract ? writeApprovalResume(context, provenance) : finishRun(context, outputs, provenance);
   } catch (error) {
     await fs.rm(snapStage, { recursive: true, force: true });
@@ -996,7 +995,7 @@ function correctionReplacementHandoff({ context, document, version, revisionRequ
   };
 }
 
-function correctionApprovalHandoff({ context, document, version, receipt, definitions }) {
+async function correctionApprovalHandoff({ context, document, version, receipt, definitions }) {
   const frames = receipt.document.payload.outputs.map((output, index) => ({ index, id: definitions[index].id, path: output.path, sha256: output.sha256, landmarkSemantic: definitions[index].landmarkSemantic }));
   return {
     version: 1,
@@ -1007,7 +1006,7 @@ function correctionApprovalHandoff({ context, document, version, receipt, defini
     animationContractSha256: context.manifest.animationContract.sha256,
     supersedesFrameApprovalSha256: context.provenance.frameApprovalSha256,
     snapReceiptSha256: receipt.sha256,
-    snapReceipt: { path: portablePath(context.runDir, receipt.path), sha256: receipt.sha256 },
+    snapReceipt: { path: await portablePath(context.runDir, receipt.path), sha256: receipt.sha256 },
     toolProvenanceVerified: false,
     frames
   };
@@ -1028,7 +1027,7 @@ async function stageCorrectionRevision({ context, document, revision, inputs }) 
   if (inputs.length !== definitions.length) throw new Error(`exactly ${definitions.length} corrected snapped frames are required in animation-contract order`);
   const outputNames = definitions.map((_, index) => `frame-${String(index).padStart(2, '0')}-snapped.png`);
   const outputs = await stageBatch({ inputs, targetDir: path.join(revision.revisionDir, 'snapped'), label: 'correction revision snapped batch', outputNames });
-  const outputRecords = await Promise.all(outputs.map(async (file) => ({ relative: portablePath(revision.revisionDir, file), sha256: await sha256(file) })));
+  const outputRecords = await Promise.all(outputs.map(async (file) => ({ relative: await portablePath(revision.revisionDir, file), sha256: await sha256(file) })));
   const replacementHandoff = correctionReplacementHandoff({
     context, document, version: revision.request.revisionVersion,
     revisionRequestSha256: await sha256(revision.file), outputs: outputRecords
@@ -1043,7 +1042,7 @@ async function stageCorrectionRevision({ context, document, revision, inputs }) 
     inputs: oldInputs,
     outputs
   });
-  const approvalHandoff = correctionApprovalHandoff({ context, document, version: revision.request.revisionVersion, receipt, definitions });
+  const approvalHandoff = await correctionApprovalHandoff({ context, document, version: revision.request.revisionVersion, receipt, definitions });
   const handoffFile = path.join(revision.revisionDir, 'frame-approval-handoff.json');
   await writeJsonIdempotent(handoffFile, approvalHandoff, 'correction frame approval handoff');
   process.exitCode = EXIT.handoff;
@@ -1094,7 +1093,7 @@ async function finishCorrectionRevision({ context, document, revision, approvalF
   };
   exactJsonDocument(receipt.document.payload, expectedReceiptPayload, 'correction revision snap receipt ancestry');
 
-  const expectedHandoff = correctionApprovalHandoff({ context, document, version, receipt, definitions });
+  const expectedHandoff = await correctionApprovalHandoff({ context, document, version, receipt, definitions });
   const handoffArtifact = await revisionArtifact(context, version, 'frame-approval-handoff.json', undefined, 'correction revision frame approval handoff');
   const handoff = JSON.parse(await fs.readFile(handoffArtifact.path, 'utf8'));
   exactJsonDocument(handoff, expectedHandoff, 'correction revision frame approval handoff');
@@ -1127,13 +1126,13 @@ async function finishCorrectionRevision({ context, document, revision, approvalF
     anchorReport, normalized, exported, config: context.config, semanticEvidence: [], animationContract: context.manifest.animationContract,
     frameApproval: { projectDir: projectDirectory(context), file: approvalArtifact.path, snapReceipt: { path: receiptFile, sha256: receipt.sha256 }, version: approvalVersion }
   });
-  const artifacts = await Promise.all([exported.metadata, ...Object.values(exported.clips).flatMap((clip) => [...clip.runtimeFrames, clip.sheet, clip.metadata, clip.preview])].map(async (file) => ({ path: portablePath(context.runDir, file), sha256: await sha256(file) })));
+  const artifacts = await Promise.all([exported.metadata, ...Object.values(exported.clips).flatMap((clip) => [...clip.runtimeFrames, clip.sheet, clip.metadata, clip.preview])].map(async (file) => ({ path: await portablePath(context.runDir, file), sha256: await sha256(file) })));
   const humanReviewOutstanding = validation.warnings.some((warning) => warning.code === 'HUMAN_REVIEW_REQUIRED' || warning.requiresUserReview === true);
   const report = {
     version: 1, runId: document.runId, revisionVersion: version, manifestSha256: context.contract.manifest.sha256,
     supersedes: structuredClone(context.provenance),
     animationContractSha256: context.manifest.animationContract.sha256, snapReceiptSha256: receipt.sha256, frameApprovalSha256: approval.sha256, toolProvenanceVerified: false,
-    snapReceipt: { path: portablePath(context.runDir, receiptFile), sha256: receipt.sha256 }, frameApproval: { path: portablePath(context.runDir, approvalArtifact.path), sha256: approval.sha256, version: approvalVersion },
+    snapReceipt: { path: await portablePath(context.runDir, receiptFile), sha256: receipt.sha256 }, frameApproval: { path: await portablePath(context.runDir, approvalArtifact.path), sha256: approval.sha256, version: approvalVersion },
     validation: { ...portableValue(validation, context.runDir), artifacts },
     profilePromotion: { eligible: false, applied: false, requiresUserApproval: true, reviewRequired: humanReviewOutstanding },
     popTAcceptance: { eligible: false, applied: false, requiresUserApproval: true, reason: 'Correction replacement was supplied through a manual handoff and cannot inherit verified-tool provenance.' }
@@ -1346,8 +1345,8 @@ program.command('correct')
     });
     if (result.afterValidation.passed && result.correction) {
       const delivered = [...result.exported.runtimeFrames, result.exported.sheet, result.exported.metadata, result.exported.preview];
-      const artifacts = await Promise.all(delivered.map(async (file) => ({ path: portablePath(runDir, file), sha256: await sha256(file) })));
-      const correctionManifest = { path: portablePath(runDir, result.correction.manifest), sha256: await sha256(result.correction.manifest) };
+      const artifacts = await Promise.all(delivered.map(async (file) => ({ path: await portablePath(runDir, file), sha256: await sha256(file) })));
+      const correctionManifest = { path: await portablePath(runDir, result.correction.manifest), sha256: await sha256(result.correction.manifest) };
       const lessons = result.correction.actions.flatMap((action, actionIndex) => action.approved && LEARNABLE_FAILURES.has(action.code) && action.evidenceVerification?.afterValidation?.passed === true ? [{
         failureCode: action.code,
         correction: action.correction,
