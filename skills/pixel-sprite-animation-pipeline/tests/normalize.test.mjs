@@ -6,8 +6,33 @@ import fs from 'node:fs/promises';
 import sharp from 'sharp';
 import { DEFAULT_CONFIG } from '../scripts/lib/config.mjs';
 import { connectedComponents, extractPrimaryComponent } from '../scripts/lib/components.mjs';
+import { loadAnimationContract } from '../scripts/lib/animation-contract.mjs';
 import { readRgba } from '../scripts/lib/image.mjs';
 import { normalizeFrames } from '../scripts/lib/normalize.mjs';
+import { stableHash } from '../scripts/lib/state-auth.mjs';
+
+const HASH = (letter) => letter.repeat(64);
+
+function animationContractDocument() {
+  const rgba = [[0, 0, 0, 0], [26, 32, 63, 255], [220, 60, 40, 255]];
+  return {
+    version: 1, anchor: { sha256: HASH('a'), traitReferenceSha256: [HASH('b')] },
+    sizes: { canonical: [128, 128], generation: [1024, 1024], runtime: [256, 256], pixelSize: 8 }, pivot: { x: 64, y: 112 }, baseline: 111,
+    palette: { rgba, sha256: stableHash(rgba), snapperPaletteHex: ['1a203f', 'dc3c28'] },
+    clips: [{ id: 'idle', loopMode: 'loop', loopTransition: { fromFrameId: 'idle-2', toFrameId: 'idle-1', reviewCheckpoint: 'motion' }, frames: [
+      { id: 'idle-1', pose: 'rest', duration: 100, landmarkSemantic: { name: 'character-root', target: { x: 64, y: 112 } } },
+      { id: 'idle-2', pose: 'reach', duration: 120, landmarkSemantic: { name: 'character-root', target: { x: 64, y: 112 } } }
+    ] }],
+    review: { checkpoints: ['identity', 'motion'], approvers: ['artist@example.test'] }
+  };
+}
+
+async function animationContract() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'normalize-contract-'));
+  const file = path.join(dir, 'animation-contract.json');
+  await fs.writeFile(file, `${JSON.stringify(animationContractDocument())}\n`);
+  return loadAnimationContract(file);
+}
 
 async function frame(file, left, top, width, height) {
   await sharp({
@@ -43,6 +68,107 @@ async function pngNames(dir) {
 function pixelAt(image, x, y) {
   return [...image.data.subarray((y * image.width + x) * 4, (y * image.width + x) * 4 + 4)];
 }
+
+async function makeExtendedLimbFrames() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'normalize-landmarks-'));
+  const frames = [path.join(dir, 'rest.png'), path.join(dir, 'reach.png')];
+  const torso = [220, 60, 40, 255];
+  for (const [index, file] of frames.entries()) {
+    const data = Buffer.alloc(64 * 64 * 4);
+    for (let y = 25; y <= 49; y += 1) for (let x = 25; x <= 34; x += 1) data.set(torso, (y * 64 + x) * 4);
+    const armStart = index === 0 ? 20 : 5;
+    for (let x = armStart; x <= 24; x += 1) data.set([26, 32, 63, 255], (30 * 64 + x) * 4);
+    await sharp(data, { raw: { width: 64, height: 64, channels: 4 } }).png().toFile(file);
+  }
+  return {
+    frames,
+    landmarks: frames.map((_, index) => ({ frameId: `idle-${index + 1}`, source: { x: 30, y: 50 }, target: { x: 64, y: 112 } })),
+    torso
+  };
+}
+
+async function torsoX(file, torso) {
+  const image = await readRgba(file);
+  for (let x = 0; x < image.width; x += 1) for (let y = 0; y < image.height; y += 1) {
+    if (pixelAt(image, x, y).every((channel, index) => channel === torso[index])) return x;
+  }
+  throw new Error('torso color was not found');
+}
+
+test('authored roots stay fixed when pose bounds change', async () => {
+  const { frames, landmarks, torso } = await makeExtendedLimbFrames();
+  const result = await normalizeFrames({ inputs: frames, landmarks, outputDir: path.join(path.dirname(frames[0]), 'out'), config: DEFAULT_CONFIG, scaleFactor: 1 });
+
+  assert.deepEqual(result.measurements.map((item) => item.frameId), ['idle-1', 'idle-2']);
+  assert.deepEqual(result.measurements.map((item) => item.sourceLandmark), [{ x: 30, y: 50 }, { x: 30, y: 50 }]);
+  assert.deepEqual(result.measurements.map((item) => item.canonicalLandmark), [{ x: 64, y: 112 }, { x: 64, y: 112 }]);
+  assert.deepEqual(result.measurements.map((item) => item.landmarkDrift), [{ x: 0, y: 0 }, { x: 0, y: 0 }]);
+  assert.equal(await torsoX(result.frames[0], torso), await torsoX(result.frames[1], torso));
+});
+
+test('contract landmarks require exact ordered coverage and contained integer coordinates', async () => {
+  const { frames, landmarks } = await makeExtendedLimbFrames();
+  const outputDir = path.join(path.dirname(frames[0]), 'invalid');
+  const cases = [
+    { value: landmarks.slice(0, 1), error: /one landmark per input frame/i },
+    { value: [landmarks[0], { ...landmarks[1], frameId: landmarks[0].frameId }], error: /frameId.*unique/i },
+    { value: [{ ...landmarks[0], extra: true }, landmarks[1]], error: /landmark.*schema/i },
+    { value: [{ ...landmarks[0], source: { x: 64, y: 50 } }, landmarks[1]], error: /source.*inside.*frame/i },
+    { value: [{ ...landmarks[0], source: { x: 30.5, y: 50 } }, landmarks[1]], error: /source.*integer/i },
+    { value: [{ ...landmarks[0], target: { x: 128, y: 112 } }, landmarks[1]], error: /target.*canonical/i }
+  ];
+  for (const item of cases) {
+    await assert.rejects(normalizeFrames({ inputs: frames, landmarks: item.value, outputDir, config: DEFAULT_CONFIG }), item.error);
+    assert.deepEqual(await pngNames(outputDir), []);
+  }
+});
+
+test('approved landmark overflow rejects the whole batch before output', async () => {
+  const { frames, landmarks } = await makeExtendedLimbFrames();
+  const outputDir = path.join(path.dirname(frames[0]), 'overflow');
+  await assert.rejects(normalizeFrames({ inputs: frames, landmarks, outputDir, config: DEFAULT_CONFIG, scaleFactor: 10 }), /exceeds canonical cell at approved landmark/i);
+  assert.deepEqual(await pngNames(outputDir), []);
+});
+
+test('normalization snapshots approved landmarks before asynchronous image reads', async () => {
+  const { frames, landmarks } = await makeExtendedLimbFrames();
+  const pending = normalizeFrames({ inputs: frames, landmarks, outputDir: path.join(path.dirname(frames[0]), 'snapshot'), config: DEFAULT_CONFIG });
+  landmarks[0].source.x = 0;
+  landmarks[0].target.x = 2;
+  const result = await pending;
+  assert.deepEqual(result.measurements[0].sourceLandmark, { x: 30, y: 50 });
+  assert.deepEqual(result.measurements[0].canonicalLandmark, { x: 64, y: 112 });
+});
+
+test('contract normalization binds ordered frame IDs and targets to the validated animation contract', async () => {
+  const { frames, landmarks } = await makeExtendedLimbFrames();
+  const contract = await animationContract();
+  const outputDir = path.join(path.dirname(frames[0]), 'contract-invalid');
+  const cases = [
+    { value: [landmarks[1], landmarks[0]], error: /ordered.*frame|frame.*order/i },
+    { value: [{ ...landmarks[0], frameId: 'invented' }, landmarks[1]], error: /frame.*contract/i },
+    { value: [{ ...landmarks[0], target: { x: 63, y: 112 } }, landmarks[1]], error: /target.*contract|pivot/i }
+  ];
+  for (const item of cases) {
+    await assert.rejects(normalizeFrames({ inputs: frames, landmarks: item.value, animationContract: contract, outputDir, config: DEFAULT_CONFIG }), item.error);
+    assert.deepEqual(await pngNames(outputDir), []);
+  }
+});
+
+test('normalization snapshots input ordering and relevant config before asynchronous reads', async () => {
+  const { frames, landmarks } = await makeExtendedLimbFrames();
+  const expectedInputs = [...frames];
+  const contract = await animationContract();
+  const config = structuredClone(DEFAULT_CONFIG);
+  const pending = normalizeFrames({ inputs: frames, landmarks, animationContract: contract, outputDir: path.join(path.dirname(frames[0]), 'contract-snapshot'), config });
+  frames.reverse();
+  config.pivot.x = 2;
+  config.canonical.width = 8;
+  config.background.tolerance = 255;
+  const result = await pending;
+  assert.deepEqual(result.measurements.map((item) => item.input), expectedInputs);
+  assert.deepEqual(result.measurements.map((item) => item.canonicalLandmark), [{ x: 64, y: 112 }, { x: 64, y: 112 }]);
+});
 
 test('normalization preserves one scale and plants every frame on the shared baseline', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'normalize-'));

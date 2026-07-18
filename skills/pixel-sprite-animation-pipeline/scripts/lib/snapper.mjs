@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { resolvePixelSnapper } from './tool-identity.mjs';
+import { verifyExistingSnapReceipt, writeSnapReceipt } from './snap-receipt.mjs';
 
 function snapperConfig(config) {
   return {
@@ -18,25 +20,37 @@ function outputFor(input, outputDir) {
   return path.join(outputDir, `${path.basename(input, path.extname(input))}-snapped.png`);
 }
 
-export function detectPixelSnapper(config) {
-  const executable = process.env.PIXEL_SNAPPER_BIN || snapperConfig(config).executable;
-  const probe = spawnSync(executable, ['--help'], { encoding: 'utf8', shell: false });
+export async function detectPixelSnapper(config, options = {}) {
+  if (!options.manifest) return { available: false, executable: (options.env ?? process.env).PIXEL_SNAPPER_BIN || snapperConfig(config).executable, probeStatus: null, error: 'pinned Pixel Snapper manifest is required', identity: null };
+  const identity = await resolvePixelSnapper({
+    projectDir: options.projectDir ?? process.cwd(),
+    config,
+    configProvenance: options.configProvenance,
+    manifest: options.manifest,
+    env: options.env ?? process.env,
+    pathValue: options.pathValue
+  });
   return {
-    available: !probe.error && probe.status === 0,
-    executable,
-    probeStatus: probe.status,
-    error: probe.error?.message ?? null
+    available: identity !== null,
+    executable: identity?.physicalPath ?? (process.env.PIXEL_SNAPPER_BIN || snapperConfig(config).executable),
+    probeStatus: identity ? 0 : null,
+    error: null,
+    identity
   };
 }
 
-export async function writeSnapperHandoff({ inputs, outputDir, config }) {
-  const executable = process.env.PIXEL_SNAPPER_BIN || snapperConfig(config).executable;
+export async function writeSnapperHandoff({ inputs, outputDir, config, env = process.env }) {
+  const executable = env.PIXEL_SNAPPER_BIN || snapperConfig(config).executable;
   await fs.mkdir(outputDir, { recursive: true });
   const expectedOutputs = inputs.map((input) => path.basename(outputFor(input, outputDir)));
   const handoffPath = path.join(outputDir, 'pixel-snapper-handoff.json');
   const resumeCommand = `pixel-sprite-pipeline normalize --frames ${outputDir}`;
   await fs.writeFile(handoffPath, JSON.stringify({
     version: 1,
+    origin: 'manual-handoff',
+    toolProvenanceVerified: false,
+    binary: null,
+    arguments: null,
     executable,
     sourceInputs: inputs,
     inputs,
@@ -47,15 +61,27 @@ export async function writeSnapperHandoff({ inputs, outputDir, config }) {
   return { status: 'manual-handoff', executable, outputs: [], handoffPath };
 }
 
-export async function runPixelSnapper({ inputs, outputDir, config }) {
-  const detection = detectPixelSnapper(config);
-  if (!detection.available) return writeSnapperHandoff({ inputs, outputDir, config });
+export async function runPixelSnapper({ inputs, outputDir, config, identity = null, resolverOptions = {}, receipt = null }) {
+  const detection = identity ? { available: true, executable: identity.physicalPath, identity } : await detectPixelSnapper(config, resolverOptions);
+  if (!detection.available) return writeSnapperHandoff({ inputs, outputDir, config, env: resolverOptions.env ?? process.env });
+
+  const argumentsForReceipt = commandArguments('<INPUT>', '<OUTPUT>', config).slice(2);
+  if (receipt) {
+    const receiptOutputDir = receipt.run?.outputDir ?? receipt.run?.runDir;
+    const receiptFile = receipt.durableReceiptFile ?? path.join(outputDir, 'snap-receipt.json');
+    if (!receipt.durableReceiptFile && path.resolve(receiptOutputDir) !== path.resolve(outputDir)) throw new Error('snap receipt output directory must match Pixel Snapper output directory');
+    const existing = await verifyExistingSnapReceipt({
+      projectDir: receipt.projectDir, file: receiptFile, expectedRun: receipt.run,
+      expectedContract: receipt.contract, expectedInputs: inputs, expectedArgs: argumentsForReceipt, expectedIdentity: detection.identity
+    });
+    if (existing) return { status: 'complete', executable: detection.identity.path, identity: detection.identity, outputs: existing.document.payload.outputs.map((item) => path.resolve(path.dirname(receiptFile), item.path)), handoffPath: null, receipt: { path: receiptFile, sha256: existing.sha256, signature: existing.document.signature }, recoveredExistingReceipt: true };
+  }
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputs = [];
   for (const input of inputs) {
     const output = outputFor(input, outputDir);
-    const result = spawnSync(detection.executable, commandArguments(input, output, config), {
+    const result = spawnSync(detection.identity.physicalPath, commandArguments(input, output, config), {
       encoding: 'utf8',
       shell: false
     });
@@ -64,5 +90,9 @@ export async function runPixelSnapper({ inputs, outputDir, config }) {
     }
     outputs.push(output);
   }
-  return { status: 'complete', executable: detection.executable, outputs, handoffPath: null };
+  const published = receipt ? await writeSnapReceipt({
+    projectDir: receipt.projectDir, run: receipt.run, contract: receipt.contract, inputs, outputs,
+    args: argumentsForReceipt, identity: detection.identity
+  }) : null;
+  return { status: 'complete', executable: detection.identity.path, identity: detection.identity, outputs, handoffPath: null, ...(published ? { receipt: { path: published.path, sha256: published.sha256, signature: published.document.signature } } : {}) };
 }

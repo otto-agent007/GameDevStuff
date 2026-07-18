@@ -9,6 +9,7 @@ import YAML from 'yaml';
 import { DEFAULT_CONFIG } from '../scripts/lib/config.mjs';
 import { inspectImage } from '../scripts/lib/inspect.mjs';
 import { createRun, promoteVerifiedProfile, proposeSkillRule, recordRunResult } from '../scripts/lib/learning.mjs';
+import { writeSnapReceipt } from '../scripts/lib/snap-receipt.mjs';
 
 const hash = (data) => crypto.createHash('sha256').update(data).digest('hex');
 const stableConfig = () => structuredClone(DEFAULT_CONFIG);
@@ -46,11 +47,21 @@ test('createRun binds a redacted inspection snapshot to matching source bytes an
 });
 
 async function passingReport(run, runDir, additions = {}) {
+  const source = await artifact(runDir, 'source/frame.png', 'verified-source');
   const output = await artifact(runDir, 'output/frame.png', 'verified-output');
+  const receipt = await writeSnapReceipt({
+    projectDir: path.dirname(path.dirname(path.dirname(runDir))),
+    run: { runId: run.runId, outputDir: runDir, manifestSha256: run.manifestSha256 },
+    contract: { sha256: 'a'.repeat(64) },
+    inputs: [path.join(runDir, source.path)], outputs: [path.join(runDir, output.path)], args: ['16'],
+    identity: { origin: 'managed-cache', sha256: 'b'.repeat(64), size: 1, version: 'test', helpSha256: 'c'.repeat(64), fixtureRgbaSha256: 'd'.repeat(64), pinnedReleaseTag: null, upstreamCommit: null }
+  });
   return {
     runId: run.runId,
     manifestSha256: run.manifestSha256,
     validation: { passed: true, artifacts: [output] },
+    toolProvenanceVerified: true,
+    snapReceipt: { path: path.basename(receipt.path), sha256: receipt.sha256 },
     ...additions
   };
 }
@@ -238,6 +249,29 @@ test('profile promotion requires artifact-backed passing evidence and preserves 
   await recordRunResult({ projectDir, runId: run.runId, report: goodReport, version: 2 });
   await promoteVerifiedProfile({ projectDir, runId: run.runId, reportVersion: 2 });
   assert.deepEqual(YAML.parse(await fs.readFile(path.join(stateDir, 'profile.yaml'), 'utf8')), stableConfig());
+});
+
+test('profile promotion requires a verified signed snap receipt provenance binding', async () => {
+  const projectDir = await project();
+  const run = await createRun({ projectDir, config: stableConfig(), inputs: [], idFactory: () => 'run-provenance' });
+  const report = await passingReport(run, run.runDir);
+  await recordRunResult({ projectDir, runId: run.runId, report: { ...report, toolProvenanceVerified: false, snapReceipt: null } });
+  await assert.rejects(promoteVerifiedProfile({ projectDir, runId: run.runId }), /verified tool provenance/i);
+});
+
+test('verified standard provenance cannot promote while human review warnings remain outstanding', async () => {
+  const projectDir = await project();
+  const run = await createRun({ projectDir, config: stableConfig(), inputs: [], idFactory: () => 'run-review-warning' });
+  const report = await passingReport(run, run.runDir, {
+    validation: {
+      passed: true,
+      warnings: [{ code: 'HUMAN_REVIEW_REQUIRED', check: 'IDENTITY_DRIFT' }],
+      artifacts: [await artifact(run.runDir, 'review/output.png', 'reviewed-output')]
+    },
+    profilePromotion: { eligible: true, reviewRequired: false }
+  });
+  await recordRunResult({ projectDir, runId: run.runId, report });
+  await assert.rejects(promoteVerifiedProfile({ projectDir, runId: run.runId }), /human review|review required/i);
 });
 
 test('profile promotion rejects symlinked and hard-linked evidence artifacts', async (t) => {

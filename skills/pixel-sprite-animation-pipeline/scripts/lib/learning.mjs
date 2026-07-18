@@ -3,7 +3,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import YAML from 'yaml';
+import { validateAnimationContract } from './animation-contract.mjs';
 import { validateConfig } from './config.mjs';
+import { verifyFrameApproval } from './frame-approval.mjs';
+import { verifySnapReceipt } from './snap-receipt.mjs';
+import { stableHash } from './state-auth.mjs';
 
 const HASH = /^[a-f0-9]{64}$/;
 const SECRET_KEY = /(password|passwd|secret|token|api[-_]?key|credential|private[-_]?key)/i;
@@ -163,10 +167,22 @@ async function resolveRunArtifact(runDir, value, label) {
   return { relative, absolute: current, stat };
 }
 
-export async function createRun({ projectDir, config, inputs = [], inspectionSnapshot, clock = () => new Date(), idFactory } = {}) {
+function normalizeAnimationContract(animationContract) {
+  if (animationContract === undefined) return undefined;
+  if (!animationContract || typeof animationContract !== 'object' || Array.isArray(animationContract) || Object.keys(animationContract).sort().join(',') !== 'document,sha256') throw new Error('animation contract binding must contain only document and sha256');
+  const document = cloneJson(animationContract.document, 'animation contract');
+  validateAnimationContract(document);
+  const expected = stableHash(document);
+  if (animationContract.sha256 !== expected) throw new Error('animation contract binding hash mismatch');
+  rejectAbsolutePrivatePaths(document, 'animation contract');
+  return { sha256: expected, document };
+}
+
+export async function createRun({ projectDir, config, inputs = [], inspectionSnapshot, animationContract, clock = () => new Date(), idFactory } = {}) {
   if (typeof projectDir !== 'string' || projectDir.trim() === '') throw new Error('projectDir is required');
   const effectiveConfig = validateConfigClone(config);
   const normalizedInputs = await normalizeInputs(projectDir, inputs);
+  const normalizedAnimationContract = normalizeAnimationContract(animationContract);
   let inspection;
   if (inspectionSnapshot !== undefined) {
     if (normalizedInputs.length === 0) throw new Error('inspection snapshot requires a source input');
@@ -197,7 +213,7 @@ export async function createRun({ projectDir, config, inputs = [], inspectionSna
       if (error.code !== 'ENOENT') throw error;
     }
     await fs.mkdir(stage);
-    const manifest = { version: 1, runId, createdAt: now.toISOString(), config: effectiveConfig, inputs: normalizedInputs, ...(inspection ? { inspection } : {}) };
+    const manifest = { version: 1, runId, createdAt: now.toISOString(), config: effectiveConfig, inputs: normalizedInputs, ...(inspection ? { inspection } : {}), ...(normalizedAnimationContract ? { animationContract: normalizedAnimationContract } : {}) };
     const contents = `${JSON.stringify(manifest, null, 2)}\n`;
     await fs.writeFile(path.join(stage, 'manifest.json'), contents, { flag: 'wx' });
     await fs.rename(stage, runDir);
@@ -407,6 +423,25 @@ async function loadVerifiedReport(run, version) {
   const report = JSON.parse(await fs.readFile(file, 'utf8'));
   if (report.runId !== run.manifest.runId || report.manifestSha256 !== run.manifestSha256) throw new Error('report is not tied to the selected run manifest');
   if (!await verifiedArtifacts(report.validation, run.runDir)) throw new Error('profile promotion requires artifact-backed passing validation evidence');
+  if (report.toolProvenanceVerified !== true || !report.snapReceipt || typeof report.snapReceipt !== 'object' || Array.isArray(report.snapReceipt) || Object.keys(report.snapReceipt).sort().join(',') !== 'path,sha256' || !HASH.test(report.snapReceipt.sha256 ?? '')) throw new Error('profile promotion requires verified tool provenance');
+  const outstandingReview = report.profilePromotion?.reviewRequired === true || report.validation?.warnings?.some((warning) => warning?.code === 'HUMAN_REVIEW_REQUIRED' || warning?.requiresUserReview === true) === true;
+  if (outstandingReview) throw new Error('profile promotion requires completion of outstanding human review');
+  try {
+    const receipt = await resolveRunArtifact(run.runDir, validRelative(report.snapReceipt.path, 'snap receipt path'), 'snap receipt');
+    const projectDir = path.dirname(path.dirname(path.dirname(run.runDir)));
+    const animationContract = run.manifest.animationContract ? normalizeAnimationContract(run.manifest.animationContract) : undefined;
+    const verified = await verifySnapReceipt({ projectDir, file: receipt.absolute, expectedRun: { runId: run.manifest.runId, runDir: run.runDir, manifestSha256: run.manifestSha256 }, ...(animationContract ? { expectedContract: animationContract } : {}) });
+    if (verified.document.payload.toolProvenanceVerified !== true || verified.sha256 !== report.snapReceipt.sha256) throw new Error('receipt binding mismatch');
+    if (animationContract) {
+      if (report.animationContractSha256 !== animationContract.sha256 || report.snapReceiptSha256 !== verified.sha256 || report.toolProvenanceVerified !== true || report.profilePromotion?.eligible !== true) throw new Error('animation approval chain is not eligible for profile promotion');
+      if (!report.frameApproval || typeof report.frameApproval !== 'object' || !Number.isInteger(report.frameApproval.version) || !HASH.test(report.frameApproval.sha256 ?? '')) throw new Error('animation approval chain is not eligible for profile promotion');
+      const approval = await resolveRunArtifact(run.runDir, validRelative(report.frameApproval.path, 'frame approval path'), 'frame approval');
+      const selected = await verifyFrameApproval({ projectDir, file: approval.absolute, contract: animationContract, snapReceipt: { path: receipt.absolute, sha256: verified.sha256 }, version: report.frameApproval.version });
+      if (selected.sha256 !== report.frameApproval.sha256 || selected.sha256 !== report.frameApprovalSha256) throw new Error('animation approval chain is not eligible for profile promotion');
+    }
+  } catch (error) {
+    throw new Error(`profile promotion requires verified tool provenance: ${error.message}`);
+  }
   return { file, report, sha256: await fileSha(file) };
 }
 

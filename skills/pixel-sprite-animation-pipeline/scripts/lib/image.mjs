@@ -2,9 +2,17 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import sharp from 'sharp';
 
-export async function readRgba(file) {
-  const { data, info } = await sharp(file).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+export async function readRgba(input) {
+  const { data, info } = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   return { data, width: info.width, height: info.height, channels: 4 };
+}
+
+export async function captureRgba(file, { readFile = fs.readFile, expectedSha256 } = {}) {
+  const bytes = await readFile(file);
+  if (!Buffer.isBuffer(bytes) && !(bytes instanceof Uint8Array)) throw new Error('captured image reader must return bytes');
+  const digest = crypto.createHash('sha256').update(bytes).digest('hex');
+  if (expectedSha256 !== undefined && digest !== expectedSha256) return { image: null, sha256: digest };
+  return { image: await readRgba(bytes), sha256: digest };
 }
 
 export async function writeRgba(file, image) {

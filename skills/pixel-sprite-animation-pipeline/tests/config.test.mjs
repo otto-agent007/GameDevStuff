@@ -1,6 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_CONFIG, loadConfig, validateConfig } from '../scripts/lib/config.mjs';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { DEFAULT_CONFIG, loadConfig, loadConfigWithProvenance, validateConfig } from '../scripts/lib/config.mjs';
+
+const fixtureDir = process.cwd();
+
+test('config records whether snapper executable was explicitly selected', async () => {
+  const plain = await loadConfigWithProvenance({ cwd: fixtureDir });
+  assert.equal(plain.provenance.snapperExecutable, 'default');
+  const explicit = await loadConfigWithProvenance({ cwd: fixtureDir, overrides: { snapper: { executable: '/trusted/snapper' } } });
+  assert.equal(explicit.provenance.snapperExecutable, 'override');
+});
+
+test('config records a profile-selected snapper executable', async () => {
+  const profileDir = await fs.mkdtemp(path.join(os.tmpdir(), 'sprite-profile-'));
+  const profilePath = path.join(profileDir, 'profile.yaml');
+  await fs.writeFile(profilePath, 'snapper:\n  executable: /profile/snapper\n');
+  const result = await loadConfigWithProvenance({ cwd: fixtureDir, profilePath });
+  assert.equal(result.provenance.snapperExecutable, 'profile');
+  assert.equal(result.config.snapper.executable, '/profile/snapper');
+});
 
 test('defaults preserve the approved 128 to 1024 to 256 workflow', async () => {
   assert.deepEqual(DEFAULT_CONFIG.canonical, { width: 128, height: 128 });

@@ -91,10 +91,21 @@ export function validateConfig(input) {
   return deepFreeze(config);
 }
 
-export async function loadConfig({ cwd, profilePath, overrides = {} }) {
-  const selected = profilePath ?? path.join(cwd, '.pixel-sprite-pipeline', 'profile.yaml');
+async function readProfile(selected) {
   let profile = {};
   try { profile = YAML.parse(await fs.readFile(selected, 'utf8')) ?? {}; }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
-  return validateConfig(merge(merge(DEFAULT_CONFIG, profile), overrides));
+  return profile;
+}
+
+export async function loadConfigWithProvenance({ cwd, profilePath, overrides = {} }) {
+  const selected = profilePath ?? path.join(cwd, '.pixel-sprite-pipeline', 'profile.yaml');
+  const profile = await readProfile(selected);
+  const source = Object.hasOwn(overrides.snapper ?? {}, 'executable') ? 'override'
+    : Object.hasOwn(profile.snapper ?? {}, 'executable') ? 'profile' : 'default';
+  return { config: validateConfig(merge(merge(DEFAULT_CONFIG, profile), overrides)), provenance: deepFreeze({ snapperExecutable: source }) };
+}
+
+export async function loadConfig(options) {
+  return (await loadConfigWithProvenance(options)).config;
 }

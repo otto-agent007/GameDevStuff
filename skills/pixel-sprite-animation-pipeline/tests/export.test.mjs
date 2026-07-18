@@ -5,8 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { DEFAULT_CONFIG } from '../scripts/lib/config.mjs';
-import { exportAnimation } from '../scripts/lib/export.mjs';
+import { exportAnimation, exportContractAnimation } from '../scripts/lib/export.mjs';
 import { sha256 } from '../scripts/lib/image.mjs';
+import { stableHash } from '../scripts/lib/state-auth.mjs';
 
 async function makeFrame(file, { width = 128, height = 128, x = 2, color = [255, 0, 0, 255] } = {}) {
   const data = Buffer.alloc(width * height * 4, 0);
@@ -17,6 +18,112 @@ async function makeFrame(file, { width = 128, height = 128, x = 2, color = [255,
 async function temporaryDirectory() {
   return fs.mkdtemp(path.join(os.tmpdir(), 'sprite-export-'));
 }
+
+const HASH = (letter) => letter.repeat(64);
+
+function contractDocument() {
+  const rgba = [[0, 0, 0, 0], [255, 0, 0, 255]];
+  const landmarkSemantic = { name: 'character-root', target: { x: 64, y: 112 } };
+  return {
+    version: 1,
+    anchor: { sha256: HASH('a'), traitReferenceSha256: [HASH('b')] },
+    sizes: { canonical: [128, 128], generation: [1024, 1024], runtime: [256, 256], pixelSize: 8 },
+    pivot: { x: 64, y: 112 },
+    baseline: 111,
+    palette: { rgba, sha256: stableHash(rgba), snapperPaletteHex: ['ff0000'] },
+    clips: [
+      {
+        id: 'run', loopMode: 'loop', loopTransition: { fromFrameId: 'run-02', toFrameId: 'run-00', reviewCheckpoint: 'motion' },
+        frames: [
+          { id: 'run-00', pose: 'stride-a', duration: 80, landmarkSemantic },
+          { id: 'run-01', pose: 'stride-b', duration: 90, landmarkSemantic },
+          { id: 'run-02', pose: 'stride-c', duration: 110, landmarkSemantic }
+        ]
+      },
+      {
+        id: 'salute', loopMode: 'hold-last', loopTransition: null,
+        frames: [{ id: 'salute-00', pose: 'salute', duration: 240, landmarkSemantic }]
+      }
+    ],
+    review: { checkpoints: ['identity', 'motion'], approvers: ['artist@example.test'] }
+  };
+}
+
+async function contractFixture() {
+  const dir = await temporaryDirectory();
+  const definitions = contractDocument().clips.flatMap((clip) => clip.frames);
+  const frames = await Promise.all(definitions.map(async (definition, index) => {
+    const file = path.join(dir, `${definition.id}.png`);
+    await makeFrame(file, { x: 2 + index });
+    return file;
+  }));
+  const measurements = definitions.map((definition, index) => ({
+    frameId: definition.id,
+    input: path.join(dir, `approved-${definition.id}.png`),
+    output: frames[index],
+    sourceLandmark: { x: 2 + index, y: 2 },
+    canonicalLandmark: { x: 64, y: 112 },
+    landmarkDrift: { x: 0, y: 0 },
+    left: 0, top: 0, width: 1, height: 1, bottom: 0, scaleFactor: 1,
+    componentCount: 1, retainedComponentCount: 1, retainedPixelCount: 1,
+    retentionPolicy: 'all', minimumComponentPixels: 1
+  }));
+  const document = contractDocument();
+  return {
+    dir,
+    normalized: { frames, measurements, canonicalPivot: { x: 64, y: 112 }, scaleFactor: 1 },
+    contract: { document, sha256: stableHash(document) },
+    outputDir: path.join(dir, 'contract-out'),
+    config: DEFAULT_CONFIG,
+    columns: 2,
+    frameApprovalSha256: HASH('c')
+  };
+}
+
+test('contract export preserves exact clip order, frame IDs, nonuniform durations, loop modes, and bindings', async () => {
+  const fixture = await contractFixture();
+  const result = await exportContractAnimation(fixture);
+
+  assert.deepEqual(Object.keys(result.clips), ['run', 'salute']);
+  assert.deepEqual(result.clips.run.frames.map((item) => item.id), ['run-00', 'run-01', 'run-02']);
+  assert.deepEqual(result.clips.run.durations, [80, 90, 110]);
+  assert.equal(result.clips.run.loopMode, 'loop');
+  assert.deepEqual((await sharp(result.clips.run.preview, { animated: true }).metadata()).delay, [80, 90, 110]);
+  assert.deepEqual(result.clips.salute.durations, [240]);
+  assert.equal(result.clips.salute.loopMode, 'hold-last');
+
+  const index = JSON.parse(await fs.readFile(result.metadata, 'utf8'));
+  assert.deepEqual(Object.keys(index), ['version', 'animationContractSha256', 'animationContract', 'frameApprovalSha256', 'palette', 'clips', 'measurements']);
+  assert.equal(index.animationContractSha256, fixture.contract.sha256);
+  assert.deepEqual(index.animationContract, fixture.contract.document);
+  assert.equal(index.frameApprovalSha256, fixture.frameApprovalSha256);
+  assert.deepEqual(index.palette, fixture.contract.document.palette);
+  assert.deepEqual(index.clips.map(({ id }) => id), ['run', 'salute']);
+  assert.deepEqual(index.clips[0].frames.map(({ id, duration }) => ({ id, duration })), [
+    { id: 'run-00', duration: 80 }, { id: 'run-01', duration: 90 }, { id: 'run-02', duration: 110 }
+  ]);
+  assert.ok(index.clips.flatMap((clip) => [clip.sheet, clip.metadata, clip.preview, ...clip.frames.map((frame) => frame.file)]).every((file) => !path.isAbsolute(file) && !file.includes('\\') && !file.startsWith('../')));
+  assert.doesNotMatch(JSON.stringify(index), new RegExp(fixture.dir.replaceAll('\\', '\\\\')));
+});
+
+test('contract export rejects missing, extra, reordered, and unsafe frames before atomic publication', async (t) => {
+  for (const [label, mutate, pattern] of [
+    ['missing', (fixture) => { fixture.normalized.frames.pop(); fixture.normalized.measurements.pop(); }, /exact ordered normalized frame coverage/i],
+    ['extra', (fixture) => { fixture.normalized.frames.push(fixture.normalized.frames[0]); fixture.normalized.measurements.push({ ...fixture.normalized.measurements[0], frameId: 'extra' }); }, /exact ordered normalized frame coverage/i],
+    ['reordered', (fixture) => { fixture.normalized.measurements.reverse(); }, /frame order/i],
+    ['missing landmark', (fixture) => { delete fixture.normalized.measurements[0].sourceLandmark; }, /landmark measurements/i],
+    ['unsafe clip', (fixture) => { fixture.contract.document.clips[0].id = '../escape'; fixture.contract.sha256 = stableHash(fixture.contract.document); }, /safe.*clip/i],
+    ['trailing punctuation', (fixture) => { fixture.contract.document.clips[0].id = 'idle.'; fixture.contract.sha256 = stableHash(fixture.contract.document); }, /portable.*clip|safe.*clip/i],
+    ['reserved clip', (fixture) => { fixture.contract.document.clips[0].id = 'CON'; fixture.contract.sha256 = stableHash(fixture.contract.document); }, /portable.*clip|safe.*clip/i],
+    ['case-fold collision', (fixture) => { fixture.contract.document.clips[0].id = 'Idle'; fixture.contract.document.clips[1].id = 'idle'; fixture.contract.sha256 = stableHash(fixture.contract.document); }, /portable.*unique|collision/i]
+  ]) await t.test(label, async () => {
+    const fixture = await contractFixture();
+    mutate(fixture);
+    await assert.rejects(exportContractAnimation(fixture), pattern);
+    await assert.rejects(fs.access(fixture.outputDir), { code: 'ENOENT' });
+    assert.deepEqual((await fs.readdir(fixture.dir)).filter((entry) => entry.includes('.sprite-contract-stage-')), []);
+  });
+});
 
 test('exports nearest-neighbor runtime frames, a transparent partial sheet row, metadata, and a lossless loop', async () => {
   const dir = await temporaryDirectory();
@@ -176,6 +283,14 @@ test('accepts the minimum and maximum supported WebP frame durations', async () 
   const metadata = JSON.parse(await fs.readFile(result.metadata, 'utf8'));
   assert.deepEqual(metadata.durations, [11, 65535]);
   assert.deepEqual((await sharp(result.preview, { animated: true }).metadata()).delay, [11, 65535]);
+});
+
+test('preserves legacy flat-export filename stems while contract clip IDs use stricter portability rules', async () => {
+  const dir = await temporaryDirectory();
+  const frame = path.join(dir, 'frame.png');
+  await makeFrame(frame);
+  const result = await exportAnimation({ frames: [frame], outputDir: path.join(dir, 'legacy'), config: DEFAULT_CONFIG, columns: 1, durations: [80], name: 'legacy-' });
+  assert.equal(path.basename(result.metadata), 'legacy-.json');
 });
 
 test('rejects Windows reserved device stems on every platform before writing', async (t) => {
