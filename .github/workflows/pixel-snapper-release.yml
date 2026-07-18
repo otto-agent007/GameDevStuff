@@ -95,7 +95,7 @@ jobs:
             const text = source.toString("utf8");
             if (!text.includes("if w < 3 || h < 3") || !text.includes("Image too small (minimum 3x3)")) throw new Error("approved upstream fixture minimum changed");
           '
-          cmp upstream/LICENSE release-tools/skills/pixel-sprite-animation-pipeline/references/pixel-snapper-upstream.LICENSE
+          test "$(git -C upstream rev-parse "${UPSTREAM_COMMIT}:LICENSE")" = "$(git -C release-tools rev-parse "HEAD:skills/pixel-sprite-animation-pipeline/references/pixel-snapper-upstream.LICENSE")"
 
       - name: Install locked Rust compliance tools
         shell: bash
@@ -187,7 +187,7 @@ jobs:
           git -C upstream fetch --force --no-tags origin "refs/tags/${UPSTREAM_TAG}:refs/tags/${UPSTREAM_TAG}"
           test "$(git -C upstream rev-parse HEAD)" = "$UPSTREAM_COMMIT"
           test "$(git -C upstream rev-parse "${UPSTREAM_TAG}^{commit}")" = "$UPSTREAM_COMMIT"
-          cmp upstream/LICENSE release-tools/skills/pixel-sprite-animation-pipeline/references/pixel-snapper-upstream.LICENSE
+          test "$(git -C upstream rev-parse "${UPSTREAM_COMMIT}:LICENSE")" = "$(git -C release-tools rev-parse "HEAD:skills/pixel-sprite-animation-pipeline/references/pixel-snapper-upstream.LICENSE")"
 
       - name: Install release-tool dependencies
         shell: bash
