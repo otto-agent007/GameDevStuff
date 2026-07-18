@@ -1,9 +1,13 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
-import { paletteOf, readRgba, sha256 } from './image.mjs';
+import { validateAnimationContract } from './animation-contract.mjs';
+import { paletteOf, readRgba } from './image.mjs';
+import { stableHash } from './state-auth.mjs';
 
 const WINDOWS_RESERVED_STEM = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
+const SHA256 = /^[a-f0-9]{64}$/;
 
 function requirePositiveInteger(value, label) {
   if (!Number.isInteger(value) || value <= 0) {
@@ -30,6 +34,34 @@ async function exists(file) {
 function portableBasename(file) {
   const normalized = file.replaceAll('\\', '/');
   return normalized.slice(normalized.lastIndexOf('/') + 1);
+}
+
+function safeStem(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value) && value !== '.' && value !== '..' && !WINDOWS_RESERVED_STEM.test(value);
+}
+
+function safePortableClipStem(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9])?$/.test(value) && !WINDOWS_RESERVED_STEM.test(value);
+}
+
+function portabilityKey(value) {
+  return value.normalize('NFKC').toLowerCase();
+}
+
+function portableRelative(value, label) {
+  if (typeof value !== 'string' || value === '' || path.isAbsolute(value) || path.win32.isAbsolute(value) || value.includes('\\') || value === '.' || value === '..' || value.startsWith('../') || path.posix.normalize(value) !== value) {
+    throw new Error(`${label} must be a contained portable relative path`);
+  }
+  return value;
+}
+
+function immutableSnapshot(value, label) {
+  try { return structuredClone(value); }
+  catch { throw new Error(`${label} must be an immutable structured-clone value`); }
+}
+
+function bufferSha256(bytes) {
+  return crypto.createHash('sha256').update(bytes).digest('hex');
 }
 
 function configurationSnapshot(value, ancestors = new Set()) {
@@ -81,7 +113,21 @@ function mergedPalette(framePalettes) {
   })).sort((left, right) => right.count - left.count || compareRgba(left.rgba, right.rgba));
 }
 
-async function validateExport({ frames, outputDir, config, columns, durations, name }) {
+async function captureFrames(frames, canonical) {
+  const captured = [];
+  for (const frame of frames) {
+    if (typeof frame !== 'string' || frame.trim() === '') throw new Error('each frame must be a nonempty path');
+    const bytes = await fs.readFile(frame);
+    const image = await readRgba(bytes);
+    if (image.width !== canonical.width || image.height !== canonical.height) {
+      throw new Error(`frame ${frame} must be ${canonical.width}x${canonical.height}`);
+    }
+    captured.push({ path: frame, bytes, image, sha256: bufferSha256(bytes) });
+  }
+  return captured;
+}
+
+async function validateExport({ frames, outputDir, config, columns, durations, name, capturedFrames }) {
   if (!Array.isArray(frames) || frames.length === 0) {
     throw new Error('at least one frame is required');
   }
@@ -96,12 +142,7 @@ async function validateExport({ frames, outputDir, config, columns, durations, n
   ) {
     throw new Error('durations must contain one integer duration per frame in the range 11..65535');
   }
-  if (
-    typeof name !== 'string' ||
-    !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name) ||
-    name === '.' || name === '..' ||
-    WINDOWS_RESERVED_STEM.test(name)
-  ) {
+  if (!safeStem(name)) {
     throw new Error('name must be a safe nonempty filename stem');
   }
   validateSize(config?.canonical, 'canonical');
@@ -124,11 +165,6 @@ async function validateExport({ frames, outputDir, config, columns, durations, n
     throw new Error('canonical pivot must contain finite x and y values');
   }
 
-  for (const frame of frames) {
-    if (typeof frame !== 'string' || frame.trim() === '') {
-      throw new Error('each frame must be a nonempty path');
-    }
-  }
   const configSnapshot = configurationSnapshot(config);
   const resolvedOutput = path.resolve(outputDir);
   const digits = Math.max(2, String(frames.length - 1).length);
@@ -144,20 +180,18 @@ async function validateExport({ frames, outputDir, config, columns, durations, n
     throw new Error(`output directory already exists: ${resolvedOutput}`);
   }
 
+  const selectedFrames = capturedFrames ?? await captureFrames(frames, config.canonical);
+  if (selectedFrames.length !== frames.length || selectedFrames.some((frame, index) => frame.path !== frames[index])) throw new Error('captured export frame order is invalid');
   const sources = [];
   const framePalettes = [];
-  for (let index = 0; index < frames.length; index += 1) {
-    const frame = frames[index];
-    const image = await readRgba(frame);
-    if (image.width !== config.canonical.width || image.height !== config.canonical.height) {
-      throw new Error(`frame ${frame} must be ${config.canonical.width}x${config.canonical.height}`);
-    }
+  for (let index = 0; index < selectedFrames.length; index += 1) {
+    const frame = selectedFrames[index];
     sources.push({
       index,
       id: `source-${String(index).padStart(digits, '0')}`,
-      sha256: await sha256(frame)
+      sha256: frame.sha256
     });
-    framePalettes.push(paletteOf(image));
+    framePalettes.push(paletteOf(frame.image));
   }
 
   return {
@@ -165,6 +199,7 @@ async function validateExport({ frames, outputDir, config, columns, durations, n
     digits,
     runtimeScale: scaleX,
     sources,
+    capturedFrames: selectedFrames,
     palette: {
       mode: configSnapshot.palette?.mode ?? null,
       colors: mergedPalette(framePalettes)
@@ -196,16 +231,17 @@ async function writePreview({ runtimeFrames, output, width, height, durations })
   }).webp({ lossless: true, loop: 0, delay: durations }).toFile(output);
 }
 
-export async function exportAnimation({ frames, outputDir, config, columns, durations, name }) {
+async function renderAnimation({ frames, outputDir, config, columns, durations, name, capturedFrames }) {
   const {
     resolvedOutput,
     digits,
     runtimeScale,
     sources,
+    capturedFrames: selectedFrames,
     palette,
     configSnapshot
   } = await validateExport({
-    frames, outputDir, config, columns, durations, name
+    frames, outputDir, config, columns, durations, name, capturedFrames
   });
   const parent = path.dirname(resolvedOutput);
   await fs.mkdir(parent, { recursive: true });
@@ -215,7 +251,7 @@ export async function exportAnimation({ frames, outputDir, config, columns, dura
     const runtimeFrames = [];
     for (let index = 0; index < frames.length; index += 1) {
       const output = path.join(stagingDir, `${name}-${String(index).padStart(digits, '0')}.png`);
-      await sharp(frames[index])
+      await sharp(selectedFrames[index].bytes)
         .resize(config.runtime.width, config.runtime.height, { kernel: sharp.kernel.nearest })
         .png()
         .toFile(output);
@@ -282,6 +318,149 @@ export async function exportAnimation({ frames, outputDir, config, columns, dura
       metadata: path.join(resolvedOutput, metadataName),
       preview: path.join(resolvedOutput, previewName)
     };
+  } catch (error) {
+    await fs.rm(stagingDir, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+export async function exportAnimation(args) {
+  const selected = {
+    frames: Array.isArray(args?.frames) ? [...args.frames] : args?.frames,
+    outputDir: args?.outputDir,
+    config: immutableSnapshot(args?.config, 'config'),
+    columns: args?.columns,
+    durations: Array.isArray(args?.durations) ? [...args.durations] : args?.durations,
+    name: args?.name
+  };
+  return renderAnimation(selected);
+}
+
+function snapshotContract(contract) {
+  if (!contract || typeof contract !== 'object' || Array.isArray(contract) || Object.keys(contract).length !== 2 || !Object.hasOwn(contract, 'document') || !Object.hasOwn(contract, 'sha256')) throw new Error('contract export animation contract schema is invalid');
+  const document = immutableSnapshot(contract.document, 'animation contract');
+  validateAnimationContract(document);
+  if (contract.sha256 !== stableHash(document)) throw new Error('contract export animation contract hash is invalid');
+  return { document, sha256: contract.sha256 };
+}
+
+function snapshotMeasurements(normalized, definitions) {
+  if (!normalized || typeof normalized !== 'object' || !Array.isArray(normalized.frames) || !Array.isArray(normalized.measurements) || normalized.frames.length !== definitions.length || normalized.measurements.length !== definitions.length) {
+    throw new Error('contract export requires exact ordered normalized frame coverage');
+  }
+  const frames = [...normalized.frames];
+  const measurements = immutableSnapshot(normalized.measurements, 'normalization measurements');
+  const coordinate = (value, { nonnegative = false } = {}) => value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 2 && Number.isInteger(value.x) && Number.isInteger(value.y) && (!nonnegative || (value.x >= 0 && value.y >= 0));
+  for (let index = 0; index < definitions.length; index += 1) {
+    if (measurements[index]?.frameId !== definitions[index].id) throw new Error(`contract export normalized frame order does not match contract at index ${index}`);
+    if (!coordinate(measurements[index].sourceLandmark, { nonnegative: true }) || !coordinate(measurements[index].canonicalLandmark, { nonnegative: true }) || !coordinate(measurements[index].landmarkDrift)) throw new Error(`contract export landmark measurements are incomplete for frame ${definitions[index].id}`);
+    if (measurements[index].canonicalLandmark.x !== definitions[index].landmarkSemantic.target.x || measurements[index].canonicalLandmark.y !== definitions[index].landmarkSemantic.target.y || measurements[index].landmarkDrift.x !== 0 || measurements[index].landmarkDrift.y !== 0) throw new Error(`contract export landmark measurements drift from the contract for frame ${definitions[index].id}`);
+  }
+  return { frames, measurements };
+}
+
+function rebaseArtifact(file, from, to) {
+  const relative = path.relative(from, file);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('contract export artifact escaped its staging directory');
+  return path.join(to, relative);
+}
+
+function snapshotMeasurement(measurement, normalizedSha256) {
+  const frameId = measurement?.frameId;
+  const coordinate = (value) => value && Number.isInteger(value.x) && Number.isInteger(value.y) ? { x: value.x, y: value.y } : null;
+  return {
+    frameId,
+    normalizedSha256,
+    sourceLandmark: coordinate(measurement?.sourceLandmark),
+    canonicalLandmark: coordinate(measurement?.canonicalLandmark),
+    landmarkDrift: coordinate(measurement?.landmarkDrift),
+    bounds: {
+      left: measurement?.left ?? null,
+      top: measurement?.top ?? null,
+      width: measurement?.width ?? null,
+      height: measurement?.height ?? null,
+      bottom: measurement?.bottom ?? null
+    }
+  };
+}
+
+export async function exportContractAnimation(args) {
+  const contract = snapshotContract(args?.contract);
+  const config = immutableSnapshot(args?.config, 'config');
+  const outputDir = args?.outputDir;
+  const columns = args?.columns ?? 8;
+  const frameApprovalSha256 = args?.frameApprovalSha256;
+  if (typeof outputDir !== 'string' || outputDir.trim() === '') throw new Error('outputDir must be a nonempty path');
+  if (!SHA256.test(frameApprovalSha256 ?? '')) throw new Error('contract export selected frame approval sha256 is required');
+  requirePositiveInteger(columns, 'columns');
+  const definitions = contract.document.clips.flatMap((clip) => clip.frames);
+  const normalized = snapshotMeasurements(args?.normalized, definitions);
+  const portableClipKeys = new Set();
+  for (const clip of contract.document.clips) {
+    if (!safePortableClipStem(clip.id)) throw new Error(`contract export requires a portable safe clip ID: ${clip.id}`);
+    const key = portabilityKey(clip.id);
+    if (portableClipKeys.has(key)) throw new Error(`contract export clip IDs must be portable and unique: ${clip.id}`);
+    portableClipKeys.add(key);
+  }
+  const resolvedOutput = path.resolve(outputDir);
+  if (await exists(resolvedOutput)) throw new Error(`output directory already exists: ${resolvedOutput}`);
+
+  // Capture each normalized frame exactly once. Every hash, palette check, and
+  // runtime resize below consumes this immutable byte snapshot.
+  const captured = await captureFrames(normalized.frames, config.canonical);
+  const contractColors = new Set(contract.document.palette.rgba.map((rgba) => rgba.join(',')));
+  for (const frame of captured) {
+    const unexpected = paletteOf(frame.image).filter(({ rgba }) => !contractColors.has(rgba.join(',')));
+    if (unexpected.length > 0) throw new Error('contract export normalized frame palette is outside the frozen animation contract palette');
+  }
+
+  const byId = new Map(definitions.map((definition, index) => [definition.id, { definition, index, captured: captured[index] }]));
+  const parent = path.dirname(resolvedOutput);
+  await fs.mkdir(parent, { recursive: true });
+  const stagingDir = await fs.mkdtemp(path.join(parent, '.sprite-contract-stage-'));
+  try {
+    const stagedClips = {};
+    const clipIndex = [];
+    for (const clip of contract.document.clips) {
+      const selected = clip.frames.map((frame) => byId.get(frame.id));
+      if (selected.some((item) => !item)) throw new Error(`contract export is missing a required frame for clip ${clip.id}`);
+      const frames = selected.map((item) => item.captured.path);
+      const durations = clip.frames.map((frame) => frame.duration);
+      const clipDir = path.join(stagingDir, clip.id);
+      const rendered = await renderAnimation({ frames, durations, outputDir: clipDir, config, columns, name: clip.id, capturedFrames: selected.map((item) => item.captured) });
+      const runtime = rendered.runtimeFrames.map((file, index) => ({ id: clip.frames[index].id, file }));
+      stagedClips[clip.id] = { ...rendered, frames: runtime, durations: [...durations], loopMode: clip.loopMode };
+      clipIndex.push({
+        id: clip.id,
+        loopMode: clip.loopMode,
+        frames: runtime.map((frame, index) => ({ id: frame.id, duration: durations[index], file: portableRelative(path.posix.join(clip.id, path.basename(frame.file)), 'runtime frame path') })),
+        sheet: portableRelative(path.posix.join(clip.id, path.basename(rendered.sheet)), 'sheet path'),
+        metadata: portableRelative(path.posix.join(clip.id, path.basename(rendered.metadata)), 'clip metadata path'),
+        preview: portableRelative(path.posix.join(clip.id, path.basename(rendered.preview)), 'preview path')
+      });
+    }
+    const indexName = 'animation-contract-export.json';
+    const indexFile = path.join(stagingDir, indexName);
+    const index = {
+      version: 1,
+      animationContractSha256: contract.sha256,
+      animationContract: contract.document,
+      frameApprovalSha256,
+      palette: contract.document.palette,
+      clips: clipIndex,
+      measurements: normalized.measurements.map((measurement, index) => snapshotMeasurement(measurement, captured[index].sha256))
+    };
+    await fs.writeFile(indexFile, `${JSON.stringify(index, null, 2)}\n`, { flag: 'wx' });
+    await fs.rename(stagingDir, resolvedOutput);
+    const clips = Object.fromEntries(Object.entries(stagedClips).map(([id, clip]) => [id, {
+      ...clip,
+      runtimeFrames: clip.runtimeFrames.map((file) => rebaseArtifact(file, stagingDir, resolvedOutput)),
+      sheet: rebaseArtifact(clip.sheet, stagingDir, resolvedOutput),
+      metadata: rebaseArtifact(clip.metadata, stagingDir, resolvedOutput),
+      preview: rebaseArtifact(clip.preview, stagingDir, resolvedOutput),
+      frames: clip.frames.map((frame) => ({ id: frame.id, file: rebaseArtifact(frame.file, stagingDir, resolvedOutput) }))
+    }]));
+    return { clips, metadata: path.join(resolvedOutput, indexName) };
   } catch (error) {
     await fs.rm(stagingDir, { recursive: true, force: true });
     throw error;

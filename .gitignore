@@ -2,6 +2,7 @@
 .superpowers/
 node_modules/
 .pixel-sprite-pipeline/
+**/.pixel-sprite-pipeline/tools/
 examples/private/
 **/examples/private/
 generated/

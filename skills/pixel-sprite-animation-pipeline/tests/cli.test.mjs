@@ -4,12 +4,17 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import sharp from 'sharp';
+import { createProgram } from '../scripts/cli.mjs';
 import { DEFAULT_CONFIG } from '../scripts/lib/config.mjs';
 import { exportAnimation } from '../scripts/lib/export.mjs';
-import { readRgba, writeRgba } from '../scripts/lib/image.mjs';
+import { paletteOf, readRgba, writeRgba } from '../scripts/lib/image.mjs';
 import { inspectImage } from '../scripts/lib/inspect.mjs';
 import { normalizeFrames } from '../scripts/lib/normalize.mjs';
 import { prepareAnchor } from '../scripts/lib/prepare.mjs';
+import { loadAnimationContract } from '../scripts/lib/animation-contract.mjs';
+import { writeSnapReceipt } from '../scripts/lib/snap-receipt.mjs';
+import { stableHash } from '../scripts/lib/state-auth.mjs';
 import { makeAnchor } from './helpers/fixtures.mjs';
 
 const packageDir = path.resolve(import.meta.dirname, '..');
@@ -29,6 +34,39 @@ function json(output) {
 
 async function tempProject(label = 'sprite cli project ') {
   return fs.mkdtemp(path.join(os.tmpdir(), label));
+}
+
+async function approvalCliFixture() {
+  const projectDir = await tempProject('sprite approval cli project ');
+  const runDir = path.join(projectDir, 'run');
+  await fs.mkdir(path.join(projectDir, '.pixel-sprite-pipeline'), { recursive: true, mode: 0o700 });
+  await fs.mkdir(runDir);
+  const rgba = [[0, 0, 0, 0], [18, 34, 51, 255]];
+  const document = {
+    version: 1, anchor: { sha256: 'a'.repeat(64), traitReferenceSha256: ['b'.repeat(64)] },
+    sizes: { canonical: [128, 128], generation: [1024, 1024], runtime: [256, 256], pixelSize: 8 }, pivot: { x: 64, y: 112 }, baseline: 111,
+    palette: { rgba, sha256: stableHash(rgba), snapperPaletteHex: ['122233'] },
+    clips: [{ id: 'idle', loopMode: 'once', loopTransition: null, frames: [{ id: 'idle-01', pose: 'rest', duration: 100, landmarkSemantic: { name: 'character-root', target: { x: 64, y: 112 } } }] }],
+    review: { checkpoints: ['identity'], approvers: ['artist@example.test'] }
+  };
+  const contractFile = path.join(projectDir, 'animation-contract.json');
+  await fs.writeFile(contractFile, `${JSON.stringify(document)}\n`);
+  const contract = await loadAnimationContract(contractFile);
+  const input = path.join(projectDir, 'input.png');
+  const output = path.join(runDir, 'idle-01.png');
+  await Promise.all([fs.writeFile(input, 'source'), fs.writeFile(output, 'snapped')]);
+  const receipt = await writeSnapReceipt({
+    projectDir, run: { id: 'run-1', outputDir: runDir, manifestSha256: 'c'.repeat(64) }, contract, inputs: [input], outputs: [output], args: ['16'],
+    identity: { origin: 'managed-cache', sha256: 'd'.repeat(64), size: 1, version: '1.2.3', helpSha256: 'e'.repeat(64), fixtureRgbaSha256: 'f'.repeat(64), pinnedReleaseTag: null, upstreamCommit: null }
+  });
+  const request = {
+    version: 1,
+    frames: [{ id: 'idle-01', path: receipt.document.payload.outputs[0].path, sha256: receipt.document.payload.outputs[0].sha256 }],
+    approvals: [{ frameId: 'idle-01', landmark: { x: 61, y: 109 }, approved: true, approvedBy: 'artist@example.test', checkpoints: ['identity'] }]
+  };
+  const requestFile = path.join(projectDir, 'approval-request.json');
+  await fs.writeFile(requestFile, `${JSON.stringify(request)}\n`);
+  return { projectDir, contractFile, receipt, requestFile };
 }
 
 async function validationRequest(projectDir) {
@@ -58,9 +96,60 @@ async function validationRequest(projectDir) {
 test('CLI exposes every independently callable pipeline stage', () => {
   const result = invoke(['--help']);
   assert.equal(result.status, 0, result.stderr);
-  for (const command of ['inspect', 'prepare', 'snap', 'normalize', 'export', 'validate', 'correct', 'promote-profile', 'propose-rule', 'run']) {
+  for (const command of ['setup-snapper', 'inspect', 'prepare', 'snap', 'normalize', 'export', 'validate', 'correct', 'promote-profile', 'propose-rule', 'run', 'contract', 'approve-frames']) {
     assert.match(result.stdout, new RegExp(`\\b${command}\\b`));
   }
+});
+
+test('contract inspect and approve-frames consume only explicit contract and landmark request data', async () => {
+  const value = await approvalCliFixture();
+  const inspected = invoke(['contract', 'inspect', '--file', value.contractFile]);
+  assert.equal(inspected.status, 0, inspected.stderr);
+  assert.equal(json(inspected.stdout).sha256.length, 64);
+
+  const approved = invoke(['approve-frames', '--contract', value.contractFile, '--snap-receipt', value.receipt.path, '--approval-request', value.requestFile, '--version', '1', '--project-dir', value.projectDir]);
+  assert.equal(approved.status, 0, approved.stderr);
+  assert.match(json(approved.stdout).path, /frame-approval-01\.json$/);
+
+  const implicit = path.join(value.projectDir, 'implicit-request.json');
+  await fs.writeFile(implicit, JSON.stringify({ version: 1, approvals: [] }));
+  const rejected = invoke(['approve-frames', '--contract', value.contractFile, '--snap-receipt', value.receipt.path, '--approval-request', implicit, '--version', '2', '--project-dir', value.projectDir]);
+  assert.equal(rejected.status, 1);
+  assert.match(json(rejected.stderr).error, /frames|approval request/i);
+});
+
+test('contract export CLI uses only contract timing and rejects a conflicting duration source', async () => {
+  const projectDir = await tempProject('sprite contract export cli ');
+  const anchor = path.join(projectDir, 'anchor.png');
+  await makeAnchor(anchor);
+  const prepared = await prepareAnchor({ input: anchor, outputDir: path.join(projectDir, 'prepared'), config: structuredClone(DEFAULT_CONFIG) });
+  const normalized = await normalizeFrames({ inputs: [prepared.canonicalTransparent], outputDir: path.join(projectDir, 'normalized'), config: structuredClone(DEFAULT_CONFIG), scaleFactor: 1 });
+  const palette = paletteOf(await readRgba(normalized.frames[0])).map(({ rgba }) => rgba);
+  const opaque = palette.slice(1).map((rgba) => rgba.slice(0, 3).map((component) => component.toString(16).padStart(2, '0')).join(''));
+  const document = {
+    version: 1, anchor: { sha256: 'a'.repeat(64), traitReferenceSha256: ['b'.repeat(64)] },
+    sizes: { canonical: [128, 128], generation: [1024, 1024], runtime: [256, 256], pixelSize: 8 }, pivot: { x: 64, y: 112 }, baseline: 111,
+    palette: { rgba: palette, sha256: stableHash(palette), snapperPaletteHex: opaque },
+    clips: [{ id: 'idle', loopMode: 'once', loopTransition: null, frames: [{ id: 'idle-01', pose: 'rest', duration: 137, landmarkSemantic: { name: 'character-root', target: { x: 64, y: 112 } } }] }],
+    review: { checkpoints: ['identity'], approvers: ['artist@example.test'] }
+  };
+  normalized.measurements[0] = { ...normalized.measurements[0], frameId: 'idle-01', sourceLandmark: { x: 6, y: 12 }, canonicalLandmark: { x: 64, y: 112 }, landmarkDrift: { x: 0, y: 0 } };
+  const contractFile = path.join(projectDir, 'animation-contract.json');
+  const normalizationFile = path.join(projectDir, 'normalization.json');
+  await fs.writeFile(contractFile, `${JSON.stringify(document)}\n`);
+  await fs.writeFile(normalizationFile, `${JSON.stringify(normalized)}\n`);
+
+  const conflict = invoke(['export', '--contract', contractFile, '--normalization', normalizationFile, '--frame-approval-sha256', 'c'.repeat(64), '--duration', '100', '--output', path.join(projectDir, 'conflict')]);
+  assert.equal(conflict.status, 1);
+  assert.match(json(conflict.stderr).error, /duration.*contract|contract.*duration/i);
+
+  const output = path.join(projectDir, 'runtime');
+  const result = invoke(['export', '--contract', contractFile, '--normalization', normalizationFile, '--frame-approval-sha256', 'c'.repeat(64), '--output', output]);
+  assert.equal(result.status, 0, result.stderr);
+  const exported = json(result.stdout);
+  assert.deepEqual(exported.clips.idle.durations, [137]);
+  const preview = await sharp(exported.clips.idle.preview, { animated: true }).metadata();
+  assert.deepEqual(preview.delay ?? [137], [137]);
 });
 
 test('skill instructions require structured argv handoff execution', async () => {
@@ -198,7 +287,7 @@ test('guided run creates a versioned generation handoff and resumes inside the s
   assert.equal(finished.status, 4, finished.stderr);
   const completed = json(finished.stdout);
   assert.equal(completed.validation.passed, true);
-  assert.equal(completed.profilePromotion.eligible, true);
+  assert.equal(completed.profilePromotion.eligible, false);
   assert.equal(completed.profilePromotion.applied, false);
   assert.equal(completed.profilePromotion.requiresUserApproval, true);
   assert.match(completed.report.reportPath, /report\.json$/);
@@ -299,36 +388,22 @@ test('manual snapped-frame resume requires exact count and publishes the batch a
   assert.deepEqual((await fs.readdir(path.join(runDir, 'snapped'))).sort(), ['frame-00-snapped.png', 'frame-01-snapped.png']);
 });
 
-test('generated batch survives a transient Pixel Snapper failure and identical retry consumes the transition once', async (t) => {
+test('generated batch keeps an unverified external Pixel Snapper in manual handoff mode', async (t) => {
   if (process.platform === 'win32') { t.skip('POSIX executable fixture'); return; }
   const projectDir = await tempProject();
   const input = path.join(projectDir, 'anchor.png');
   const frame = path.join(projectDir, 'generated.png');
   const fake = path.join(projectDir, 'fake snapper.js');
-  const state = path.join(projectDir, 'fake snapper state');
   await makeAnchor(input);
   await makeAnchor(frame);
-  await fs.writeFile(fake, `#!/usr/bin/env node\nconst fs=require('node:fs');const a=process.argv.slice(2);if(a[0]==='--help')process.exit(0);const s=process.env.FAKE_SNAPPER_STATE;if(!fs.existsSync(s)){fs.writeFileSync(s,'failed');process.stderr.write('transient snap failure');process.exit(7)}fs.copyFileSync(a[0],a[1]);\n`);
+  await fs.writeFile(fake, `#!/usr/bin/env node\nconst fs=require('node:fs');const a=process.argv.slice(2);if(a[0]==='--version'||a[0]==='--help')process.exit(0);fs.copyFileSync(a[0],a[1]);\n`);
   await fs.chmod(fake, 0o755);
   const initial = json(invoke(['run', '--input', input, '--project-dir', projectDir]).stdout);
   const args = ['run', '--resume', initial.runId, '--resume-token', initial.resumeToken, '--frame', frame, '--project-dir', projectDir];
-  const first = invoke(args, { env: { FAKE_SNAPPER_STATE: state, PIXEL_SNAPPER_BIN: fake } });
-  assert.equal(first.status, 1);
-  assert.match(json(first.stderr).error, /transient snap failure/);
-  const generatedFile = path.join(path.dirname(initial.handoffPath), 'generated', 'frame-00.png');
-  assert.deepEqual(await fs.readdir(path.dirname(generatedFile)), ['frame-00.png']);
-  await fs.appendFile(generatedFile, 'tampered');
-  const changed = invoke(args, { env: { FAKE_SNAPPER_STATE: state, PIXEL_SNAPPER_BIN: fake } });
-  assert.equal(changed.status, 1);
-  assert.match(json(changed.stderr).error, /hash does not match.*authenticated batch/i);
-  await fs.copyFile(frame, generatedFile);
-
-  const retry = invoke(args, { env: { FAKE_SNAPPER_STATE: state, PIXEL_SNAPPER_BIN: fake } });
-  assert.equal(retry.status, 4, retry.stderr);
-  assert.equal(json(retry.stdout).validation.passed, true);
-  const replay = invoke(args, { env: { FAKE_SNAPPER_STATE: state, PIXEL_SNAPPER_BIN: fake } });
-  assert.equal(replay.status, 1);
-  assert.match(json(replay.stderr).error, /already consumed/i);
+  const result = invoke(args, { env: { PIXEL_SNAPPER_BIN: fake } });
+  assert.equal(result.status, 2, result.stderr);
+  assert.equal(json(result.stdout).status, 'manual-handoff');
+  assert.deepEqual((await fs.readdir(path.dirname(initial.handoffPath))).filter((name) => name.includes('snapped-stage')), []);
 });
 
 test('manual snapped batch is authenticated and reusable after downstream normalization failure', async () => {
@@ -430,4 +505,34 @@ test('stage commands accept repeated frames without treating commas as separator
   const result = invoke(['normalize', '--frame', first, '--frame', second, '--output', output, '--scale', '1']);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(json(result.stdout).frames.length, 2);
+});
+
+test('setup-snapper CLI forwards project-dir and force only through explicit in-process dependency injection', async () => {
+  const projectDir = await tempProject('setup cli project ');
+  const calls = [];
+  const program = createProgram({
+    manifestPath: '/explicit/test/manifest.json',
+    setupPixelSnapperImpl: async (options) => { calls.push(options); return { status: 'installed' }; },
+    printImpl: () => {}
+  });
+  await program.parseAsync(['node', 'pixel-sprite-pipeline', 'setup-snapper', '--project-dir', projectDir, '--force']);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].projectDir, projectDir);
+  assert.equal(calls[0].manifestPath, '/explicit/test/manifest.json');
+  assert.equal(calls[0].force, true);
+  assert.equal('fetchImpl' in calls[0], false);
+});
+
+test('hostile environment variables cannot replace production setup manifest or transport', async () => {
+  const projectDir = await tempProject('hostile setup env ');
+  const fakeManifest = path.join(projectDir, 'fake.json');
+  const fakeArchive = path.join(projectDir, 'fake.tar.gz');
+  await fs.writeFile(fakeManifest, '{}');
+  await fs.writeFile(fakeArchive, 'fake');
+  const result = invoke(['setup-snapper', '--project-dir', projectDir], { env: {
+    NODE_ENV: 'test', PIXEL_SNAPPER_TEST_MANIFEST: fakeManifest, PIXEL_SNAPPER_TEST_ARCHIVE: fakeArchive
+  } });
+  assert.equal(result.status, 1);
+  assert.match(json(result.stderr).error, /pixel-snapper-tool-manifest\.json|ENOENT/);
+  await assert.rejects(fs.lstat(path.join(projectDir, '.pixel-sprite-pipeline')), { code: 'ENOENT' });
 });

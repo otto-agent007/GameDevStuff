@@ -1,0 +1,331 @@
+name: Pixel Snapper immutable release
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: Immutable upstream semantic-version tag
+        required: true
+        type: string
+      upstream_commit:
+        description: Full 40-character upstream commit
+        required: true
+        type: string
+      release_tag:
+        description: pixel-snapper-vX.Y.Z-commit.abcdef0
+        required: true
+        type: string
+      immutable_releases_confirmed:
+        description: Confirm repository immutable releases are enabled and an Administration:read token is configured
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  immutability-preflight:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Verify repository immutable-release enforcement before any build
+        shell: bash
+        env:
+          CONFIRMED: ${{ inputs.immutable_releases_confirmed }}
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMED" = "true"
+          test -n "$GH_TOKEN"
+          test "$(gh api -H "X-GitHub-Api-Version: 2026-03-10" "repos/${GITHUB_REPOSITORY}/immutable-releases" --jq '.enabled')" = "true"
+
+  compliance:
+    needs: immutability-preflight
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+      UPSTREAM_COMMIT: ${{ inputs.upstream_commit }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - name: Validate immutable inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$UPSTREAM_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$UPSTREAM_COMMIT" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$RELEASE_TAG" =~ ^pixel-snapper-v[0-9]+\.[0-9]+\.[0-9]+-commit\.[a-f0-9]{7}$ ]]
+          test "$RELEASE_TAG" = "pixel-snapper-${UPSTREAM_TAG}-commit.${UPSTREAM_COMMIT:0:7}"
+
+      - name: Check out release tooling
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          path: release-tools
+          persist-credentials: false
+
+      - name: Check out exact upstream source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Hugo-Dz/spritefusion-pixel-snapper
+          ref: ${{ inputs.upstream_commit }}
+          fetch-depth: 0
+          path: upstream
+          persist-credentials: false
+
+      - name: Set up locked Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20.19.6
+
+      - name: Verify approved source, tag, minimum fixture, and exact license bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C upstream fetch --force --no-tags origin "refs/tags/${UPSTREAM_TAG}:refs/tags/${UPSTREAM_TAG}"
+          test "$(git -C upstream rev-parse HEAD)" = "$UPSTREAM_COMMIT"
+          test "$(git -C upstream rev-parse "${UPSTREAM_TAG}^{commit}")" = "$UPSTREAM_COMMIT"
+          node --input-type=module -e '
+            import crypto from "node:crypto";
+            import fs from "node:fs";
+            const source = fs.readFileSync("upstream/src/lib.rs");
+            const sourceSha = crypto.createHash("sha256").update(source).digest("hex");
+            if (sourceSha !== "08c1323a65243400a4a6ce7ac0051ad116e39869f3276630c2a16a02cc2e05b4") throw new Error("approved upstream source hash mismatch");
+            const text = source.toString("utf8");
+            if (!text.includes("if w < 3 || h < 3") || !text.includes("Image too small (minimum 3x3)")) throw new Error("approved upstream fixture minimum changed");
+          '
+          cmp upstream/LICENSE release-tools/skills/pixel-sprite-animation-pipeline/references/pixel-snapper-upstream.LICENSE
+
+      - name: Install locked Rust compliance tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+          cargo install --locked cargo-sbom@0.10.0
+          cargo install --locked cargo-about@0.8.4
+          cargo fetch --locked --manifest-path upstream/Cargo.toml
+
+      - name: Generate one deterministic compliance payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir compliance
+          cp upstream/LICENSE compliance/LICENSE-Pixel-Snapper
+          cargo sbom --project-directory upstream --output-format spdx_json_2_3 > raw-pixel-snapper.spdx.json
+          cargo about generate --locked --offline --fail --manifest-path upstream/Cargo.toml --config release-tools/skills/pixel-sprite-animation-pipeline/references/pixel-snapper-about.toml --output-file compliance/THIRD-PARTY-NOTICES release-tools/skills/pixel-sprite-animation-pipeline/references/pixel-snapper-about.hbs
+          CARGO_LOCK_SHA256="$(node --input-type=module -e 'import crypto from "node:crypto"; import fs from "node:fs"; process.stdout.write(crypto.createHash("sha256").update(fs.readFileSync("upstream/Cargo.lock")).digest("hex"));')"
+          [[ "$CARGO_LOCK_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          node release-tools/skills/pixel-sprite-animation-pipeline/scripts/release/normalize-compliance.mjs --input raw-pixel-snapper.spdx.json --output compliance/pixel-snapper.spdx.json --upstream-commit "$UPSTREAM_COMMIT" --cargo-lock-sha256 "$CARGO_LOCK_SHA256"
+
+      - name: Upload single compliance source of truth
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pixel-snapper-compliance
+          path: compliance
+          if-no-files-found: error
+          retention-days: 2
+
+  build:
+    needs: compliance
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { key: windows-x64, os: windows-2025, target: x86_64-pc-windows-msvc }
+          - { key: macos-x64, os: macos-15-intel, target: x86_64-apple-darwin }
+          - { key: macos-arm64, os: macos-15, target: aarch64-apple-darwin }
+          - { key: linux-x64, os: ubuntu-24.04, target: x86_64-unknown-linux-musl }
+          - { key: linux-arm64, os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl }
+    runs-on: ${{ matrix.os }}
+    env:
+      UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+      UPSTREAM_COMMIT: ${{ inputs.upstream_commit }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      RUST_TARGET: ${{ matrix.target }}
+      RELEASE_TARGET: ${{ matrix.key }}
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Validate immutable inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$UPSTREAM_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$UPSTREAM_COMMIT" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$RELEASE_TAG" =~ ^pixel-snapper-v[0-9]+\.[0-9]+\.[0-9]+-commit\.[a-f0-9]{7}$ ]]
+          test "$RELEASE_TAG" = "pixel-snapper-${UPSTREAM_TAG}-commit.${UPSTREAM_COMMIT:0:7}"
+
+      - name: Check out release tooling
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          path: release-tools
+          persist-credentials: false
+
+      - name: Check out exact upstream source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Hugo-Dz/spritefusion-pixel-snapper
+          ref: ${{ inputs.upstream_commit }}
+          fetch-depth: 0
+          path: upstream
+          persist-credentials: false
+
+      - name: Set up locked Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20.19.6
+          cache: npm
+          cache-dependency-path: release-tools/skills/pixel-sprite-animation-pipeline/npm-shrinkwrap.json
+
+      - name: Verify upstream tag and source commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C upstream fetch --force --no-tags origin "refs/tags/${UPSTREAM_TAG}:refs/tags/${UPSTREAM_TAG}"
+          test "$(git -C upstream rev-parse HEAD)" = "$UPSTREAM_COMMIT"
+          test "$(git -C upstream rev-parse "${UPSTREAM_TAG}^{commit}")" = "$UPSTREAM_COMMIT"
+          cmp upstream/LICENSE release-tools/skills/pixel-sprite-animation-pipeline/references/pixel-snapper-upstream.LICENSE
+
+      - name: Install release-tool dependencies
+        shell: bash
+        run: npm ci --ignore-scripts
+        working-directory: release-tools/skills/pixel-sprite-animation-pipeline
+
+      - name: Install locked Rust toolchain and target
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup target add --toolchain 1.88.0 "$RUST_TARGET"
+          rustup default 1.88.0
+          test "$(rustc --version | cut -d' ' -f2)" = "1.88.0"
+
+      - name: Build locked native binary
+        shell: bash
+        run: cargo build --locked --release --target "$RUST_TARGET"
+        working-directory: upstream
+
+      - name: Download deterministic compliance payload
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: pixel-snapper-compliance
+          path: compliance
+
+      - name: Build authenticated package request
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module -e '
+            import crypto from "node:crypto";
+            import { execFileSync } from "node:child_process";
+            import fs from "node:fs";
+            import path from "node:path";
+            const commit = process.env.UPSTREAM_COMMIT;
+            const workflowCommit = process.env.WORKFLOW_COMMIT;
+            if (!/^[a-f0-9]{40}$/.test(commit) || !/^[a-f0-9]{40}$/.test(workflowCommit)) throw new Error("full commits required");
+            const windows = process.env.RELEASE_TARGET === "windows-x64";
+            const binary = path.join("upstream", "target", process.env.RUST_TARGET, "release", `spritefusion-pixel-snapper${windows ? ".exe" : ""}`);
+            const lock = fs.readFileSync("upstream/Cargo.lock");
+            const request = {
+              nativeProbe: true,
+              target: process.env.RELEASE_TARGET,
+              rustTarget: process.env.RUST_TARGET,
+              binaryFile: binary,
+              licenseFile: "compliance/LICENSE-Pixel-Snapper",
+              noticesFile: "compliance/THIRD-PARTY-NOTICES",
+              sbomFile: "compliance/pixel-snapper.spdx.json",
+              upstream: { repository: "Hugo-Dz/spritefusion-pixel-snapper", tag: process.env.UPSTREAM_TAG, version: process.env.UPSTREAM_TAG.slice(1), commit },
+              build: { workflowCommit, rustVersion: "1.88.0", cargoVersion: execFileSync("cargo", ["--version"], { encoding: "utf8", shell: false }).trim(), cargoLockSha256: crypto.createHash("sha256").update(lock).digest("hex"), cargoSbomVersion: "0.10.0", cargoAboutVersion: "0.8.4" },
+              fixture: { inputRgbaSha256: "bb9b87994cf22366cad9d0bbaca0a4663921cda521c5c7f1d44de921d8d8c84f", expectedRgbaSha256: "bb9b87994cf22366cad9d0bbaca0a4663921cda521c5c7f1d44de921d8d8c84f" }
+            };
+            fs.writeFileSync("package-request.json", `${JSON.stringify(request, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+          '
+        env:
+          WORKFLOW_COMMIT: ${{ github.sha }}
+
+      - name: Execute native probes and package exact files
+        shell: bash
+        run: node release-tools/skills/pixel-sprite-animation-pipeline/scripts/release/package-pixel-snapper.mjs --request package-request.json --output-dir "packaged/${RELEASE_TARGET}"
+
+      - name: Upload isolated target package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pixel-snapper-build-${{ matrix.key }}
+          path: packaged/${{ matrix.key }}
+          if-no-files-found: error
+          retention-days: 2
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+      UPSTREAM_COMMIT: ${{ inputs.upstream_commit }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Validate immutable inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$UPSTREAM_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$UPSTREAM_COMMIT" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$RELEASE_TAG" =~ ^pixel-snapper-v[0-9]+\.[0-9]+\.[0-9]+-commit\.[a-f0-9]{7}$ ]]
+          test "$RELEASE_TAG" = "pixel-snapper-${UPSTREAM_TAG}-commit.${UPSTREAM_COMMIT:0:7}"
+
+      - name: Check out reviewed release tooling
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Set up locked Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20.19.6
+          cache: npm
+          cache-dependency-path: skills/pixel-sprite-animation-pipeline/npm-shrinkwrap.json
+
+      - name: Install release-tool dependencies
+        shell: bash
+        run: npm ci --ignore-scripts
+        working-directory: skills/pixel-sprite-animation-pipeline
+
+      - name: Download all untrusted build artifacts without execution
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: pixel-snapper-build-*
+          path: build-inputs
+
+      - name: Reject an existing immutable tag or release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "release tag already exists" >&2
+            exit 1
+          fi
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release already exists" >&2
+            exit 1
+          fi
+
+      - name: Assemble and validate release without executing downloads
+        shell: bash
+        run: node skills/pixel-sprite-animation-pipeline/scripts/release/assemble-release.mjs --input-dir build-inputs --output-dir release-output --release-tag "$RELEASE_TAG" --upstream-commit "$UPSTREAM_COMMIT" --workflow-commit "$GITHUB_SHA"
+
+      - name: Publish immutable release
+        shell: bash
+        run: gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$RELEASE_TAG" --notes "Verified five-target build from upstream ${UPSTREAM_COMMIT}." release-output/*
+
+      - name: Require published release immutability
+        shell: bash
+        run: test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isImmutable --jq '.isImmutable')" = "true"
+
+      - name: Verify public release hashes
+        shell: bash
+        run: node skills/pixel-sprite-animation-pipeline/scripts/release/verify-release.mjs --metadata-dir release-output

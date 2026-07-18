@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { DEFAULT_CONFIG } from '../scripts/lib/config.mjs';
-import { createCorrectionContract, loadCorrectionContext, sealCorrectionContract } from '../scripts/lib/contract.mjs';
+import { createCorrectionContract, loadCorrectionContext, sealCorrectionContract, stableHash } from '../scripts/lib/contract.mjs';
 import { exportAnimation } from '../scripts/lib/export.mjs';
 import { inspectImage } from '../scripts/lib/inspect.mjs';
 import { sha256 } from '../scripts/lib/image.mjs';
@@ -22,14 +22,35 @@ async function fixture() {
   const exported = await exportAnimation({ frames: normalized.frames, outputDir: path.join(runDir, 'runtime'), config: DEFAULT_CONFIG, columns: 1, durations: [100], name: 'animation' });
   const manifest = { version: 1, runId: 'run-1', config: DEFAULT_CONFIG, inputs: [{ id: 'source.png' }] };
   await fs.writeFile(path.join(runDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-  const contract = await createCorrectionContract({ runDir, runId: 'run-1', config: DEFAULT_CONFIG, anchorReport: await inspectImage(source), normalized, exported });
+  const provenance = {
+    animationContractSha256: 'a'.repeat(64), snapReceiptSha256: 'b'.repeat(64),
+    frameApprovalSha256: 'c'.repeat(64), toolProvenanceVerified: false
+  };
+  const contract = await createCorrectionContract({ runDir, runId: 'run-1', config: DEFAULT_CONFIG, anchorReport: await inspectImage(source), normalized, exported, provenance });
   const manifestSha256 = await sha256(path.join(runDir, 'manifest.json'));
-  await fs.writeFile(path.join(runDir, 'report.json'), `${JSON.stringify({ runId: 'run-1', manifestSha256, correctionContract: { path: 'correction-contract-v1.json', sha256: contract.sha256 } }, null, 2)}\n`);
+  await fs.writeFile(path.join(runDir, 'report.json'), `${JSON.stringify({ runId: 'run-1', manifestSha256, correctionContract: { path: 'correction-contract-v1.json', sha256: contract.sha256 }, ...provenance }, null, 2)}\n`);
   const receipts = await Promise.all(Array.from({ length: 8 }, () => sealCorrectionContract({ projectDir: project, runDir, runId: 'run-1', contract })));
   const [receipt] = receipts;
   for (const concurrentReceipt of receipts) assert.deepEqual(concurrentReceipt, receipt);
-  return { project, runDir, source, normalized, exported, contract, receipt };
+  return { project, runDir, source, normalized, exported, contract, receipt, provenance };
 }
+
+test('correction contracts authenticate the complete animation approval chain before repair', async () => {
+  const value = await fixture();
+  assert.deepEqual(value.contract.document.provenance, value.provenance);
+  const loaded = await loadCorrectionContext({ projectDir: value.project, runId: 'run-1', contractSha256: value.contract.sha256, receiptSha256: value.receipt.sha256, receiptSignature: value.receipt.signature });
+  assert.deepEqual(loaded.provenance, value.provenance);
+
+  const reportFile = path.join(value.runDir, 'report.json');
+  const report = JSON.parse(await fs.readFile(reportFile, 'utf8'));
+  report.frameApprovalSha256 = 'd'.repeat(64);
+  await fs.writeFile(reportFile, `${JSON.stringify(report, null, 2)}\n`);
+  await assert.rejects(loadCorrectionContext({ projectDir: value.project, runId: 'run-1', contractSha256: value.contract.sha256, receiptSha256: value.receipt.sha256, receiptSignature: value.receipt.signature }), /receipt|approval|provenance|report/i);
+});
+
+test('correction contract preserves stable hash compatibility', () => {
+  assert.equal(stableHash({ z: 1, a: { y: 2, x: 3 } }), stableHash({ a: { x: 3, y: 2 }, z: 1 }));
+});
 
 test('immutable correction contract authenticates ancestors and permits only the declared corrupted target', async () => {
   const value = await fixture();
