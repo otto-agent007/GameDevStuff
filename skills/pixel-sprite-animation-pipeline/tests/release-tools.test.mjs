@@ -437,6 +437,17 @@ test('release workflow verifies committed license bytes independent of checkout 
   assert.match(source, new RegExp(`git -C release-tools rev-parse "HEAD:${referencePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`));
 });
 
+test('release workflow isolates Cargo hardlinks before native probes and packaging', async () => {
+  const workflowFile = path.join(ROOT, '.github', 'workflows', 'pixel-snapper-release.yml');
+  const source = await fs.readFile(workflowFile, 'utf8');
+
+  assert.match(source, /const cargoBinary = path\.join\("upstream", "target", process\.env\.RUST_TARGET, "release"/);
+  assert.match(source, /const isolatedBinary = path\.join\("native-input", executableName\)/);
+  assert.match(source, /fs\.copyFileSync\(cargoBinary, isolatedBinary, fs\.constants\.COPYFILE_EXCL\)/);
+  assert.match(source, /if \(!windows\) fs\.chmodSync\(isolatedBinary, 0o755\)/);
+  assert.match(source, /binaryFile: isolatedBinary/);
+});
+
 test('approved release documents pin immutable v1.0.0 commit and retain the former README-only commit only as history', async () => {
   const approvedCommit = '5743009265051098831ad7298092072325d1149b';
   const releaseTag = 'pixel-snapper-v1.0.0-commit.5743009';
