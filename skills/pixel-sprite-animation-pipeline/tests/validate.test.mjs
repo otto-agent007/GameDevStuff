@@ -522,3 +522,40 @@ test('generative retry accounting is capped per affected frame and never calls o
   assert.deepEqual(result.generativeAttemptsRemaining, { 2: 1, 4: 0 });
   assert.deepEqual(result.actions.map(({ requires }) => requires), ['generative-retry', 'generative-retry-exhausted', 'user-review', 'user-review']);
 });
+
+test('correction cleanup requests documented Windows lock retries and propagates persistent failure', async () => {
+  const module = await import('../scripts/lib/correct.mjs');
+  assert.equal(typeof module.removeCorrectionTree, 'function');
+  let observed;
+  await module.removeCorrectionTree('staging', async (directory, options) => { observed = { directory, options }; });
+  assert.deepEqual(observed, {
+    directory: 'staging',
+    options: { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }
+  });
+  const locked = Object.assign(new Error('still locked'), { code: 'EBUSY' });
+  await assert.rejects(module.removeCorrectionTree('staging', async () => { throw locked; }), (error) => error === locked);
+});
+
+test('failed correction releases an animated WebP before removing its staging tree', async () => {
+  const fixture = await makeSmallExport();
+  const runDir = await temporaryDirectory('sprite-webp-cleanup-');
+  const before = path.join(runDir, 'before.webp');
+  await sharp(fixture.frames[0]).negate({ alpha: false }).webp({ lossless: true }).toFile(before);
+  const failure = { code: 'PREVIEW_MISMATCH', stage: 'preview', correction: 'reexport-preview', target: 'preview', before };
+  await assert.rejects(applyDeterministicCorrections({
+    failures: [failure],
+    run: { runDir, corrections: [], inputs: [before], generativeAttempts: {}, expected: { metadata: fixture.metadata, preview: { runtimeFrames: fixture.exported.runtimeFrames, durations: fixture.durations } } },
+    config: fixture.config,
+    operations: {
+      'reexport-preview': async ({ outputDir }) => {
+        const output = path.join(outputDir, 'animation.webp');
+        await fs.copyFile(fixture.exported.preview, output);
+        const blocker = path.join(runDir, 'correction-01');
+        await fs.mkdir(blocker);
+        await fs.writeFile(path.join(blocker, 'blocker'), 'force rename failure after Sharp verification');
+        return { output, validationPassed: true, improved: true, revalidations: [await revalidationFor(failure, before, output)] };
+      }
+    }
+  }), /rename|not empty|exist/i);
+  assert.deepEqual((await fs.readdir(runDir)).filter((name) => name.startsWith('.correction-') || name.startsWith('correction-')), []);
+});

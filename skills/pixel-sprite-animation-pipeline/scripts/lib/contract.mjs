@@ -93,18 +93,24 @@ async function signingKey(projectDir, { create = false } = {}) {
   return key;
 }
 
-function relative(runDir, file) {
-  const value = path.relative(runDir, path.resolve(file)).replaceAll('\\', '/');
-  if (value === '..' || value.startsWith('../') || path.isAbsolute(value)) throw new Error('correction contract artifact escaped the run');
-  return value;
+export function portableContainedPath(physicalRunDir, physicalFile, pathApi = path) {
+  const value = pathApi.relative(physicalRunDir, physicalFile);
+  if (value === '..' || value.startsWith(`..${pathApi.sep}`) || pathApi.isAbsolute(value)) throw new Error('correction contract artifact escaped the run');
+  return value.replaceAll('\\', '/');
 }
 
-async function imageRecord(runDir, file, role, extra = {}) {
+async function relative(physicalRunDir, file) { return portableContainedPath(physicalRunDir, await fs.realpath(file)); }
+
+async function imageRecord(physicalRunDir, file, role, extra = {}) {
+  const portablePath = await relative(physicalRunDir, file);
   const image = await readRgba(file);
-  return { role, path: relative(runDir, file), sha256: await sha256(file), width: image.width, height: image.height, palette: paletteOf(image), ...extra };
+  return { role, path: portablePath, sha256: await sha256(file), width: image.width, height: image.height, palette: paletteOf(image), ...extra };
 }
 
-async function fileRecord(runDir, file, role) { return { role, path: relative(runDir, file), sha256: await sha256(file) }; }
+async function fileRecord(physicalRunDir, file, role) {
+  const portablePath = await relative(physicalRunDir, file);
+  return { role, path: portablePath, sha256: await sha256(file) };
+}
 
 async function atomicNew(file, contents) {
   const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${crypto.randomUUID()}.tmp`);
@@ -118,18 +124,19 @@ async function atomicNew(file, contents) {
 
 export async function createCorrectionContract({ runDir, runId, config, anchorReport, normalized, exported }) {
   const effective = validateConfig(config);
+  const physicalRunDir = await fs.realpath(runDir);
   const manifestPath = path.join(runDir, 'manifest.json');
   const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
   if (manifest.runId !== runId) throw new Error('correction contract run ID mismatch');
   const metadata = JSON.parse(await fs.readFile(exported.metadata, 'utf8'));
-  const anchor = await imageRecord(runDir, anchorReport.path, 'approved-anchor');
-  const normalizedFrames = await Promise.all(normalized.frames.map(async (file, frame) => imageRecord(runDir, file, 'normalized-frame', {
+  const anchor = await imageRecord(physicalRunDir, anchorReport.path, 'approved-anchor');
+  const normalizedFrames = await Promise.all(normalized.frames.map(async (file, frame) => imageRecord(physicalRunDir, file, 'normalized-frame', {
     frame,
-    source: relative(runDir, normalized.measurements[frame].input),
+    source: await relative(physicalRunDir, normalized.measurements[frame].input),
     sourceSha256: await sha256(normalized.measurements[frame].input),
     measurement: Object.fromEntries(['left', 'top', 'width', 'height', 'bottom', 'scaleFactor'].map((key) => [key, normalized.measurements[frame][key]]))
   })));
-  const runtimeFrames = await Promise.all(exported.runtimeFrames.map((file, frame) => imageRecord(runDir, file, 'runtime-frame', { frame, sourceSha256: metadata.sources[frame].sha256 })));
+  const runtimeFrames = await Promise.all(exported.runtimeFrames.map((file, frame) => imageRecord(physicalRunDir, file, 'runtime-frame', { frame, sourceSha256: metadata.sources[frame].sha256 })));
   const delivery = {
     name: path.basename(exported.metadata, '.json'),
     columns: metadata.columns,
@@ -141,9 +148,9 @@ export async function createCorrectionContract({ runDir, runId, config, anchorRe
     sources: metadata.sources,
     normalizedFrames,
     runtimeFrames,
-    sheet: await imageRecord(runDir, exported.sheet, 'sheet'),
-    metadata: await fileRecord(runDir, exported.metadata, 'metadata'),
-    preview: await fileRecord(runDir, exported.preview, 'preview')
+    sheet: await imageRecord(physicalRunDir, exported.sheet, 'sheet'),
+    metadata: await fileRecord(physicalRunDir, exported.metadata, 'metadata'),
+    preview: await fileRecord(physicalRunDir, exported.preview, 'preview')
   };
   const document = {
     version: 1,

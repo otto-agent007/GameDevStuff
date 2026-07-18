@@ -6,6 +6,9 @@ import sharp from 'sharp';
 const AUTOMATIC = new Set(['repad', 'nearest-rescale', 'rekey', 'realign', 'reexport-metadata', 'reexport-preview', 'reexport-sheet']);
 const GENERATIVE = new Set(['stop-for-regeneration']);
 const REVIEW = new Set(['palette-remap-review', 'timing-or-transition-review', 'stop-for-review']);
+const CLEANUP_OPTIONS = Object.freeze({ recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+
+export async function removeCorrectionTree(directory, remove = fs.rm) { await remove(directory, CLEANUP_OPTIONS); }
 
 function onlyReviewFailures(report) {
   return report?.passed === false && Array.isArray(report.failures) && report.failures.every((failure) => GENERATIVE.has(failure.correction) || REVIEW.has(failure.correction));
@@ -114,8 +117,17 @@ function jsonEqual(left, right) {
 }
 
 async function readRawImage(file, animated = false) {
-  const { data, info } = await sharp(file, animated ? { animated: true } : undefined).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  return { data, info };
+  const pipeline = sharp(file, animated ? { animated: true } : undefined).ensureAlpha().raw();
+  try {
+    const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
+    return { data, info };
+  } finally { pipeline.destroy(); }
+}
+
+async function readImageMetadata(file, options) {
+  const pipeline = sharp(file, options);
+  try { return await pipeline.metadata(); }
+  finally { pipeline.destroy(); }
 }
 
 async function verifyMetadataArtifact(file, expected) {
@@ -161,7 +173,7 @@ async function verifyPreviewArtifact(file, expected, trustedMetadata) {
     const runtime = await runtimeImages(expected);
     if (!runtime || !Array.isArray(expected.durations) || expected.durations.length !== runtime.images.length) return false;
     const preview = await readRawImage(file, true);
-    const metadata = await sharp(file, { animated: true }).metadata();
+    const metadata = await readImageMetadata(file, { animated: true });
     const pages = preview.info.pages ?? 1;
     const pageHeight = preview.info.pageHeight ?? preview.info.height / pages;
     if (pages !== runtime.images.length || preview.info.width !== runtime.width || pageHeight !== runtime.height) return false;
@@ -242,8 +254,8 @@ async function verifyRevalidation(failure, result, outputs, stagingDir, run) {
   if (!await verifyArtifactForFailure(failure, after.path, run)) return invalid;
   if (failure.code === 'CANVAS_SIZE') {
     if (!Array.isArray(failure.expected) || failure.expected.length !== 2 || !Array.isArray(failure.actual) || failure.actual.length !== 2) return invalid;
-    const beforeMetadata = await sharp(before.path).metadata();
-    const afterMetadata = await sharp(after.path).metadata();
+    const beforeMetadata = await readImageMetadata(before.path);
+    const afterMetadata = await readImageMetadata(after.path);
     if (beforeMetadata.width !== failure.actual[0] || beforeMetadata.height !== failure.actual[1]) return invalid;
     if (afterMetadata.width !== failure.expected[0] || afterMetadata.height !== failure.expected[1]) return invalid;
   }
@@ -441,7 +453,7 @@ export async function applyDeterministicCorrections({ failures, run, config, ope
         if (outputs.length === 0) throw new Error(`deterministic correction ${failure.correction} must produce a valid image`);
         for (const output of outputs) {
           try {
-            const metadata = await sharp(resolvedOutput(output, stagingDir)).metadata();
+            const metadata = await readImageMetadata(resolvedOutput(output, stagingDir));
             if (!metadata.width || !metadata.height) throw new Error('missing image dimensions');
           } catch (error) {
             throw new Error(`correction output must be a valid image: ${output}`, { cause: error });
@@ -480,8 +492,9 @@ export async function applyDeterministicCorrections({ failures, run, config, ope
     await assertStoredReferences(actions, correctionDir);
     return { correctionDir, actions, generativeAttemptsRemaining: remaining, manifest: path.join(correctionDir, 'manifest.json') };
   } catch (error) {
-    await fs.rm(stagingDir, { recursive: true, force: true });
-    await fs.rm(correctionDir, { recursive: true, force: true });
+    const cleanup = await Promise.allSettled([removeCorrectionTree(stagingDir), removeCorrectionTree(correctionDir)]);
+    const cleanupFailures = cleanup.filter((result) => result.status === 'rejected').map((result) => result.reason);
+    if (cleanupFailures.length > 0) throw new AggregateError([error, ...cleanupFailures], 'correction failed and cleanup did not complete');
     throw error;
   }
 }

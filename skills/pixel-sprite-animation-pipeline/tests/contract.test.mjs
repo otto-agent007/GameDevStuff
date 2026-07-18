@@ -213,3 +213,52 @@ test('signed correction loading rejects a multiply-linked signing key', async ()
     /signing key permissions or file type are unsafe/i
   );
 });
+
+test('contract containment compares canonical physical paths while recording slash-portable paths', async (context) => {
+  const project = await fs.mkdtemp(path.join(os.tmpdir(), 'sprite-contract-alias-'));
+  const runDir = path.join(project, '.pixel-sprite-pipeline', 'runs', 'alias-run');
+  await fs.mkdir(runDir, { recursive: true });
+  const source = path.join(runDir, 'source.png');
+  await makeAnchor(source);
+  const normalized = await normalizeFrames({ inputs: [source], outputDir: path.join(runDir, 'normalized'), config: DEFAULT_CONFIG });
+  const exported = await exportAnimation({ frames: normalized.frames, outputDir: path.join(runDir, 'runtime'), config: DEFAULT_CONFIG, columns: 1, durations: [100], name: 'animation' });
+  await fs.writeFile(path.join(runDir, 'manifest.json'), `${JSON.stringify({ version: 1, runId: 'alias-run', config: DEFAULT_CONFIG, inputs: [] })}\n`);
+  const alias = path.join(project, 'physical-run-alias');
+  try { await fs.symlink(runDir, alias, 'dir'); }
+  catch (error) {
+    if (['EPERM', 'ENOSYS'].includes(error.code)) { context.skip('directory aliases unavailable'); return; }
+    throw error;
+  }
+  const anchorReport = await inspectImage(path.join(alias, 'source.png'));
+  const contract = await createCorrectionContract({ runDir, runId: 'alias-run', config: DEFAULT_CONFIG, anchorReport, normalized, exported });
+  assert.equal(contract.document.anchor.path, 'source.png');
+  assert.ok(contract.document.delivery.normalizedFrames.every((frame) => !frame.path.includes('\\')));
+});
+
+test('contract containment rejects an external original anchor instead of confusing it with the staged approved anchor', async () => {
+  const project = await fs.mkdtemp(path.join(os.tmpdir(), 'sprite-contract-external-'));
+  const runDir = path.join(project, '.pixel-sprite-pipeline', 'runs', 'external-run');
+  await fs.mkdir(runDir, { recursive: true });
+  const staged = path.join(runDir, 'approved-anchor.png');
+  const external = path.join(project, 'original-anchor.png');
+  await makeAnchor(staged);
+  await makeAnchor(external);
+  const normalized = await normalizeFrames({ inputs: [staged], outputDir: path.join(runDir, 'normalized'), config: DEFAULT_CONFIG });
+  const exported = await exportAnimation({ frames: normalized.frames, outputDir: path.join(runDir, 'runtime'), config: DEFAULT_CONFIG, columns: 1, durations: [100], name: 'animation' });
+  await fs.writeFile(path.join(runDir, 'manifest.json'), `${JSON.stringify({ version: 1, runId: 'external-run', config: DEFAULT_CONFIG, inputs: [] })}\n`);
+  await assert.rejects(
+    createCorrectionContract({ runDir, runId: 'external-run', config: DEFAULT_CONFIG, anchorReport: await inspectImage(external), normalized, exported }),
+    /artifact escaped the run/
+  );
+});
+
+test('Windows canonical containment is case-insensitive, slash-portable, and drive-safe', async () => {
+  const module = await import('../scripts/lib/contract.mjs');
+  assert.equal(typeof module.portableContainedPath, 'function');
+  assert.equal(
+    module.portableContainedPath('C:\\Users\\RUNNER~1\\project\\run', 'c:\\users\\runner~1\\project\\run\\source\\anchor.png', path.win32),
+    'source/anchor.png'
+  );
+  assert.throws(() => module.portableContainedPath('C:\\project\\run', 'D:\\project\\run\\anchor.png', path.win32), /artifact escaped the run/);
+  assert.throws(() => module.portableContainedPath('C:\\project\\run', 'C:\\project\\run-sibling\\anchor.png', path.win32), /artifact escaped the run/);
+});
