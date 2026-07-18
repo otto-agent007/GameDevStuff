@@ -129,6 +129,20 @@ function rawHash(data) {
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
+async function readAnimatedPreview(file) {
+  // Keep libvips away from the staging pathname. Its Windows file cache can
+  // retain a path-backed animated image after the JS pipeline has completed,
+  // blocking the correction directory's atomic rename and cleanup.
+  const input = await fs.readFile(file);
+  const rawPipeline = sharp(input, { animated: true }).ensureAlpha().raw();
+  let decoded;
+  try { decoded = await rawPipeline.toBuffer({ resolveWithObject: true }); }
+  finally { rawPipeline.destroy(); }
+  const metadataPipeline = sharp(input, { animated: true });
+  try { return { ...decoded, metadata: await metadataPipeline.metadata() }; }
+  finally { metadataPipeline.destroy(); }
+}
+
 async function retainedForeground(file, image, config, { configuredBackground = true } = {}) {
   return extractPrimaryComponent(file, {
     image,
@@ -306,8 +320,7 @@ export async function validateRun({ anchorReport, normalized, exported, config, 
   const sheet = await readRgba(exported.sheet);
   if (!expectedRows || !sheetMatches(sheet, runtimeImages, metadata.columns, expectedRows, runtime)) addFailure(failures, 'FRAME_BLEED', { expected: expectedRows ? [metadata.columns * runtime.width, expectedRows * runtime.height] : null, actual: [sheet.width, sheet.height] });
 
-  const { data: previewData, info: previewInfo } = await sharp(exported.preview, { animated: true }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  const preview = await sharp(exported.preview, { animated: true }).metadata();
+  const { data: previewData, info: previewInfo, metadata: preview } = await readAnimatedPreview(exported.preview);
   measurements.previewPages = preview.pages ?? 1;
   measurements.previewDelays = preview.delay ?? [];
   if ((preview.pages ?? 1) !== exported.runtimeFrames.length) addFailure(failures, 'PREVIEW_MISMATCH', { field: 'pages', expected: exported.runtimeFrames.length, actual: preview.pages ?? 1 });
