@@ -1,0 +1,74 @@
+name: Pixel sprite skill
+
+on:
+  push:
+    paths:
+      - ".github/workflows/pixel-sprite-skill.yml"
+      - "skills/pixel-sprite-animation-pipeline/**"
+  pull_request:
+    paths:
+      - ".github/workflows/pixel-sprite-skill.yml"
+      - "skills/pixel-sprite-animation-pipeline/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pixel-sprite-skill-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [20, 24]
+    defaults:
+      run:
+        working-directory: skills/pixel-sprite-animation-pipeline
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: skills/pixel-sprite-animation-pipeline/npm-shrinkwrap.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run test suite
+        run: npm test
+
+      - name: Check CLI entry point
+        run: node scripts/cli.mjs --help
+
+      - name: Validate skill when the official validator is installed
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          roots = [Path.home() / ".codex"]
+          if os.environ.get("CODEX_HOME"):
+              roots.insert(0, Path(os.environ["CODEX_HOME"]))
+          candidates = [
+              root / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py"
+              for root in roots
+          ]
+          validator = next((candidate for candidate in candidates if candidate.is_file()), None)
+          if validator is None:
+              print("Official quick_validate.py is not installed on this runner; skipping.")
+          else:
+              raise SystemExit(subprocess.call([sys.executable, str(validator), "."]))
+
+      - name: Verify installable package contents
+        run: npm pack --dry-run

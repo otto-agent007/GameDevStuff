@@ -1,0 +1,8 @@
+.worktrees/
+.superpowers/
+node_modules/
+.pixel-sprite-pipeline/
+examples/private/
+**/examples/private/
+generated/
+*.log

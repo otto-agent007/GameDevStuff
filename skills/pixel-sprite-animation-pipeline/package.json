@@ -1,0 +1,24 @@
+{
+  "name": "pixel-sprite-animation-pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20.9.0" },
+  "files": [
+    "SKILL.md",
+    "agents/",
+    "npm-shrinkwrap.json",
+    "references/",
+    "scripts/"
+  ],
+  "bin": { "pixel-sprite-pipeline": "scripts/cli.mjs" },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "validate-skill": "python /root/.codex/skills/oai/skill-creator/scripts/quick_validate.py ."
+  },
+  "dependencies": {
+    "commander": "15.0.0",
+    "sharp": "0.35.3",
+    "yaml": "2.9.0"
+  }
+}
