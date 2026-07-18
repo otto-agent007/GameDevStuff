@@ -57,7 +57,7 @@ test('download streams a pinned asset with manual redirects and restrictive perm
 
   assert.deepEqual(result, { output: request.output, size: bytes.length, sha256: request.expectedSha256 });
   assert.deepEqual(await fs.readFile(request.output), bytes);
-  assert.equal((await fs.stat(request.output)).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') assert.equal((await fs.stat(request.output)).mode & 0o777, 0o600);
   assert.deepEqual(fetchImpl.calls.map(({ options }) => options), [{ redirect: 'manual' }, { redirect: 'manual' }]);
 });
 

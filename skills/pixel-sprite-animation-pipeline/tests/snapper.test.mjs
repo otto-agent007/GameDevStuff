@@ -78,7 +78,7 @@ test('handoff command uses the resolver environment rather than ambient process 
   }
 });
 
-test('verified snap receipt is published atomically and blocks changed retry identity before execution', async () => {
+test('verified snap receipt is published atomically and blocks changed retry identity before execution', { skip: process.platform === 'win32' && 'POSIX executable fixture' }, async () => {
   const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapper-receipt-'));
   const outputDir = path.join(projectDir, 'output');
   const input = path.join(projectDir, 'frame.png');
@@ -97,7 +97,7 @@ test('verified snap receipt is published atomically and blocks changed retry ide
   assert.equal(await fs.readFile(marker, 'utf8'), 'x');
 });
 
-test('durable guided receipt is reused before spawning and rejects drift', async () => {
+test('durable guided receipt is reused before spawning and rejects drift', { skip: process.platform === 'win32' && 'POSIX executable fixture' }, async () => {
   const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapper-durable-receipt-'));
   const durableDir = path.join(projectDir, 'snapped');
   const stageDir = path.join(projectDir, 'stage');

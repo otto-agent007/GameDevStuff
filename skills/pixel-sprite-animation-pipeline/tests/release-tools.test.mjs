@@ -157,7 +157,7 @@ test('packager rejects unsafe inputs and writes an atomic five-file archive arti
   await assert.rejects(packagePixelSnapper({ target: 'linux-x64', rustTarget: 'x86_64-unknown-linux-musl', outputDir: path.join(dir, 'bad'), ...files, licenseFile: linked, upstream: result.record.upstream, build: result.record.build, fixture: { ...result.record.fixture, expectedRgbaSha256: result.record.fixture.rgbaSha256 } }), /regular non-link file/);
 });
 
-test('native fixture probe uses the approved source-compatible 3x3 pixels', async () => {
+test('native fixture probe uses the approved source-compatible 3x3 pixels', { skip: process.platform === 'win32' && 'POSIX executable fixture' }, async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapper-native-probe-'));
   const binaryFile = path.join(dir, 'spritefusion-pixel-snapper');
   await fs.writeFile(binaryFile, `#!/usr/bin/env node
@@ -423,6 +423,8 @@ test('workflow policy is pinned, least-privileged, native, locked and publish ne
   const license = await fs.readFile(path.join(ROOT, 'skills/pixel-sprite-animation-pipeline/references/pixel-snapper-upstream.LICENSE'));
   assert.equal(license.length, 1075);
   assert.notEqual(license.at(-1), 10);
+  const attributes = await fs.readFile(path.join(ROOT, '.gitattributes'), 'utf8');
+  assert.match(attributes, /^skills\/pixel-sprite-animation-pipeline\/references\/pixel-snapper-upstream\.LICENSE -text$/m);
 });
 
 test('approved release documents pin immutable v1.0.0 commit and retain the former README-only commit only as history', async () => {

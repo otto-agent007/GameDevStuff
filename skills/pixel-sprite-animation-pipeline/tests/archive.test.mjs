@@ -87,8 +87,25 @@ test('ZIP preflight and extraction produce only the complete expected regular-fi
   assert.deepEqual(result.files.map((file) => path.relative(outputDir, file)), ['pixel-snapper.exe', 'LICENSE.txt']);
   assert.equal(await fs.readFile(path.join(outputDir, 'pixel-snapper.exe'), 'utf8'), 'binary');
   assert.equal(await fs.readFile(path.join(outputDir, 'LICENSE.txt'), 'utf8'), 'license');
-  assert.equal((await fs.stat(path.join(outputDir, 'pixel-snapper.exe'))).mode & 0o777, 0o700);
-  assert.equal((await fs.stat(path.join(outputDir, 'LICENSE.txt'))).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') {
+    assert.equal((await fs.stat(path.join(outputDir, 'pixel-snapper.exe'))).mode & 0o777, 0o700);
+    assert.equal((await fs.stat(path.join(outputDir, 'LICENSE.txt'))).mode & 0o777, 0o600);
+  }
+});
+
+test('archive extraction accepts a stable canonical alias while retaining identity checks', async () => {
+  const bytes = zipFixture([{ name: 'tool.exe', data: 'binary' }]);
+  const inspection = inspectArchive({ bytes, format: 'zip', expectedFiles: ['tool.exe'], limits: LIMITS });
+  const { parent, outputDir } = await emptyDestination();
+  const canonicalParent = `${parent}-canonical-alias`;
+  const fsImpl = {
+    ...fs,
+    realpath: async (candidate) => (await fs.realpath(candidate)).replace(parent, canonicalParent)
+  };
+
+  const result = await extractInspectedArchive({ inspection, outputDir, fsImpl });
+
+  assert.equal(await fs.readFile(result.files[0], 'utf8'), 'binary');
 });
 
 test('tar.gz preflight preserves safe nested files and archive executable metadata', async () => {
@@ -102,8 +119,10 @@ test('tar.gz preflight preserves safe nested files and archive executable metada
   await extractInspectedArchive({ inspection, outputDir });
 
   assert.equal(await fs.readFile(path.join(outputDir, 'bin/pixel-snapper'), 'utf8'), 'binary');
-  assert.equal((await fs.stat(path.join(outputDir, 'bin/pixel-snapper'))).mode & 0o777, 0o700);
-  assert.equal((await fs.stat(path.join(outputDir, 'share/data.bin'))).mode & 0o777, 0o600);
+  if (process.platform !== 'win32') {
+    assert.equal((await fs.stat(path.join(outputDir, 'bin/pixel-snapper'))).mode & 0o777, 0o700);
+    assert.equal((await fs.stat(path.join(outputDir, 'share/data.bin'))).mode & 0o777, 0o600);
+  }
 });
 
 test('archive preflight writes nothing for a case-fold or Unicode-normalization collision', async () => {

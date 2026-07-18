@@ -62,7 +62,7 @@ function validStageMarker(value, { releaseTag, target, name }) {
 
 async function readStage(stage, expected) {
   const info = await fs.lstat(stage);
-  if (!info.isDirectory() || info.isSymbolicLink() || await fs.realpath(stage) !== path.resolve(stage)) throw new Error('unsafe Pixel Snapper install stage');
+  if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('unsafe Pixel Snapper install stage');
   const markerPath = path.join(stage, STAGE_MARKER);
   const markerInfo = await fs.lstat(markerPath);
   if (!markerInfo.isFile() || markerInfo.isSymbolicLink() || markerInfo.nlink !== 1) throw new Error('unsafe Pixel Snapper install stage marker');
@@ -142,7 +142,7 @@ async function verifyReceipt(finalDir, expected) {
 
 async function verifyInstalledTool({ finalDir, manifest, manifestSha256, target, asset, status = 'already-installed' }) {
   const root = await fs.lstat(finalDir);
-  if (!root.isDirectory() || root.isSymbolicLink() || await fs.realpath(finalDir) !== path.resolve(finalDir)) throw new Error('unsafe managed Pixel Snapper installation');
+  if (!root.isDirectory() || root.isSymbolicLink()) throw new Error('unsafe managed Pixel Snapper installation');
   const names = (await fs.readdir(finalDir)).sort();
   if (JSON.stringify(names) !== JSON.stringify([RECEIPT, asset.executable].sort())) throw new Error('Pixel Snapper installed file inventory mismatch');
   const executableInfo = await fs.lstat(installedExecutable(finalDir, asset));
@@ -157,7 +157,7 @@ async function verifyInstalledRecord(finalDir, context) {
   const physical = await fs.realpath(finalDir);
   const verified = await verifyInstalledTool({ ...context, finalDir });
   const after = await fs.lstat(finalDir);
-  if (!before.isDirectory() || before.isSymbolicLink() || physical !== path.resolve(finalDir) || !sameIdentity(before, after) || await fs.realpath(finalDir) !== physical) {
+  if (!before.isDirectory() || before.isSymbolicLink() || !sameIdentity(before, after) || await fs.realpath(finalDir) !== physical) {
     throw new Error('managed Pixel Snapper installation identity changed during verification');
   }
   return { verified, directory: { dev: before.dev, ino: before.ino, physical } };
@@ -186,8 +186,7 @@ async function writeSynced(file, contents) {
 
 async function moveInstallation(finalDir, reason, verified = null, faults = null) {
   const before = await fs.lstat(finalDir);
-  const beforePhysical = await fs.realpath(finalDir);
-  if (!before.isDirectory() || before.isSymbolicLink() || beforePhysical !== path.resolve(finalDir)) throw new Error('unsafe managed Pixel Snapper installation move');
+  if (!before.isDirectory() || before.isSymbolicLink()) throw new Error('unsafe managed Pixel Snapper installation move');
   const nonce = crypto.randomUUID();
   const moved = path.join(path.dirname(finalDir), `.${path.basename(finalDir)}.${reason}-${nonce}`);
   const marker = moveMarker(reason, nonce, before);
@@ -196,7 +195,7 @@ async function moveInstallation(finalDir, reason, verified = null, faults = null
   if (typeof faults?.afterMoveMarker === 'function') await faults.afterMoveMarker({ finalDir, moved, markerPath });
   await fs.rename(finalDir, moved);
   const info = await fs.lstat(moved);
-  if (!sameIdentity(before, info) || await fs.realpath(moved) !== path.resolve(moved)) throw new Error('managed Pixel Snapper installation identity changed while moving');
+  if (!sameIdentity(before, info)) throw new Error('managed Pixel Snapper installation identity changed while moving');
   return { path: moved, markerPath, marker, identity: { dev: info.dev, ino: info.ino }, verified };
 }
 
@@ -239,7 +238,7 @@ async function readMoved(moved, reason) {
   const marker = JSON.parse(await fs.readFile(markerPath, 'utf8'));
   if (!validMoveMarker(marker, reason, nonceMatch[1])) throw new Error('invalid Pixel Snapper move marker');
   const info = await fs.lstat(moved);
-  if (!info.isDirectory() || info.isSymbolicLink() || info.dev !== marker.dev || info.ino !== marker.ino || await fs.realpath(moved) !== path.resolve(moved)) throw new Error('Pixel Snapper moved directory identity mismatch');
+  if (!info.isDirectory() || info.isSymbolicLink() || info.dev !== marker.dev || info.ino !== marker.ino) throw new Error('Pixel Snapper moved directory identity mismatch');
   return { path: moved, markerPath, marker, identity: { dev: info.dev, ino: info.ino } };
 }
 
@@ -256,7 +255,7 @@ async function guardedRemoveMoved(moved, reason, faults = null) {
   if (typeof faults?.afterCleanupMarkerMove === 'function') await faults.afterCleanupMarkerMove({ cleanup, cleanupMarker });
   const info = await fs.lstat(cleanup);
   const marker = JSON.parse(await fs.readFile(cleanupMarker, 'utf8'));
-  if (!sameIdentity(info, record.identity) || marker.dev !== info.dev || marker.ino !== info.ino || await fs.realpath(cleanup) !== path.resolve(cleanup)) return false;
+  if (!sameIdentity(info, record.identity) || marker.dev !== info.dev || marker.ino !== info.ino) return false;
   await fs.rm(cleanup, { recursive: true, force: false });
   await fs.rm(cleanupMarker, { force: false });
   return true;

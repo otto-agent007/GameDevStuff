@@ -39,6 +39,10 @@ function pathCandidates(name, pathValue, platform, env) {
   return pathEntries(pathValue, platform).flatMap((directory) => names.map((candidate) => path.join(directory, candidate)));
 }
 
+export function pixelSnapperPathCandidates(name, pathValue, platform, env = {}) {
+  return pathCandidates(name, pathValue, platform, env);
+}
+
 function managedExecutable(projectDir, manifest, target, asset) {
   return path.join(projectDir, '.pixel-sprite-pipeline', 'tools', 'pixel-snapper', manifest.release.tag, target, asset.executable);
 }
@@ -71,10 +75,10 @@ async function secureExecutable(selected, { managedRoot } = {}) {
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
     }
-    const root = await fs.realpath(managedRoot);
-    const relative = path.relative(root, resolved);
+    const logicalRoot = path.resolve(managedRoot);
+    const relative = path.relative(logicalRoot, resolved);
     if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('managed Pixel Snapper escaped its installation directory');
-    let current = root;
+    let current = logicalRoot;
     for (const segment of relative.split(path.sep)) {
       current = path.join(current, segment);
       const stat = await fs.lstat(current);

@@ -67,7 +67,7 @@ async function writeOwner(file, owner) {
 async function readTicket(ticket, expectedNonce) {
   const info = await fs.lstat(ticket);
   const physical = await fs.realpath(ticket);
-  if (!info.isDirectory() || info.isSymbolicLink() || physical !== path.resolve(ticket)) throw new Error('unsafe Pixel Snapper setup ticket');
+  if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('unsafe Pixel Snapper setup ticket');
   const ownerFile = path.join(ticket, 'owner.json');
   const ownerInfo = await fs.lstat(ownerFile);
   if (!ownerInfo.isFile() || ownerInfo.isSymbolicLink() || ownerInfo.nlink !== 1) throw new Error('unsafe Pixel Snapper setup ticket owner');

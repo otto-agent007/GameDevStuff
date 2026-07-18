@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Gunzip, Inflate } from 'fflate';
+import { isPathContained } from './path-security.mjs';
 
 const DEFAULT_LIMITS = Object.freeze({ entries: 16, compressed: 25 << 20, total: 100 << 20, perFile: 50 << 20, ratio: 100 });
 const RESERVED_STEM = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
@@ -440,7 +441,7 @@ async function verifySecureParent(fsImpl, parent, expectedIdentity) {
   const info = await fsImpl.lstat(resolved);
   const physical = await fsImpl.realpath(resolved);
   const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
-  if (physical !== resolved || (currentUid !== null && Number.isInteger(info.uid) && info.uid !== currentUid) || (info.mode & 0o022) !== 0) {
+  if ((currentUid !== null && Number.isInteger(info.uid) && info.uid !== currentUid) || (currentUid !== null && (info.mode & 0o022) !== 0)) {
     throw new Error(`unsafe archive output parent: ${resolved}`);
   }
   if (expectedIdentity && (!sameIdentity(info, expectedIdentity) || physical !== expectedIdentity.physical)) {
@@ -496,8 +497,8 @@ async function verifyStage(fsImpl, stage, identity, entries) {
   const stageInfo = await fsImpl.lstat(stage);
   const physical = await fsImpl.realpath(stage);
   const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
-  if (!stageInfo.isDirectory() || stageInfo.isSymbolicLink() || !sameIdentity(stageInfo, identity) || physical !== path.resolve(stage) ||
-      (stageInfo.mode & 0o077) !== 0 || (currentUid !== null && Number.isInteger(stageInfo.uid) && stageInfo.uid !== currentUid)) {
+  if (!stageInfo.isDirectory() || stageInfo.isSymbolicLink() || !sameIdentity(stageInfo, identity) ||
+      (currentUid !== null && (stageInfo.mode & 0o077) !== 0) || (currentUid !== null && Number.isInteger(stageInfo.uid) && stageInfo.uid !== currentUid)) {
     throw new Error('unsafe staged archive directory');
   }
 
@@ -513,12 +514,12 @@ async function verifyStage(fsImpl, stage, identity, entries) {
     if (!wanted || wanted.type !== item.type) throw new Error('staged archive entry set mismatch');
     const candidate = path.join(stage, ...item.name.split('/'));
     const candidatePhysical = await fsImpl.realpath(candidate);
-    if (!candidatePhysical.startsWith(`${physical}${path.sep}`)) throw new Error('unsafe staged archive entry');
+    if (!isPathContained(physical, candidatePhysical)) throw new Error('unsafe staged archive entry');
     if (item.type === 'directory') {
-      if ((item.info.mode & 0o077) !== 0) throw new Error('unsafe staged archive directory');
+      if (currentUid !== null && (item.info.mode & 0o077) !== 0) throw new Error('unsafe staged archive directory');
     } else {
       const expectedMode = wanted.entry.executable ? 0o700 : 0o600;
-      if (item.info.nlink !== 1 || item.info.size !== wanted.entry.data.length || (item.info.mode & 0o777) !== expectedMode ||
+      if (item.info.nlink !== 1 || item.info.size !== wanted.entry.data.length || (currentUid !== null && (item.info.mode & 0o777) !== expectedMode) ||
           !Buffer.from(await fsImpl.readFile(candidate)).equals(wanted.entry.data)) {
         throw new Error('staged archive entry verification failed');
       }
@@ -543,7 +544,7 @@ async function verifyOwnedReservation(fsImpl, reservation, expectedIdentity) {
   const info = await fsImpl.lstat(reservation);
   const physical = await fsImpl.realpath(reservation);
   const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
-  if (!info.isDirectory() || info.isSymbolicLink() || physical !== path.resolve(reservation) || (info.mode & 0o077) !== 0 ||
+  if (!info.isDirectory() || info.isSymbolicLink() || (currentUid !== null && (info.mode & 0o077) !== 0) ||
       (currentUid !== null && Number.isInteger(info.uid) && info.uid !== currentUid)) {
     throw new Error('unsafe archive output reservation');
   }
@@ -560,8 +561,9 @@ async function transferStageIntoReservation(fsImpl, stage, reservation, reservat
     await fsImpl.mkdir(directory, { recursive: false, mode: 0o700 });
     const info = await fsImpl.lstat(directory);
     const physical = await fsImpl.realpath(directory);
-    if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o077) !== 0 ||
-        !physical.startsWith(`${reservationIdentity.physical}${path.sep}`)) {
+    const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
+    if (!info.isDirectory() || info.isSymbolicLink() || (currentUid !== null && (info.mode & 0o077) !== 0) ||
+        !isPathContained(reservationIdentity.physical, physical)) {
       throw new Error('unsafe archive output reservation entry');
     }
   }
@@ -598,7 +600,6 @@ export async function extractInspectedArchive({ inspection, outputDir, fsImpl = 
     const initialStageInfo = await fsImpl.lstat(stage);
     stageIdentity = { dev: initialStageInfo.dev, ino: initialStageInfo.ino };
     stagePhysical = await fsImpl.realpath(stage);
-    if (stagePhysical !== path.resolve(stage)) throw new Error('unsafe staged archive directory');
     await fsImpl.chmod(stage, 0o700);
 
     for (const directory of stageDirectories(stage, entries)) await fsImpl.mkdir(directory, { mode: 0o700 });

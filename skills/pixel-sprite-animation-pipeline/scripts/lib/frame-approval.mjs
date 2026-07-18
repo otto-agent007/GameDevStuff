@@ -85,7 +85,7 @@ function validateApproval(approval, output, definition, index, review) {
 async function requireRunDirectory(runDir) {
   const stat = await fs.lstat(runDir);
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('frame approval run directory must be a real directory');
-  return path.resolve(runDir);
+  return fs.realpath(runDir);
 }
 
 async function verifiedReceipt({ projectDir, snapReceipt, contract }) {
@@ -98,9 +98,9 @@ async function verifiedReceipt({ projectDir, snapReceipt, contract }) {
 export async function writeFrameApproval({ projectDir, runDir, contract, snapReceipt, frames, approvals, version }) {
   if (!Number.isInteger(version) || version < 1 || !Array.isArray(approvals)) throw new Error('frame approval requires one approval for every snapped frame');
   const physicalRunDir = await requireRunDirectory(runDir);
-  if (!snapReceipt?.path || path.dirname(path.resolve(snapReceipt.path)) !== physicalRunDir) throw new Error('frame approval snap receipt must be selected from the signed run directory');
   const definitions = frameDefinitions(contract);
   const receipt = await verifiedReceipt({ projectDir, snapReceipt, contract });
+  if (path.dirname(receipt.path) !== physicalRunDir) throw new Error('frame approval snap receipt must be selected from the signed run directory');
   const outputs = await outputRecords(receipt);
   validateRequestFrames(frames, outputs, definitions);
   if (approvals.length !== outputs.length) throw new Error('frame approval requires one approval for every snapped frame');

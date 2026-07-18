@@ -191,11 +191,17 @@ export async function writeManualHandoffReceipt({ projectDir, run, handoff, inpu
 }
 
 export async function verifySnapReceipt({ projectDir, file, expectedRun, expectedContract }) {
-  const raw = JSON.parse(await fs.readFile(file, 'utf8'));
+  const selected = path.resolve(file);
+  const before = await fs.lstat(selected);
+  if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1) throw new Error('snap receipt must be a regular non-symlink single-link file');
+  const physical = await fs.realpath(selected);
+  const physicalInfo = await fs.lstat(physical);
+  if (!physicalInfo.isFile() || physicalInfo.isSymbolicLink() || physicalInfo.dev !== before.dev || physicalInfo.ino !== before.ino) throw new Error('snap receipt file identity is unsafe');
+  const raw = JSON.parse(await fs.readFile(physical, 'utf8'));
   exact(raw, ['version', 'payload', 'signature'], 'envelope');
   if (raw.version !== 1 || !HASH.test(raw.signature ?? '')) throw new Error('snap receipt envelope schema is invalid');
   const domain = raw?.payload?.origin === 'manual-handoff' ? MANUAL_DOMAIN : SNAP_DOMAIN;
-  const document = await readSignedState({ projectDir, file, domain });
+  const document = await readSignedState({ projectDir, file: physical, domain });
   const payload = document.payload;
   if (domain === SNAP_DOMAIN) {
     exact(payload, ['version', 'origin', 'toolProvenanceVerified', 'run', 'animationContractSha256', 'inputs', 'outputs', 'arguments', 'binary', 'createdAt'], 'payload');
@@ -210,9 +216,11 @@ export async function verifySnapReceipt({ projectDir, file, expectedRun, expecte
   validRun(payload.run);
   validDate(payload.createdAt);
   expectedBinding(payload, expectedRun, domain === SNAP_DOMAIN ? expectedContract : undefined);
-  await verifyRecords(payload.inputs, path.dirname(file), 'input');
-  await verifyRecords(payload.outputs, path.dirname(file), 'output', { contained: true });
-  return { document, path: file, sha256: document.sha256 };
+  const after = await fs.lstat(selected);
+  if (after.dev !== before.dev || after.ino !== before.ino || await fs.realpath(selected) !== physical) throw new Error('snap receipt file identity changed during verification');
+  await verifyRecords(payload.inputs, path.dirname(physical), 'input');
+  await verifyRecords(payload.outputs, path.dirname(physical), 'output', { contained: true });
+  return { document, path: physical, sha256: document.sha256 };
 }
 
 export async function verifyExistingSnapReceipt(options) { return existingReceipt(options); }

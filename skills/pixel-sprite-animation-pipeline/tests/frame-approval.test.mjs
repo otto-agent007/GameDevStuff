@@ -58,6 +58,18 @@ test('frame approval is created only after snap and covers every ordered output 
   await assert.rejects(writeFrameApproval({ ...value, approvals: value.approvals.slice(1), version: 2 }), /approval for every snapped frame/);
 });
 
+test('frame approval rejects a symlinked signed snap receipt', async (t) => {
+  const value = await fixture();
+  const alias = path.join(value.runDir, 'snap-receipt-alias.json');
+  try { await fs.symlink(path.basename(value.snapReceipt.path), alias); }
+  catch (error) { if (error.code === 'EPERM') { t.skip('file links unavailable'); return; } throw error; }
+
+  await assert.rejects(
+    writeFrameApproval({ ...value, snapReceipt: { ...value.snapReceipt, path: alias }, version: 1 }),
+    /snap receipt.*regular|symlink|single-link/i
+  );
+});
+
 test('approval verification rejects tampered, extra, missing, duplicate, and mismatched ordered frames', async () => {
   const value = await fixture();
   const approval = await writeFrameApproval({ ...value, version: 1 });

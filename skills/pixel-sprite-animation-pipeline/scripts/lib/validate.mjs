@@ -6,6 +6,7 @@ import { validateAnimationContract } from './animation-contract.mjs';
 import { extractPrimaryComponent, foregroundPredicate } from './components.mjs';
 import { verifyFrameApproval } from './frame-approval.mjs';
 import { captureRgba, paletteOf, readRgba } from './image.mjs';
+import { canonicalPath } from './path-security.mjs';
 import { stableHash } from './state-auth.mjs';
 
 const CORRECTIONS = Object.freeze({
@@ -537,7 +538,13 @@ async function validateContractExportRun({ anchorReport, normalized, exported, c
       if (callerSchema) {
         const callerIds = caller.frames.map((frame) => frame.id);
         const callerPaths = caller.runtimeFrames;
-        if (!jsonEqual(callerIds, expectedIds) || !jsonEqual(caller.durations, expectedDurations) || caller.loopMode !== definition.loopMode || !jsonEqual(callerPaths.map((file) => path.resolve(file)), frameFiles.map((file) => path.resolve(file))) || !jsonEqual(caller.frames.map((frame) => path.resolve(frame.file)), frameFiles.map((file) => path.resolve(file))) || path.resolve(caller.sheet) !== path.resolve(flat.sheet) || path.resolve(caller.metadata) !== path.resolve(flat.metadata) || path.resolve(caller.preview) !== path.resolve(flat.preview)) contractExportFailure(failures, 'METADATA_MISMATCH', { field: 'callerArtifacts', clipId: definition.id });
+        try {
+          const callerArtifacts = await Promise.all([...callerPaths, ...caller.frames.map((frame) => frame.file), caller.sheet, caller.metadata, caller.preview].map((file) => canonicalPath(file)));
+          const expectedArtifacts = await Promise.all([...frameFiles, ...frameFiles, flat.sheet, flat.metadata, flat.preview].map((file) => canonicalPath(file)));
+          if (!jsonEqual(callerIds, expectedIds) || !jsonEqual(caller.durations, expectedDurations) || caller.loopMode !== definition.loopMode || !jsonEqual(callerArtifacts, expectedArtifacts)) contractExportFailure(failures, 'METADATA_MISMATCH', { field: 'callerArtifacts', clipId: definition.id });
+        } catch (error) {
+          contractExportFailure(failures, 'METADATA_MISMATCH', { field: 'callerArtifacts', clipId: definition.id, reason: error.message });
+        }
       }
       const subset = {
         frames: normalized.frames.slice(definitionOffset, definitionOffset + definition.frames.length),

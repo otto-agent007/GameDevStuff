@@ -76,6 +76,26 @@ test('package test command uses Node discovery instead of a shell-expanded glob'
   assert.equal(packageJson.scripts.test, 'node --test');
 });
 
+test('guided resume rejects a symlinked authenticated run directory', async (t) => {
+  const projectDir = await makeProject();
+  const anchor = path.join(projectDir, 'approved.png');
+  const frame = path.join(projectDir, 'generated.png');
+  await makeAnchor(anchor); await makeAnchor(frame);
+  const startedProcess = invoke(['run', '--input', anchor, '--project-dir', projectDir]);
+  assert.equal(startedProcess.status, 2, startedProcess.stderr);
+  const started = outputOf(startedProcess);
+  const runDir = path.dirname(started.handoffPath);
+  const moved = `${runDir}-moved`;
+  await fs.rename(runDir, moved);
+  try { await fs.symlink(moved, runDir, process.platform === 'win32' ? 'junction' : 'dir'); }
+  catch (error) { if (error.code === 'EPERM') { t.skip('directory links unavailable'); return; } throw error; }
+
+  const resumed = invoke(['run', '--resume', started.runId, '--resume-token', started.resumeToken, '--frame', frame, '--project-dir', projectDir]);
+
+  assert.equal(resumed.status, 1, resumed.stderr);
+  assert.match(resumed.stderr, /run directory.*symlink|real directory/i);
+});
+
 async function completeGuidedRun(projectDir, anchor, frame) {
   const startedProcess = invoke(['run', '--input', anchor, '--project-dir', projectDir]);
   assert.equal(startedProcess.status, 2, startedProcess.stderr);

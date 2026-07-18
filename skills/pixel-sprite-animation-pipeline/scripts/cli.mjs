@@ -19,6 +19,7 @@ import { readRgba, sha256 } from './lib/image.mjs';
 import { validateRun } from './lib/validate.mjs';
 import { repairValidationRun } from './lib/repair.mjs';
 import { createCorrectionContract, loadCorrectionContext, sealCorrectionContract } from './lib/contract.mjs';
+import { isPathContained } from './lib/path-security.mjs';
 
 const EXIT = Object.freeze({ success: 0, error: 1, handoff: 2, objectiveFailure: 3, review: 4 });
 const REVIEW_CORRECTIONS = new Set(['palette-remap-review', 'stop-for-regeneration', 'stop-for-review', 'timing-or-transition-review']);
@@ -543,9 +544,13 @@ async function loadResume(options) {
   const token = parseTransitionToken(options.resumeToken);
   if (token.runId !== requestedRunId) throw new Error('resume token run ID does not match requested run ID');
   const stateRoot = path.join(projectDir, '.pixel-sprite-pipeline', 'runs');
-  const runDir = path.join(stateRoot, requestedRunId);
-  const runStat = await fs.lstat(runDir);
-  if (!runStat.isDirectory() || runStat.isSymbolicLink()) throw new Error('run directory must be a real directory');
+  const logicalRunDir = path.join(stateRoot, requestedRunId);
+  for (const directory of [projectDir, path.join(projectDir, '.pixel-sprite-pipeline'), stateRoot, logicalRunDir]) {
+    const runStat = await fs.lstat(directory);
+    if (!runStat.isDirectory() || runStat.isSymbolicLink()) throw new Error('run directory must be a real non-symlink directory');
+  }
+  const [physicalStateRoot, runDir] = await Promise.all([fs.realpath(stateRoot), fs.realpath(logicalRunDir)]);
+  if (!isPathContained(physicalStateRoot, runDir)) throw new Error('run directory escaped the authenticated runs root');
   const handoffArtifact = await safeRunArtifact(runDir, HANDOFF_FILES[token.state], token.handoffSha256, 'canonical handoff');
   const handoff = validateHandoff(JSON.parse(await fs.readFile(handoffArtifact.path, 'utf8')));
   if (handoff.runId !== requestedRunId || handoff.state !== token.state) throw new Error('resume token does not authenticate canonical handoff state');

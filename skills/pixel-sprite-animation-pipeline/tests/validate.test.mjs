@@ -360,6 +360,12 @@ test('contract validation treats missing or caller-injected clip artifacts as ob
   assert.equal(injectedReport.passed, false);
   assert.ok(injectedReport.failures.some(({ code }) => code === 'FRAME_COUNT'));
 
+  const missingCaller = await makeApprovedContractExportRun();
+  missingCaller.exported.clips.idle.runtimeFrames[0] = path.join(missingCaller.projectDir, 'missing-caller-frame.png');
+  const missingCallerReport = await validateRun({ ...missingCaller, config: DEFAULT_CONFIG });
+  assert.equal(missingCallerReport.passed, false);
+  assert.ok(missingCallerReport.failures.some(({ code, field }) => code === 'METADATA_MISMATCH' && field === 'callerArtifacts'));
+
   const unknown = await makeApprovedContractExportRun();
   unknown.exported.untrusted = true;
   unknown.exported.clips.idle.frames[0].untrusted = true;

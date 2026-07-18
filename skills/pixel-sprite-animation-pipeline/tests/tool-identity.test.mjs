@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolvePixelSnapper } from '../scripts/lib/tool-identity.mjs';
+import { pixelSnapperPathCandidates, resolvePixelSnapper } from '../scripts/lib/tool-identity.mjs';
 import { validateToolManifest } from '../scripts/lib/tool-manifest.mjs';
 
 const fixturePath = fileURLToPath(new URL('./fixtures/tool-manifest.fixture.json', import.meta.url));
@@ -69,14 +69,14 @@ test('managed cache is rejected after executable replacement', async () => {
   await assert.rejects(resolvePixelSnapper(fixture.resolveOptions), /managed Pixel Snapper hash mismatch/);
 });
 
-test('external binary records no pinned identity unless its hash matches', async () => {
+test('external binary records no pinned identity unless its hash matches', { skip: process.platform === 'win32' && 'POSIX executable fixture' }, async () => {
   const resolved = await resolvePixelSnapper(await externalBinaryFixture());
   assert.equal(resolved.origin, 'environment');
   assert.equal(resolved.pinnedReleaseTag, null);
   assert.equal(resolved.upstreamCommit, null);
 });
 
-test('PATH lookup is deterministic and records its origin', async () => {
+test('PATH lookup is deterministic and records its origin', { skip: process.platform === 'win32' && 'POSIX executable fixture' }, async () => {
   const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'path-snapper-'));
   const binDir = path.join(projectDir, 'bin');
   const executable = path.join(binDir, 'spritefusion-pixel-snapper');
@@ -137,23 +137,18 @@ test('managed cache rejects a symlinked executable even when it points to matchi
   await assert.rejects(resolvePixelSnapper(fixture.resolveOptions), /must not contain symlinks/);
 });
 
-test('Windows PATH lookup adds exe only when PATHEXT permits it', async () => {
-  const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'windows-path-snapper-'));
-  const binDir = path.join(projectDir, 'bin');
-  const executable = path.join(binDir, 'spritefusion-pixel-snapper.exe');
-  await fs.mkdir(binDir);
-  const manifest = await manifestFor(executable, 'windows-x64');
-  const resolved = await resolvePixelSnapper({
-    projectDir,
-    config: { snapper: { executable: 'spritefusion-pixel-snapper', args: ['16'] } },
-    configProvenance: { snapperExecutable: 'default' }, manifest,
-    env: { PATHEXT: '.COM;.EXE' }, pathValue: binDir, platform: { platform: 'win32', arch: 'x64' }
-  });
-  assert.equal(resolved.origin, 'path');
-  assert.equal(resolved.path, executable);
+test('Windows PATH candidate lookup adds exe only when PATHEXT permits it', () => {
+  const binDir = 'C:\\tools\\pixel-snapper';
+  assert.deepEqual(pixelSnapperPathCandidates('spritefusion-pixel-snapper', binDir, 'win32', { PATHEXT: '.COM;.EXE' }), [
+    path.join(binDir, 'spritefusion-pixel-snapper'),
+    path.join(binDir, 'spritefusion-pixel-snapper.exe')
+  ]);
+  assert.deepEqual(pixelSnapperPathCandidates('spritefusion-pixel-snapper', binDir, 'win32', { PATHEXT: '.COM' }), [
+    path.join(binDir, 'spritefusion-pixel-snapper')
+  ]);
 });
 
-test('a hash pinned for another target does not receive current-platform attribution', async () => {
+test('a hash pinned for another target does not receive current-platform attribution', { skip: process.platform === 'win32' && 'POSIX executable fixture' }, async () => {
   const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cross-target-snapper-'));
   const executable = path.join(projectDir, 'external-snapper');
   const manifest = structuredClone(await manifestFor(executable));
