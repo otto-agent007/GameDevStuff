@@ -227,13 +227,20 @@ jobs:
             const workflowCommit = process.env.WORKFLOW_COMMIT;
             if (!/^[a-f0-9]{40}$/.test(commit) || !/^[a-f0-9]{40}$/.test(workflowCommit)) throw new Error("full commits required");
             const windows = process.env.RELEASE_TARGET === "windows-x64";
-            const binary = path.join("upstream", "target", process.env.RUST_TARGET, "release", `spritefusion-pixel-snapper${windows ? ".exe" : ""}`);
+            const executableName = `spritefusion-pixel-snapper${windows ? ".exe" : ""}`;
+            const cargoBinary = path.join("upstream", "target", process.env.RUST_TARGET, "release", executableName);
+            const cargoStat = fs.lstatSync(cargoBinary);
+            if (!cargoStat.isFile() || cargoStat.isSymbolicLink()) throw new Error("Cargo output must be a regular non-symlink file");
+            fs.mkdirSync("native-input", { mode: 0o700 });
+            const isolatedBinary = path.join("native-input", executableName);
+            fs.copyFileSync(cargoBinary, isolatedBinary, fs.constants.COPYFILE_EXCL);
+            if (!windows) fs.chmodSync(isolatedBinary, 0o755);
             const lock = fs.readFileSync("upstream/Cargo.lock");
             const request = {
               nativeProbe: true,
               target: process.env.RELEASE_TARGET,
               rustTarget: process.env.RUST_TARGET,
-              binaryFile: binary,
+              binaryFile: isolatedBinary,
               licenseFile: "compliance/LICENSE-Pixel-Snapper",
               noticesFile: "compliance/THIRD-PARTY-NOTICES",
               sbomFile: "compliance/pixel-snapper.spdx.json",
