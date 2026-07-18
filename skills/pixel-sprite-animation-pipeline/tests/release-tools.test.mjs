@@ -448,6 +448,15 @@ test('release workflow isolates Cargo hardlinks before native probes and packagi
   assert.match(source, /binaryFile: isolatedBinary/);
 });
 
+test('release workflow hashes committed Cargo.lock bytes independent of checkout line endings', async () => {
+  const workflowFile = path.join(ROOT, '.github', 'workflows', 'pixel-snapper-release.yml');
+  const source = await fs.readFile(workflowFile, 'utf8');
+  const committedLockRead = /execFileSync\("git", \["-C", "upstream", "show", `\$\{commit\}:Cargo\.lock`\], \{ encoding: null, shell: false \}\)/g;
+
+  assert.doesNotMatch(source, /fs\.readFileSync\("upstream\/Cargo\.lock"\)/);
+  assert.equal([...source.matchAll(committedLockRead)].length, 2);
+});
+
 test('approved release documents pin immutable v1.0.0 commit and retain the former README-only commit only as history', async () => {
   const approvedCommit = '5743009265051098831ad7298092072325d1149b';
   const releaseTag = 'pixel-snapper-v1.0.0-commit.5743009';
