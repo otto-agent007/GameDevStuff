@@ -60,6 +60,11 @@ async function resolveNpmCli() {
   throw new Error('could not locate npm-cli.js for shell-free package inspection');
 }
 
+test('package test command uses Node discovery instead of a shell-expanded glob', async () => {
+  const packageJson = JSON.parse(await fs.readFile(path.join(packageDir, 'package.json'), 'utf8'));
+  assert.equal(packageJson.scripts.test, 'node --test');
+});
+
 async function completeGuidedRun(projectDir, anchor, frame) {
   const startedProcess = invoke(['run', '--input', anchor, '--project-dir', projectDir]);
   assert.equal(startedProcess.status, 2, startedProcess.stderr);

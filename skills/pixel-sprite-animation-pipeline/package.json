@@ -13,7 +13,7 @@
   ],
   "bin": { "pixel-sprite-pipeline": "scripts/cli.mjs" },
   "scripts": {
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test",
     "validate-skill": "python /root/.codex/skills/oai/skill-creator/scripts/quick_validate.py ."
   },
   "dependencies": {
