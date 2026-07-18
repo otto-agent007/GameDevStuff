@@ -19,7 +19,7 @@ import { readRgba, sha256 } from './lib/image.mjs';
 import { validateRun } from './lib/validate.mjs';
 import { repairValidationRun } from './lib/repair.mjs';
 import { createCorrectionContract, loadCorrectionContext, sealCorrectionContract } from './lib/contract.mjs';
-import { canonicalRelativePath, isPathContained } from './lib/path-security.mjs';
+import { canonicalRelativePath, isPathContained, sameCanonicalPath } from './lib/path-security.mjs';
 
 const EXIT = Object.freeze({ success: 0, error: 1, handoff: 2, objectiveFailure: 3, review: 4 });
 const REVIEW_CORRECTIONS = new Set(['palette-remap-review', 'stop-for-regeneration', 'stop-for-review', 'timing-or-transition-review']);
@@ -1099,7 +1099,7 @@ async function finishCorrectionRevision({ context, document, revision, approvalF
   exactJsonDocument(handoff, expectedHandoff, 'correction revision frame approval handoff');
   const selectedApproval = path.resolve(approvalFile);
   const expectedApprovalPath = path.join(revisionDir, `frame-approval-${String(approvalVersion).padStart(2, '0')}.json`);
-  if (selectedApproval !== expectedApprovalPath) throw new Error('new frame approval must be the canonical numbered file in the correction revision');
+  if (!await sameCanonicalPath(selectedApproval, expectedApprovalPath)) throw new Error('new frame approval must be the canonical numbered file in the correction revision');
   const approvalArtifact = await revisionArtifact(context, version, path.basename(expectedApprovalPath), undefined, 'correction revision frame approval');
   const approval = await verifyFrameApproval({ projectDir: projectDirectory(context), file: approvalArtifact.path, contract: context.manifest.animationContract, snapReceipt: { path: receiptFile, sha256: receipt.sha256 }, version: approvalVersion });
   if (approval.document.payload.frames.length !== expectedHandoff.frames.length || approval.document.payload.frames.some((frameRecord, index) => frameRecord.id !== expectedHandoff.frames[index].id || frameRecord.path !== expectedHandoff.frames[index].path || frameRecord.sha256 !== expectedHandoff.frames[index].sha256)) throw new Error('new frame approval does not match the corrected revision outputs');

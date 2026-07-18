@@ -3,12 +3,27 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { withSetupLock } from '../scripts/lib/setup-lock.mjs';
+import { renameWithWindowsRetry, withSetupLock } from '../scripts/lib/setup-lock.mjs';
 
 const TAG = 'pixel-snapper-v1.2.3-commit.0123456';
 
 async function project() { return fs.mkdtemp(path.join(os.tmpdir(), 'pixel-snapper-lock-')); }
 function lockRoot(projectDir) { return path.join(projectDir, '.pixel-sprite-pipeline', 'tools', '.locks', TAG); }
+
+test('Windows ticket rename retries transient sharing violations', async () => {
+  let attempts = 0;
+  const delays = [];
+  await renameWithWindowsRetry('ticket', 'moved', {
+    platform: 'win32',
+    rename: async () => {
+      attempts += 1;
+      if (attempts < 3) throw Object.assign(new Error('sharing violation'), { code: 'EPERM' });
+    },
+    sleepImpl: async (delay) => { delays.push(delay); }
+  });
+  assert.equal(attempts, 3);
+  assert.deepEqual(delays, [20, 40]);
+});
 
 async function seedTicket(projectDir, owner, name = `ticket-${owner.nonce}`) {
   const ticket = path.join(lockRoot(projectDir), name);

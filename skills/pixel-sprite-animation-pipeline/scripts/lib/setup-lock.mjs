@@ -21,6 +21,22 @@ function lockError(state) {
 }
 
 function sleep(milliseconds) { return new Promise((resolve) => setTimeout(resolve, milliseconds)); }
+
+export async function renameWithWindowsRetry(source, target, {
+  platform = process.platform,
+  rename = fs.rename,
+  sleepImpl = sleep,
+  attempts = 6
+} = {}) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try { await rename(source, target); return; }
+    catch (error) {
+      const transient = platform === 'win32' && ['EPERM', 'EACCES', 'EBUSY'].includes(error?.code);
+      if (!transient || attempt === attempts - 1) throw error;
+      await sleepImpl(POLL_MS * (attempt + 1));
+    }
+  }
+}
 function sameOwner(left, right) { return left?.nonce === right?.nonce && left?.pid === right?.pid && left?.createdAt === right?.createdAt; }
 function sameIdentity(left, right) { return left?.dev === right?.dev && left?.ino === right?.ino; }
 
@@ -187,7 +203,7 @@ export function defaultProcessProbe(pid) {
 
 async function moveAndRemoveTicket(ticket, record, suffix) {
   const moved = path.join(path.dirname(ticket), `.${path.basename(ticket)}.${suffix}-${crypto.randomUUID()}`);
-  try { await fs.rename(ticket, moved); }
+  try { await renameWithWindowsRetry(ticket, moved); }
   catch (error) { if (error.code === 'ENOENT') return true; throw error; }
   try {
     const current = await readTicket(moved, record.owner.nonce);
