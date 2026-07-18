@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pixel Sprite Animation Pipeline"
+  short_description: "Build consistent, normalized pixel-art animations"
+  default_prompt: "Use $pixel-sprite-animation-pipeline to prepare and validate this character animation."
