@@ -1,0 +1,73 @@
+{
+  "assets": {
+    "linux-arm64": {
+      "archiveFormat": "tar.gz",
+      "archiveName": "pixel-snapper-linux-arm64.tar.gz",
+      "archiveSha256": "3f836ddc1a073ab6e45d9658448d4f9d41d43830adac3abd21a8a2e3c13a8f29",
+      "archiveSize": 670002,
+      "executable": "spritefusion-pixel-snapper",
+      "executableSha256": "a2961f8d0da1bfa53c071f6c137b622ed59545503beb387ff3aa5ab58d80c4e5",
+      "executableSize": 1539864,
+      "url": "https://github.com/otto-agent007/GameDevStuff/releases/download/pixel-snapper-v1.0.0-commit.5743009/pixel-snapper-linux-arm64.tar.gz"
+    },
+    "linux-x64": {
+      "archiveFormat": "tar.gz",
+      "archiveName": "pixel-snapper-linux-x64.tar.gz",
+      "archiveSha256": "fa885e65040b837a39acf9077a21a3e78072606e3117252d80fda1454a5d78bf",
+      "archiveSize": 691748,
+      "executable": "spritefusion-pixel-snapper",
+      "executableSha256": "bd03110406efc2efc0b094c0442a2265cb44f935a3f418fc30fdc20e77eb3f96",
+      "executableSize": 1529536,
+      "url": "https://github.com/otto-agent007/GameDevStuff/releases/download/pixel-snapper-v1.0.0-commit.5743009/pixel-snapper-linux-x64.tar.gz"
+    },
+    "macos-arm64": {
+      "archiveFormat": "tar.gz",
+      "archiveName": "pixel-snapper-macos-arm64.tar.gz",
+      "archiveSha256": "1e43d121d1d4fd4de513c503831617a4e9b0d9d58e70a27fa8e11526abfb9d48",
+      "archiveSize": 581658,
+      "executable": "spritefusion-pixel-snapper",
+      "executableSha256": "275055100e57f5f1f80454d30e8313827da991df33289510c54e9ad6a8a1684c",
+      "executableSize": 1254640,
+      "url": "https://github.com/otto-agent007/GameDevStuff/releases/download/pixel-snapper-v1.0.0-commit.5743009/pixel-snapper-macos-arm64.tar.gz"
+    },
+    "macos-x64": {
+      "archiveFormat": "tar.gz",
+      "archiveName": "pixel-snapper-macos-x64.tar.gz",
+      "archiveSha256": "869e3d8d3e74d997d033bdedd6b459293e0820de4b39b93c0af2e8a52cccc13b",
+      "archiveSize": 601046,
+      "executable": "spritefusion-pixel-snapper",
+      "executableSha256": "695b2694340f89522aa7e3b11c0c6b30d01015d1cc95fec79b079a3567c5548f",
+      "executableSize": 1266424,
+      "url": "https://github.com/otto-agent007/GameDevStuff/releases/download/pixel-snapper-v1.0.0-commit.5743009/pixel-snapper-macos-x64.tar.gz"
+    },
+    "windows-x64": {
+      "archiveFormat": "zip",
+      "archiveName": "pixel-snapper-windows-x64.zip",
+      "archiveSha256": "32d8b8e7a5c8cb4dd545187f7a88eae55453c4193f061a5dd67b3bb6272270b7",
+      "archiveSize": 458327,
+      "executable": "spritefusion-pixel-snapper.exe",
+      "executableSha256": "ae193191377d045a775a88e02092142a52fb2f212e0b730b67cf109e5955282a",
+      "executableSize": 951296,
+      "url": "https://github.com/otto-agent007/GameDevStuff/releases/download/pixel-snapper-v1.0.0-commit.5743009/pixel-snapper-windows-x64.zip"
+    }
+  },
+  "build": {
+    "cargoLockSha256": "d349974f31866473e88270dc9b2ad19c3e2e3711c8e2756151be18fb24a5e60f",
+    "rustVersion": "1.88.0",
+    "workflowCommit": "128b3f2eab9d37095682f9d5bfea186d160d4daf"
+  },
+  "fixture": {
+    "inputRgbaSha256": "bb9b87994cf22366cad9d0bbaca0a4663921cda521c5c7f1d44de921d8d8c84f",
+    "rgbaSha256": "bb9b87994cf22366cad9d0bbaca0a4663921cda521c5c7f1d44de921d8d8c84f"
+  },
+  "release": {
+    "tag": "pixel-snapper-v1.0.0-commit.5743009",
+    "url": "https://github.com/otto-agent007/GameDevStuff/releases/tag/pixel-snapper-v1.0.0-commit.5743009"
+  },
+  "schemaVersion": 1,
+  "upstream": {
+    "commit": "5743009265051098831ad7298092072325d1149b",
+    "repository": "Hugo-Dz/spritefusion-pixel-snapper",
+    "version": "1.0.0"
+  }
+}

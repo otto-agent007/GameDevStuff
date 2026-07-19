@@ -11,6 +11,12 @@ import { setupPixelSnapper } from '../scripts/lib/setup-snapper.mjs';
 
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const fixtureHash = hash(Buffer.concat(Array.from({ length: 9 }, () => Buffer.from([16, 32, 48, 255]))));
+const SUPPORT_FILES = Object.freeze([
+  ['LICENSE-Pixel-Snapper', Buffer.from('Pixel Snapper fixture license\n')],
+  ['THIRD-PARTY-NOTICES', Buffer.from('Pixel Snapper fixture notices\n')],
+  ['pixel-snapper.spdx.json', Buffer.from('{"spdxVersion":"SPDX-2.3"}\n')],
+  ['target-metadata.json', Buffer.from('{"fixture":true}\n')]
+]);
 
 async function tarGz(name, data) {
   const pack = tar.pack();
@@ -18,6 +24,9 @@ async function tarGz(name, data) {
   pack.on('data', (chunk) => chunks.push(chunk));
   const complete = new Promise((resolve, reject) => { pack.on('end', resolve); pack.on('error', reject); });
   pack.entry({ name, size: data.length, mode: 0o755 }, data);
+  for (const [supportName, supportData] of SUPPORT_FILES) {
+    pack.entry({ name: supportName, size: supportData.length, mode: 0o644 }, supportData);
+  }
   pack.finalize();
   await complete;
   return gzipSync(Buffer.concat(chunks));
@@ -99,6 +108,11 @@ test('idempotent reuse revalidates the receipt, executable hash, and determinist
   const receipt = JSON.parse(await fs.readFile(second.receipt));
   assert.equal(receipt.manifest.sha256, hash(await fs.readFile(fixture.manifestPath)));
   assert.equal(receipt.identity.sha256, second.identity.sha256);
+  assert.deepEqual(receipt.installedFiles.map((item) => item.path), [
+    fixture.manifest.assets[fixture.target].executable,
+    ...SUPPORT_FILES.map(([name]) => name)
+  ]);
+  assert.ok(receipt.installedFiles.every((item) => Number.isSafeInteger(item.size) && /^[a-f0-9]{64}$/.test(item.sha256)));
 });
 
 test('setup quarantines a changed cached executable until force restore', async (t) => {
@@ -122,6 +136,17 @@ test('a changed installation receipt is quarantined and cannot authorize reuse',
   receipt.identity.sha256 = 'f'.repeat(64);
   await fs.writeFile(installed.receipt, `${JSON.stringify(receipt, null, 2)}\n`);
   await assert.rejects(setupPixelSnapper(fixture.options), (error) => error.code === 'PIXEL_SNAPPER_INSTALLATION_TAMPERED' && /installation receipt mismatch/.test(error.cause?.message ?? ''));
+  await assert.rejects(fs.lstat(fixture.finalDir), { code: 'ENOENT' });
+});
+
+test('a changed bundled compliance file is quarantined and cannot authorize reuse', async (t) => {
+  if (process.platform === 'win32') { t.skip('POSIX executable fixture'); return; }
+  const fixture = await setupFixture();
+  await setupPixelSnapper(fixture.options);
+  await fs.appendFile(path.join(fixture.finalDir, 'THIRD-PARTY-NOTICES'), 'tamper');
+  await assert.rejects(setupPixelSnapper(fixture.options), (error) =>
+    error.code === 'PIXEL_SNAPPER_INSTALLATION_TAMPERED' && /installation receipt mismatch/.test(error.cause?.message ?? '')
+  );
   await assert.rejects(fs.lstat(fixture.finalDir), { code: 'ENOENT' });
 });
 

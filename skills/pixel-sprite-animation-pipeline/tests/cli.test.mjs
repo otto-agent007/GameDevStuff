@@ -182,7 +182,7 @@ test('snap emits a resumable manual handoff with exit 2 when Pixel Snapper is un
   const frame = path.join(projectDir, 'frame, one.png');
   await makeAnchor(frame);
   const output = path.join(projectDir, 'snap output');
-  const result = invoke(['snap', '--frame', frame, '--output', output], { env: { PIXEL_SNAPPER_BIN: 'definitely-missing-pixel-snapper' } });
+  const result = invoke(['snap', '--frame', frame, '--output', output], { env: { PATH: '' } });
   assert.equal(result.status, 2, result.stderr);
   const response = json(result.stdout);
   assert.equal(response.status, 'manual-handoff');
@@ -267,7 +267,7 @@ test('guided run creates a versioned generation handoff and resumes inside the s
   const resumed = invoke([
     'run', '--resume', handoff.runId, '--resume-token', handoff.resumeToken,
     '--frame', frame, '--project-dir', projectDir
-  ], { env: { PIXEL_SNAPPER_BIN: 'definitely-missing-pixel-snapper' } });
+  ], { env: { PATH: '' } });
   assert.equal(resumed.status, 2, resumed.stderr);
   const snapHandoff = json(resumed.stdout);
   assert.equal(snapHandoff.status, 'manual-handoff');
@@ -300,7 +300,7 @@ test('guided run with supplied generated frames advances directly to snapping', 
   await makeAnchor(input);
   await makeAnchor(frame);
   const result = invoke(['run', '--input', input, '--frame', frame, '--project-dir', projectDir], {
-    env: { PIXEL_SNAPPER_BIN: 'definitely-missing-pixel-snapper' }
+    env: { PATH: '' }
   });
   assert.equal(result.status, 2, result.stderr);
   assert.equal(json(result.stdout).status, 'manual-handoff');
@@ -367,7 +367,7 @@ test('manual snapped-frame resume requires exact count and publishes the batch a
   distinct.data.set([20, 30, 60, 255], (3 * distinct.width + 4) * 4);
   await writeRgba(second, distinct);
   const snap = json(invoke(['run', '--input', input, '--frame', first, '--frame', second, '--project-dir', projectDir], {
-    env: { PIXEL_SNAPPER_BIN: 'definitely-missing-pixel-snapper' }
+    env: { PATH: '' }
   }).stdout);
   const runDir = path.dirname(snap.handoffPath);
 
@@ -396,7 +396,7 @@ test('generated batch keeps an unverified external Pixel Snapper in manual hando
   const fake = path.join(projectDir, 'fake snapper.js');
   await makeAnchor(input);
   await makeAnchor(frame);
-  await fs.writeFile(fake, `#!/usr/bin/env node\nconst fs=require('node:fs');const a=process.argv.slice(2);if(a[0]==='--version'||a[0]==='--help')process.exit(0);fs.copyFileSync(a[0],a[1]);\n`);
+  await fs.writeFile(fake, `#!/usr/bin/env node\nconst fs=require('node:fs');const a=process.argv.slice(2);if(a[0]==='--version'){console.log('spritefusion-pixel-snapper 1.0.0');process.exit(0)}if(a[0]==='--help'){console.log('USAGE: spritefusion-pixel-snapper INPUT OUTPUT SIZE');process.exit(0)}fs.copyFileSync(a[0],a[1]);\n`);
   await fs.chmod(fake, 0o755);
   const initial = json(invoke(['run', '--input', input, '--project-dir', projectDir]).stdout);
   const args = ['run', '--resume', initial.runId, '--resume-token', initial.resumeToken, '--frame', frame, '--project-dir', projectDir];
@@ -413,7 +413,7 @@ test('manual snapped batch is authenticated and reusable after downstream normal
   await makeAnchor(input);
   await makeAnchor(frame);
   const snap = json(invoke(['run', '--input', input, '--frame', frame, '--project-dir', projectDir], {
-    env: { PIXEL_SNAPPER_BIN: 'definitely-missing-pixel-snapper' }
+    env: { PATH: '' }
   }).stdout);
   const runDir = path.dirname(snap.handoffPath);
   const normalizedBlocker = path.join(runDir, 'normalized');
@@ -453,7 +453,7 @@ test('identical retry reuses normalized and exported artifacts after a transient
   await makeAnchor(input);
   await makeAnchor(frame);
   const snap = json(invoke(['run', '--input', input, '--frame', frame, '--project-dir', projectDir], {
-    env: { PIXEL_SNAPPER_BIN: 'definitely-missing-pixel-snapper' }
+    env: { PATH: '' }
   }).stdout);
   const runDir = path.dirname(snap.handoffPath);
   const reportBlocker = path.join(runDir, 'report.json');
@@ -483,7 +483,7 @@ test('failed validation records evidence without consuming the retry transition'
   changed.data.set([255, 0, 0, 255], (5 * changed.width + 5) * 4);
   await writeRgba(frame, changed);
   const snap = json(invoke(['run', '--input', input, '--frame', frame, '--project-dir', projectDir], {
-    env: { PIXEL_SNAPPER_BIN: 'definitely-missing-pixel-snapper' }
+    env: { PATH: '' }
   }).stdout);
   const args = ['run', '--resume', snap.runId, '--resume-token', snap.resumeToken, '--snapped-frame', frame, '--project-dir', projectDir];
   const first = invoke(args);
@@ -527,12 +527,25 @@ test('hostile environment variables cannot replace production setup manifest or 
   const projectDir = await tempProject('hostile setup env ');
   const fakeManifest = path.join(projectDir, 'fake.json');
   const fakeArchive = path.join(projectDir, 'fake.tar.gz');
+  const productionManifest = JSON.parse(await fs.readFile(path.join(packageDir, 'references', 'pixel-snapper-tool-manifest.json'), 'utf8'));
   await fs.writeFile(fakeManifest, '{}');
   await fs.writeFile(fakeArchive, 'fake');
   const result = invoke(['setup-snapper', '--project-dir', projectDir], { env: {
     NODE_ENV: 'test', PIXEL_SNAPPER_TEST_MANIFEST: fakeManifest, PIXEL_SNAPPER_TEST_ARCHIVE: fakeArchive
   } });
-  assert.equal(result.status, 1);
-  assert.match(json(result.stderr).error, /pixel-snapper-tool-manifest\.json|ENOENT/);
-  await assert.rejects(fs.lstat(path.join(projectDir, '.pixel-sprite-pipeline')), { code: 'ENOENT' });
+  assert.equal(result.status, 0, result.stderr);
+  const installed = json(result.stdout);
+  assert.equal(installed.identity.pinnedReleaseTag, productionManifest.release.tag);
+  assert.equal(installed.identity.upstreamCommit, productionManifest.upstream.commit);
+  assert.equal(await fs.readFile(fakeManifest, 'utf8'), '{}');
+  assert.equal(await fs.readFile(fakeArchive, 'utf8'), 'fake');
+  const receipt = JSON.parse(await fs.readFile(installed.receipt, 'utf8'));
+  assert.equal(receipt.releaseTag, productionManifest.release.tag);
+  assert.deepEqual(receipt.installedFiles.map((item) => item.path), [
+    productionManifest.assets[receipt.target].executable,
+    'LICENSE-Pixel-Snapper',
+    'THIRD-PARTY-NOTICES',
+    'pixel-snapper.spdx.json',
+    'target-metadata.json'
+  ]);
 });

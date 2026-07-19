@@ -21,20 +21,24 @@ function outputFor(input, outputDir) {
 }
 
 export async function detectPixelSnapper(config, options = {}) {
-  if (!options.manifest) return { available: false, executable: (options.env ?? process.env).PIXEL_SNAPPER_BIN || snapperConfig(config).executable, probeStatus: null, error: 'pinned Pixel Snapper manifest is required', identity: null };
+  const env = options.env ?? process.env;
+  if (!options.manifest) return { available: false, executable: env.PIXEL_SNAPPER_BIN || snapperConfig(config).executable, probeStatus: null, error: 'pinned Pixel Snapper manifest is required', identity: null };
   const identity = await resolvePixelSnapper({
     projectDir: options.projectDir ?? process.cwd(),
     config,
     configProvenance: options.configProvenance,
     manifest: options.manifest,
-    env: options.env ?? process.env,
+    env,
     pathValue: options.pathValue
   });
+  const pinned = identity !== null &&
+    identity.pinnedReleaseTag === options.manifest.release.tag &&
+    identity.upstreamCommit === options.manifest.upstream.commit;
   return {
-    available: identity !== null,
-    executable: identity?.physicalPath ?? (process.env.PIXEL_SNAPPER_BIN || snapperConfig(config).executable),
+    available: pinned,
+    executable: identity?.physicalPath ?? (env.PIXEL_SNAPPER_BIN || snapperConfig(config).executable),
     probeStatus: identity ? 0 : null,
-    error: null,
+    error: identity && !pinned ? 'resolved Pixel Snapper binary is not pinned by the release manifest' : null,
     identity
   };
 }
