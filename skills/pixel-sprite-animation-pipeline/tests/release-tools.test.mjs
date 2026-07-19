@@ -457,6 +457,17 @@ test('release workflow hashes committed Cargo.lock bytes independent of checkout
   assert.equal([...source.matchAll(committedLockRead)].length, 2);
 });
 
+test('packaged tool manifest pins the verified immutable Pixel Snapper release', async () => {
+  const manifestFile = path.join(ROOT, 'skills/pixel-sprite-animation-pipeline/references/pixel-snapper-tool-manifest.json');
+  const manifest = validateToolManifest(JSON.parse(await fs.readFile(manifestFile, 'utf8')));
+
+  assert.equal(manifest.release.tag, RELEASE_TAG);
+  assert.equal(manifest.upstream.commit, UPSTREAM);
+  assert.equal(manifest.build.workflowCommit, '128b3f2eab9d37095682f9d5bfea186d160d4daf');
+  assert.equal(manifest.build.cargoLockSha256, 'd349974f31866473e88270dc9b2ad19c3e2e3711c8e2756151be18fb24a5e60f');
+  assert.deepEqual(Object.keys(manifest.assets).sort(), TARGETS.map(([target]) => target).sort());
+});
+
 test('approved release documents pin immutable v1.0.0 commit and retain the former README-only commit only as history', async () => {
   const approvedCommit = '5743009265051098831ad7298092072325d1149b';
   const releaseTag = 'pixel-snapper-v1.0.0-commit.5743009';

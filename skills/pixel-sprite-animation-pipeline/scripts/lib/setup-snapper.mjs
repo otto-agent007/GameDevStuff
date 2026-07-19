@@ -10,6 +10,12 @@ import { platformKey, selectToolAsset, validateToolManifest } from './tool-manif
 const STAGE_MARKER = '.pixel-snapper-install-stage.json';
 const MOVE_MARKER_SUFFIX = '.marker.json';
 const RECEIPT = 'installation-receipt.json';
+const BUNDLED_FILES = Object.freeze([
+  'LICENSE-Pixel-Snapper',
+  'THIRD-PARTY-NOTICES',
+  'pixel-snapper.spdx.json',
+  'target-metadata.json'
+]);
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const defaultGetUid = typeof process.getuid === 'function' ? () => process.getuid() : null;
 
@@ -47,6 +53,7 @@ function installationDir(projectDir, releaseTag, target) {
   return path.join(path.resolve(projectDir), '.pixel-sprite-pipeline', 'tools', 'pixel-snapper', releaseTag, target);
 }
 function installedExecutable(finalDir, asset) { return path.join(finalDir, asset.executable); }
+function archiveFiles(asset) { return [asset.executable, ...BUNDLED_FILES]; }
 function stagePrefix(releaseTag, target) { return `.install-${releaseTag}-${target}-`; }
 
 function stageMarker(releaseTag, target, nonce, info) {
@@ -116,12 +123,31 @@ function receiptIdentity(identity) {
   return Object.fromEntries(['size', 'sha256', 'version', 'helpSha256', 'fixtureRgbaSha256', 'pinnedReleaseTag', 'upstreamCommit'].map((key) => [key, identity[key]]));
 }
 
-function expectedReceipt({ manifestSha256, manifest, target, asset, identity }) {
+function expectedReceipt({ manifestSha256, manifest, target, asset, identity, installedFiles }) {
   return {
     schemaVersion: 1, manifest: { sha256: manifestSha256 }, releaseTag: manifest.release.tag, target,
     asset: { archiveName: asset.archiveName, archiveSize: asset.archiveSize, archiveSha256: asset.archiveSha256, executable: asset.executable, executableSize: asset.executableSize, executableSha256: asset.executableSha256 },
-    identity: receiptIdentity(identity), installedFiles: [{ path: asset.executable, size: identity.size, sha256: identity.sha256 }]
+    identity: receiptIdentity(identity), installedFiles
   };
+}
+
+async function installedFileRecords(finalDir, asset, { receipt = false } = {}) {
+  const expectedNames = [...archiveFiles(asset), ...(receipt ? [RECEIPT] : [])].sort();
+  const actualNames = (await fs.readdir(finalDir)).sort();
+  if (JSON.stringify(actualNames) !== JSON.stringify(expectedNames)) throw new Error('Pixel Snapper installed file inventory mismatch');
+  const records = [];
+  for (const name of archiveFiles(asset)) {
+    const file = path.join(finalDir, name);
+    const info = await fs.lstat(file);
+    if (!info.isFile() || info.isSymbolicLink()) throw new Error(`managed Pixel Snapper file must be a regular non-symlink file: ${name}`);
+    if (info.nlink !== 1) {
+      const kind = name === asset.executable ? 'executable' : 'bundled file';
+      throw new Error(`managed Pixel Snapper ${kind} must have one link: ${name}`);
+    }
+    const bytes = await fs.readFile(file);
+    records.push({ path: name, size: bytes.length, sha256: sha256(bytes) });
+  }
+  return records;
 }
 
 async function inspectManaged(finalDir, manifest, asset) {
@@ -143,12 +169,9 @@ async function verifyReceipt(finalDir, expected) {
 async function verifyInstalledTool({ finalDir, manifest, manifestSha256, target, asset, status = 'already-installed' }) {
   const root = await fs.lstat(finalDir);
   if (!root.isDirectory() || root.isSymbolicLink()) throw new Error('unsafe managed Pixel Snapper installation');
-  const names = (await fs.readdir(finalDir)).sort();
-  if (JSON.stringify(names) !== JSON.stringify([RECEIPT, asset.executable].sort())) throw new Error('Pixel Snapper installed file inventory mismatch');
-  const executableInfo = await fs.lstat(installedExecutable(finalDir, asset));
-  if (executableInfo.nlink !== 1) throw new Error('managed Pixel Snapper executable must have one link');
+  const installedFiles = await installedFileRecords(finalDir, asset, { receipt: true });
   const identity = await inspectManaged(finalDir, manifest, asset);
-  const receipt = await verifyReceipt(finalDir, expectedReceipt({ manifestSha256, manifest, target, asset, identity }));
+  const receipt = await verifyReceipt(finalDir, expectedReceipt({ manifestSha256, manifest, target, asset, identity, installedFiles }));
   return { status, executable: installedExecutable(finalDir, asset), identity, receipt };
 }
 
@@ -325,7 +348,8 @@ function classifyDownload(error) {
 
 async function writeInstallationReceipt({ content, manifestSha256, manifest, target, asset, identity }) {
   const receipt = path.join(content, RECEIPT);
-  await fs.writeFile(receipt, `${JSON.stringify(expectedReceipt({ manifestSha256, manifest, target, asset, identity }), null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+  const installedFiles = await installedFileRecords(content, asset);
+  await fs.writeFile(receipt, `${JSON.stringify(expectedReceipt({ manifestSha256, manifest, target, asset, identity, installedFiles }), null, 2)}\n`, { flag: 'wx', mode: 0o600 });
 }
 
 export async function setupPixelSnapper({ projectDir, manifestPath, fetchImpl = fetch, force = false, platform, getUid = defaultGetUid, faults } = {}) {
@@ -374,7 +398,7 @@ export async function setupPixelSnapper({ projectDir, manifestPath, fetchImpl = 
         } catch (error) { throw classifyDownload(error); }
 
         let inspection;
-        try { inspection = inspectArchive({ bytes: await fs.readFile(archive.output), format: asset.archiveFormat, expectedFiles: [asset.executable] }); }
+        try { inspection = inspectArchive({ bytes: await fs.readFile(archive.output), format: asset.archiveFormat, expectedFiles: archiveFiles(asset) }); }
         catch (error) { throw setupError('PIXEL_SNAPPER_UNSAFE_ARCHIVE', 'Pixel Snapper archive failed closed safety inspection', error); }
         try {
           if (typeof faults?.beforeExtraction === 'function') await faults.beforeExtraction({ content });
