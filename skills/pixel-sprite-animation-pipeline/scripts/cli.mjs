@@ -908,6 +908,7 @@ async function resumeRun(options, { manifestPath = packagedToolManifest() } = {}
   try {
     const snapped = await runPixelSnapper({
       inputs: generated, outputDir: snapStage, config: context.config,
+      paletteHex: context.animationContract?.document.palette.snapperPaletteHex,
       resolverOptions: await snapperResolverOptions(context.projectDir, manifestPath),
       receipt: { projectDir: context.projectDir, run: { id: context.handoff.runId, outputDir: snapStage, manifestSha256: context.handoff.manifestSha256 }, contract: context.animationContract ?? { sha256: context.handoffSha256 }, durableReceiptFile: path.join(snappedDir, 'snap-receipt.json') }
     });
