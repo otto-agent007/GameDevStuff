@@ -11,9 +11,12 @@ function snapperConfig(config) {
   };
 }
 
-function commandArguments(input, output, config) {
+function commandArguments(input, output, config, paletteHex) {
   const options = (snapperConfig(config).args ?? []).filter((argument) => String(argument) !== '16');
-  return [input, output, '16', ...options];
+  if (paletteHex === undefined) return [input, output, '16', ...options];
+  if (!Array.isArray(paletteHex) || paletteHex.length === 0 || paletteHex.length > 16 || paletteHex.some((color) => !/^[0-9a-fA-F]{6}$/.test(color))) throw new Error('contract palette must contain 1-16 six-digit hex colors');
+  if (options.includes('--palette')) throw new Error('contract palette conflicts with configured Pixel Snapper palette arguments');
+  return [input, output, '16', ...options, '--palette', paletteHex.join(',')];
 }
 
 function outputFor(input, outputDir) {
@@ -43,7 +46,7 @@ export async function detectPixelSnapper(config, options = {}) {
   };
 }
 
-export async function writeSnapperHandoff({ inputs, outputDir, config, env = process.env }) {
+export async function writeSnapperHandoff({ inputs, outputDir, config, paletteHex, env = process.env }) {
   const executable = env.PIXEL_SNAPPER_BIN || snapperConfig(config).executable;
   await fs.mkdir(outputDir, { recursive: true });
   const expectedOutputs = inputs.map((input) => path.basename(outputFor(input, outputDir)));
@@ -59,17 +62,17 @@ export async function writeSnapperHandoff({ inputs, outputDir, config, env = pro
     sourceInputs: inputs,
     inputs,
     expectedOutputs,
-    commandTemplate: [executable, '<INPUT>', '<OUTPUT>', '16', ...commandArguments('<INPUT>', '<OUTPUT>', config).slice(3)],
+    commandTemplate: [executable, '<INPUT>', '<OUTPUT>', ...commandArguments('<INPUT>', '<OUTPUT>', config, paletteHex).slice(2)],
     resumeCommand
   }, null, 2));
   return { status: 'manual-handoff', executable, outputs: [], handoffPath };
 }
 
-export async function runPixelSnapper({ inputs, outputDir, config, identity = null, resolverOptions = {}, receipt = null }) {
+export async function runPixelSnapper({ inputs, outputDir, config, paletteHex, identity = null, resolverOptions = {}, receipt = null }) {
   const detection = identity ? { available: true, executable: identity.physicalPath, identity } : await detectPixelSnapper(config, resolverOptions);
-  if (!detection.available) return writeSnapperHandoff({ inputs, outputDir, config, env: resolverOptions.env ?? process.env });
+  if (!detection.available) return writeSnapperHandoff({ inputs, outputDir, config, paletteHex, env: resolverOptions.env ?? process.env });
 
-  const argumentsForReceipt = commandArguments('<INPUT>', '<OUTPUT>', config).slice(2);
+  const argumentsForReceipt = commandArguments('<INPUT>', '<OUTPUT>', config, paletteHex).slice(2);
   if (receipt) {
     const receiptOutputDir = receipt.run?.outputDir ?? receipt.run?.runDir;
     const receiptFile = receipt.durableReceiptFile ?? path.join(outputDir, 'snap-receipt.json');
@@ -85,7 +88,7 @@ export async function runPixelSnapper({ inputs, outputDir, config, identity = nu
   const outputs = [];
   for (const input of inputs) {
     const output = outputFor(input, outputDir);
-    const result = spawnSync(detection.identity.physicalPath, commandArguments(input, output, config), {
+    const result = spawnSync(detection.identity.physicalPath, commandArguments(input, output, config, paletteHex), {
       encoding: 'utf8',
       shell: false
     });

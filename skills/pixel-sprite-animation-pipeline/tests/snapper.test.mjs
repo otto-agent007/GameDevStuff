@@ -78,6 +78,29 @@ test('handoff command uses the resolver environment rather than ambient process 
   }
 });
 
+test('guided contract palette is passed to Pixel Snapper and bound into its receipt', { skip: process.platform === 'win32' && 'POSIX executable fixture' }, async () => {
+  const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapper-contract-palette-'));
+  const outputDir = path.join(projectDir, 'output');
+  const input = path.join(projectDir, 'frame.png');
+  const invocation = path.join(projectDir, 'invocation.json');
+  const executable = path.join(projectDir, 'snapper.mjs');
+  await fs.mkdir(path.join(projectDir, '.pixel-sprite-pipeline'), { mode: 0o700 });
+  await fs.writeFile(input, 'frame');
+  await fs.writeFile(executable, `#!/usr/bin/env node\nimport fs from 'node:fs/promises';\nconst [input, output, ...args] = process.argv.slice(2); await fs.copyFile(input, output); await fs.writeFile(${JSON.stringify(invocation)}, JSON.stringify(args));\n`, { mode: 0o700 });
+  const identity = { origin: 'environment', path: executable, physicalPath: executable, sha256: 'a'.repeat(64), version: 'test', helpSha256: 'b'.repeat(64), fixtureRgbaSha256: 'c'.repeat(64), size: 1 };
+  const run = { id: 'run-contract-palette', outputDir, manifestSha256: 'd'.repeat(64) };
+  const contract = { sha256: 'e'.repeat(64) };
+
+  await runPixelSnapper({
+    inputs: [input], outputDir, config: { snapper: { args: ['16'] } }, identity,
+    paletteHex: ['06fd08', '040614', 'f1eff0'], receipt: { projectDir, run, contract }
+  });
+
+  assert.deepEqual(JSON.parse(await fs.readFile(invocation, 'utf8')), ['16', '--palette', '06fd08,040614,f1eff0']);
+  const receipt = JSON.parse(await fs.readFile(path.join(outputDir, 'snap-receipt.json'), 'utf8'));
+  assert.deepEqual(receipt.payload.arguments, ['16', '--palette', '06fd08,040614,f1eff0']);
+});
+
 test('verified snap receipt is published atomically and blocks changed retry identity before execution', { skip: process.platform === 'win32' && 'POSIX executable fixture' }, async () => {
   const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapper-receipt-'));
   const outputDir = path.join(projectDir, 'output');
