@@ -10,6 +10,8 @@ examples/private/
 generated/
 private-audits/
 **/private-audits/
+.private-audits/
+**/.private-audits/
 test-results/
 **/test-results/
 playwright-report/

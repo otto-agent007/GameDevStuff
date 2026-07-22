@@ -1040,13 +1040,13 @@ git commit -m "test: prove public character workflow"
 - Skill route covers approved character anchor, character brief, sprite animation, GIF/APNG/WebP/video/PNG intake, Frame Studio, pivots, sockets, contacts, Pixel Snapper delegation, and engine export.
 - Private audit command accepts paths outside the repository and writes under an ignored operator-selected audit root.
 
-- [ ] **Step 1: Define and run baseline scenarios before creating `SKILL.md`**
+- [x] **Step 1: Define and run baseline scenarios before creating `SKILL.md`**
 
 Create `skill-scenarios.json` with the raw user prompts and fixture paths for: imported GIF with disposal, video without timestamps, requested per-frame auto-fit, changed approved source, missing socket, once clip set to loop, unavailable ComfyUI, and a request to copy Pop T output into CockpitEscapeRoom. Run fresh-context agents without the new skill, pass only one raw scenario per agent, and save the uncommitted baseline outputs outside the skill directory. For any wording intended to change behavior, run a no-guidance control and at least five fresh-context samples; read every output rather than scoring keyword counts alone.
 
 Expected: the baseline evidence records the exact omissions or rationalizations that the minimal skill must correct and contains no private asset bytes. If controls already comply consistently, omit guidance for that behavior.
 
-- [ ] **Step 2: Initialize the skill metadata after RED evidence exists**
+- [x] **Step 2: Initialize the skill metadata after RED evidence exists**
 
 Read `/home/user1/.codex/skills/.system/skill-creator/references/openai_yaml.md`, run `init_skill.py` against a temporary directory, and use its generated structure to create only `SKILL.md`, `agents/openai.yaml`, and the four required references in the existing package. The skill name is exactly `game-character-pipeline`; frontmatter contains only `name` and a third-person description beginning `Use when...` that lists trigger situations without summarizing the workflow. Generate `agents/openai.yaml` with `generate_openai_yaml.py` and explicit `display_name`, `short_description`, and `default_prompt` values derived from the completed skill.
 
@@ -1059,11 +1059,11 @@ python3 /home/user1/.codex/skills/.system/skill-creator/scripts/init_skill.py ga
 
 Expected: the temporary scaffold validates and no template, example, or placeholder file is copied into the repository.
 
-- [ ] **Step 3: Author the minimal operational skill from the baseline failures**
+- [x] **Step 3: Author the minimal operational skill from the baseline failures**
 
 Require project-contract validation, immutable intake, complete decode diagnostics, Frame Studio review, explicit approval, authenticated pixel-pipeline delegation, objective validation, and audit. Route unavailable ComfyUI to import with generation recorded as skipped. Explicitly forbid CockpitEscapeRoom modification and private-asset publication.
 
-- [ ] **Step 4: Rerun and refactor the skill scenarios**
+- [x] **Step 4: Rerun and refactor the skill scenarios**
 
 Run the same fresh-context scenarios with `SKILL.md` loaded, passing raw artifacts rather than expected answers. Add only counters for newly observed rationalizations, then repeat until all five samples per changed wording converge. `skill-scenarios.test.mjs` validates that every scenario has a unique ID, raw prompt, fixture boundary, expected command family, expected exit class, and forbidden behavior list.
 
@@ -1071,19 +1071,19 @@ Run: `node --test tests/skill-scenarios.test.mjs`
 
 Expected: all scenarios select the correct command/stop rule; no scenario silently defaults timing, rescales frames, bypasses approval, claims ComfyUI success, or crosses the repository boundary.
 
-- [ ] **Step 5: Validate discovery metadata and installed-skill shape**
+- [x] **Step 5: Validate discovery metadata and installed-skill shape**
 
 Run: `cd skills/game-character-pipeline && npm run validate-skill && wc -l SKILL.md`
 
 Expected: `Skill is valid!`; `SKILL.md` stays below 500 lines; every reference is linked directly from `SKILL.md`; package contents contain no README, installation guide, changelog, eval output, or private artifact.
 
-- [ ] **Step 6: Perform the bounded private Pop T audit outside Git**
+- [x] **Step 6: Perform the bounded private Pop T audit outside Git**
 
 Create an audit root with `mktemp -d`, copy only owner-approved private inputs there, run the workflow for stable height, planted-foot contact, key/hand socket attachment, and nonrestarting playback, then inspect contact sheets and lossless previews at the private production gate. Record only `{ passed, runSha256, reportSha256, approvedBy, approvedAt }` in the owner handoff; do not stage media, manifests, paths, thumbnails, or descriptive private evidence.
 
 Expected: objective validation PASS and owner approval recorded. If owner approval is absent, exit `4` and stop without integrating downstream assets.
 
-- [ ] **Step 7: Run final verification and commit public guidance only**
+- [x] **Step 7: Run final verification and commit public guidance only**
 
 Run: `cd skills/game-character-pipeline && npm test && npm run test:browser && npm run acceptance && npm pack --dry-run && git status --short`
 
