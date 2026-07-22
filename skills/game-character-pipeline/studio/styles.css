@@ -26,7 +26,9 @@ button, input { font: inherit; }
 button { color: inherit; }
 
 .app-shell {
+  height: 100vh;
   min-height: 100vh;
+  overflow: hidden;
   display: grid;
   grid-template: 64px minmax(0, 1fr) 34px / 292px minmax(0, 1fr) 304px;
   grid-template-areas:
@@ -171,6 +173,21 @@ frame-canvas canvas { display: block; max-width: 100%; height: auto; image-rende
 .track-field code { color: var(--muted); font-size: 9px; }
 .repair-group { opacity: .85; }
 
+.approval-card { margin-top: 14px; padding: 14px; border: 1px solid #594116; border-radius: var(--radius); background: #18170f; }
+.approval-card h3 { margin: 3px 0 12px; font-size: 15px; }
+.hash-list { display: grid; gap: 6px; margin: 0 0 12px; }
+.hash-list div { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; }
+.hash-list dt { color: var(--muted); font-size: 9px; }
+.hash-list dd { min-width: 0; margin: 0; }
+.hash-list code { display: block; color: var(--cyan); font: 7.5px ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; white-space: normal; }
+.approval-field { display: grid; gap: 4px; margin-top: 8px; color: var(--muted); font-size: 9px; }
+.approval-field select, .approval-field textarea { width: 100%; min-width: 0; padding: 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--chrome); color: var(--text); resize: vertical; }
+#render-review { width: 100%; margin-top: 10px; border-color: var(--cyan); color: var(--cyan); }
+.decision-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 7px; }
+.approve-button { border-color: #6aa864; color: #9bdd94; }
+.reject-button { border-color: var(--danger); color: #ff93a8; }
+.decision-buttons button:disabled, #render-review:disabled { cursor: default; opacity: .4; }
+
 .statusbar { grid-area: status; min-width: 0; display: flex; align-items: center; gap: 9px; padding: 0 14px; background: var(--chrome); color: var(--muted); font-size: 10px; }
 .statusbar code { margin-left: auto; color: #718087; }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #79ca72; box-shadow: 0 0 8px #79ca7277; }
@@ -178,8 +195,10 @@ frame-canvas canvas { display: block; max-width: 100%; height: auto; image-rende
 @media (max-width: 760px) {
   .app-shell {
     display: flex;
+    height: auto;
     min-width: 0;
     flex-direction: column;
+    overflow: visible;
   }
   .topbar { min-height: 72px; padding: 8px 12px; }
   .brand-mark { display: none; }

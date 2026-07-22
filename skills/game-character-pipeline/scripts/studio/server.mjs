@@ -3,6 +3,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { renderReviewRevision, verifyApproval, writeApproval } from '../lib/approval.mjs';
 import { writeRevision } from '../lib/artifacts.mjs';
 import { loadInitializedProject, loadRun } from '../lib/run-contract.mjs';
 import {
@@ -293,7 +294,7 @@ export async function startStudioServer({
           editState = { editRevision: written.revision, editSha256: written.sha256, edit };
           return written;
         });
-        sendJson(response, 200, { revision: result.revision, sha256: result.sha256 });
+        sendJson(response, 200, { revision: result.revision, sha256: result.sha256, editSha256: sha256Value(edit) });
         return;
       }
 
@@ -311,24 +312,48 @@ export async function startStudioServer({
       if (pathname === '/api/approval') {
         if (request.method !== 'POST') throw methodError('POST');
         const approval = await readJson(request);
+        exactObject(approval, ['approver', 'decision', 'notes'], 'studio approval request');
         const result = await serialize(async () => {
           requireMutationHeaders(request, origin, editState.editSha256);
-          return writeRevision({
-            root: run.root,
-            area: 'approved',
-            stem: 'studio-approval',
-            value: {
-              schemaVersion: 1,
-              kind: 'studio-approval-pending-task-10',
-              runId: run.id,
-              stage,
-              sourceSha256,
-              editSha256: editState.editSha256,
-              approval
-            }
-          });
+          if (editState.editRevision < 1) throw new HttpError(409, 'approval requires a saved edit revision');
+          try {
+            const written = await writeApproval({ run, project, editRevision: editState.editRevision, ...approval });
+            await verifyApproval({ run, file: written.path, project, source, edit: editState.edit });
+            return written;
+          } catch (error) {
+            throw new HttpError(400, error.message);
+          }
         });
-        sendJson(response, 200, { revision: result.revision, sha256: result.sha256 });
+        sendJson(response, 200, {
+          revision: result.revision,
+          sha256: result.sha256,
+          decision: result.document.decision,
+          editSha256: result.document.editSha256,
+          renderSha256: result.document.renderedReview.sha256
+        });
+        return;
+      }
+
+      if (pathname === '/api/render') {
+        if (request.method !== 'POST') throw methodError('POST');
+        const body = await readJson(request);
+        exactObject(body, [], 'studio render request');
+        const result = await serialize(async () => {
+          requireMutationHeaders(request, origin, editState.editSha256);
+          if (editState.editRevision < 1) throw new HttpError(409, 'render requires a saved edit revision');
+          try {
+            return await renderReviewRevision({ run, project, editRevision: editState.editRevision });
+          } catch (error) {
+            throw new HttpError(400, error.message);
+          }
+        });
+        sendJson(response, 200, {
+          editRevision: result.editRevision,
+          editSha256: result.editSha256,
+          renderSha256: result.sha256,
+          renderedManifestSha256: result.renderedManifest.sha256,
+          contactSheetSha256: result.contactSheet.sha256
+        });
         return;
       }
 

@@ -14,10 +14,29 @@ let playing = false;
 let playbackTimer;
 let copyNumber = 0;
 let markerAuthoring;
+let dirty = false;
+let renderReceipt = null;
 
 const titleCase = (value) => value.split(/[-_]/).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
 const frameUrl = (sha256) => `/api/frame/${sha256}`;
 const includedFrames = () => frames.filter((frame) => frame.included !== false);
+
+function updateApprovalControls() {
+  const hasSavedEdit = Boolean(session?.editRevision);
+  document.querySelector('#render-review').disabled = dirty || !hasSavedEdit;
+  const canDecide = !dirty && Boolean(renderReceipt) && hasSavedEdit;
+  document.querySelector('#approve-revision').disabled = !canDecide;
+  document.querySelector('#reject-revision').disabled = !canDecide;
+}
+
+function setDirty(value) {
+  dirty = value;
+  if (value) {
+    renderReceipt = null;
+    document.querySelector('#approval-render-hash').textContent = 'Not rendered';
+  }
+  updateApprovalControls();
+}
 
 function compatibleEdit(edit) {
   return edit?.kind === 'frame-studio-edit' &&
@@ -119,6 +138,7 @@ timeline.addEventListener('frame-select', ({ detail }) => selectFrame(detail.ind
 timeline.addEventListener('frame-include', ({ detail }) => {
   frames[detail.index].included = detail.included;
   frames[detail.index].edit.included = detail.included;
+  setDirty(true);
   render();
   status.textContent = `${detail.included ? 'Included' : 'Excluded'} ${frames[detail.index].id}; save to create a revision.`;
 });
@@ -129,12 +149,14 @@ timeline.addEventListener('frame-duplicate', ({ detail }) => {
   duplicate.edit.frameId = duplicate.id;
   frames.splice(detail.index + 1, 0, duplicate);
   selectedIndex = detail.index + 1;
+  setDirty(true);
   render();
   status.textContent = `Duplicated ${original.id}; save to create a revision.`;
 });
 timeline.addEventListener('frame-label', ({ detail }) => {
   frames[detail.index].label = detail.label;
   frames[detail.index].edit.label = detail.label;
+  setDirty(true);
 });
 
 playButton.addEventListener('click', togglePlayback);
@@ -176,6 +198,10 @@ document.querySelector('#save-revision').addEventListener('click', async () => {
     session.editSha256 = result.sha256;
     session.editRevision = result.revision;
     document.querySelector('#restore-revision').disabled = result.revision < 2;
+    renderReceipt = null;
+    document.querySelector('#approval-edit-hash').textContent = result.editSha256;
+    document.querySelector('#approval-render-hash').textContent = 'Not rendered';
+    setDirty(false);
     status.textContent = `Saved edit revision ${result.revision}.`;
   } catch (error) {
     status.textContent = `Could not save revision: ${error.message}`;
@@ -192,11 +218,62 @@ document.querySelector('#restore-revision').addEventListener('click', async () =
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? 'revision load failed');
     if (!applyEdit(result.edit)) throw new Error('prior revision is not compatible with this source frame set');
+    setDirty(true);
     status.textContent = `Restored edit revision ${target}; save to create a new revision.`;
   } catch (error) {
     status.textContent = `Could not restore revision: ${error.message}`;
   }
 });
+
+document.querySelector('#render-review').addEventListener('click', async () => {
+  status.textContent = 'Rendering hash-bound review derivatives…';
+  try {
+    const response = await fetch('/api/render', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'If-Match': session.editSha256 },
+      body: '{}'
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? 'review render failed');
+    renderReceipt = result;
+    document.querySelector('#approval-edit-hash').textContent = result.editSha256;
+    document.querySelector('#approval-render-hash').textContent = result.renderSha256;
+    updateApprovalControls();
+    status.textContent = `Rendered edit revision ${result.editRevision} for owner review.`;
+  } catch (error) {
+    renderReceipt = null;
+    updateApprovalControls();
+    status.textContent = `Could not render review: ${error.message}`;
+  }
+});
+
+async function submitDecision(decision) {
+  const notes = document.querySelector('#approval-notes').value;
+  if (decision === 'rejected' && notes.trim() === '') {
+    status.textContent = 'Rejection notes are required.';
+    return;
+  }
+  status.textContent = `${decision === 'approved' ? 'Approving' : 'Rejecting'} hash-bound selection…`;
+  try {
+    const response = await fetch('/api/approval', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'If-Match': session.editSha256 },
+      body: JSON.stringify({
+        approver: document.querySelector('#approval-identity').value,
+        decision,
+        notes
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? 'approval write failed');
+    status.textContent = `${decision === 'approved' ? 'Approved' : 'Rejected'} selection revision ${result.revision}.`;
+  } catch (error) {
+    status.textContent = `Could not record owner decision: ${error.message}`;
+  }
+}
+
+document.querySelector('#approve-revision').addEventListener('click', () => submitDecision('approved'));
+document.querySelector('#reject-revision').addEventListener('click', () => submitDecision('rejected'));
 
 document.addEventListener('keydown', (event) => {
   if (event.target.matches('input, textarea, select')) return;
@@ -215,6 +292,8 @@ document.addEventListener('keydown', (event) => {
   } else if (event.key === 'Delete' && frames[selectedIndex]) {
     event.preventDefault();
     frames[selectedIndex].included = false;
+    frames[selectedIndex].edit.included = false;
+    setDirty(true);
     render();
   }
 });
@@ -244,8 +323,27 @@ async function initialize() {
         tracks: [...actionTracks]
       }
     }));
+    if (compatibleEdit(session.edit)) {
+      for (const [index, frameEdit] of session.edit.frames.entries()) {
+        frames[index].edit = structuredClone(frameEdit);
+        frames[index].included = frameEdit.included;
+        frames[index].label = frameEdit.label;
+        frames[index].durationMs = frameEdit.durationMs;
+      }
+    } else if (session.edit) {
+      dirty = true;
+    }
     document.querySelector('#project-title').textContent = `${session.project.character.name} / ${titleCase(action?.id ?? session.actionId)}`;
     document.querySelector('#source-hash').textContent = session.sourceSha256.slice(0, 12);
+    document.querySelector('#approval-source-hash').textContent = session.sourceSha256;
+    document.querySelector('#approval-edit-hash').textContent = session.editSha256;
+    const approver = document.querySelector('#approval-identity');
+    for (const identity of session.project.approvals.identities) {
+      const option = document.createElement('option');
+      option.value = identity;
+      option.textContent = identity;
+      approver.append(option);
+    }
     status.textContent = `Immutable ${session.stage} source loaded.`;
     document.querySelector('#restore-revision').disabled = session.editRevision < 2;
     markerAuthoring = installMarkerAuthoring({
@@ -260,11 +358,13 @@ async function initialize() {
         frame.durationMs = frame.edit.durationMs;
         frame.included = frame.edit.included;
         frame.label = frame.edit.label;
+        if (shouldRender) setDirty(true);
         status.textContent = `${message} Save to create a revision.`;
         if (shouldRender) render();
       }
     });
     render();
+    updateApprovalControls();
     shell.dataset.loading = 'false';
   } catch (error) {
     status.textContent = `Frame Studio could not load: ${error.message}`;

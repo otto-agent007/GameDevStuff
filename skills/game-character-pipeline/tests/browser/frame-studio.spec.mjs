@@ -28,7 +28,7 @@ function spriteFrame(index) {
   return sharp(pixels, { raw: { width, height, channels: 4 } }).png().toBuffer();
 }
 
-test.beforeAll(async () => {
+async function startFixture() {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'game-character-frame-studio-browser-'));
   const projectRoot = path.join(root, 'project');
   const project = await createProject({ root: projectRoot, contractFile: projectFixture });
@@ -73,14 +73,10 @@ test.beforeAll(async () => {
   };
   await writeImmutableJson({ root: run.root, relative: 'reports/source.json', value: source });
   studio = await startStudioServer({ projectDir: projectRoot, runId: run.id, stage: 'selection' });
-});
-
-test.afterAll(async () => {
-  await studio?.close();
-  await fs.rm(root, { recursive: true, force: true });
-});
+}
 
 test.beforeEach(async ({ page }) => {
+  await startFixture();
   const messages = [];
   page.on('console', (message) => {
     if (message.type() === 'error' || message.type() === 'warning') messages.push(message.text());
@@ -89,6 +85,11 @@ test.beforeEach(async ({ page }) => {
   await expect(page).toHaveTitle('Frame Studio');
   await expect(page.getByRole('heading', { name: 'Frame Studio' })).toBeVisible();
   expect(messages).toEqual([]);
+});
+
+test.afterEach(async () => {
+  await studio?.close();
+  await fs.rm(root, { recursive: true, force: true });
 });
 
 test('renders the complete editor shell and source timeline', async ({ page }, testInfo) => {
@@ -173,6 +174,32 @@ test('authors landmarks, contact intervals, travel, timing, and explicit tracks'
   await page.getByRole('button', { name: 'Restore prior revision' }).click();
   await expect(page.getByRole('status')).toContainText(/Restored edit revision \d+/);
   await expect(page.getByLabel('Ground travel X')).toHaveValue('2');
+});
+
+test('renders hashes and binds configured owner approval only to saved edits', async ({ page }, testInfo) => {
+  await expect(page.getByText('Approval gate', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Approver identity')).toHaveValue('owner');
+  await expect(page.getByRole('button', { name: 'Approve revision' })).toBeDisabled();
+  await page.getByLabel('Label step-contact', { exact: true }).fill('owner-reviewed contact');
+  await expect(page.getByRole('button', { name: 'Approve revision' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Save revision' }).click();
+  await page.getByRole('button', { name: 'Render review' }).click();
+  await expect(page.getByRole('status')).toContainText(/Rendered edit revision \d+/);
+  for (const label of ['Source hash', 'Edit hash', 'Render hash']) {
+    await expect(page.getByLabel(label)).toHaveText(/[a-f0-9]{64}/);
+  }
+  await expect(page.getByRole('button', { name: 'Approve revision' })).toBeEnabled();
+  await page.getByLabel('Approval notes').fill('Timing, identity, and planted contacts approved.');
+  await page.getByRole('button', { name: 'Approve revision' }).click();
+  await expect(page.getByRole('status')).toContainText(/Approved selection revision \d+/);
+  if (process.env.FRAME_STUDIO_SCREENSHOT_DIR) {
+    await fs.mkdir(process.env.FRAME_STUDIO_SCREENSHOT_DIR, { recursive: true });
+    await page.locator('.inspector').evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    await page.screenshot({
+      path: path.join(process.env.FRAME_STUDIO_SCREENSHOT_DIR, `approval-${testInfo.project.name}.png`),
+      fullPage: true
+    });
+  }
 });
 
 test('fits desktop and narrow viewports with visible focus and reduced motion', async ({ page }) => {

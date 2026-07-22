@@ -697,7 +697,7 @@ git commit -m "feat: author animation alignment metadata"
 - Produces `writeApproval({ run, project, editRevision, approver, decision, notes })` and `verifyApproval({ run, file, project, source, edit })`.
 - Approval binds project, source report, complete selected-frame set, edit manifest, rendered derivatives, approver, decision, notes, and timestamp hashes.
 
-- [ ] **Step 1: Write failing approval-chain tests**
+- [x] **Step 1: Write failing approval-chain tests**
 
 ```js
 test('approval rejects changed membership, source, edit, or rendered bytes', async () => {
@@ -712,21 +712,21 @@ test('rejection records notes but cannot enter production', async () => {
 });
 ```
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
 Run: `node --test tests/approval.test.mjs`
 
 Expected: FAIL because approval support is absent.
 
-- [ ] **Step 3: Implement approval and render commands**
+- [x] **Step 3: Implement approval and render commands**
 
 `render --run <id> --edit <revision>` writes a new `work/revisions/<hash>/` tree and contact sheet without replacing prior bytes. `approve --run <id> --edit <revision> --approver <id> --decision approved|rejected --notes <text>` creates an append-only approval JSON; CLI exit is `4` for rejection or missing approval and `0` only for a verified approval.
 
-- [ ] **Step 4: Add Studio approve/reject controls**
+- [x] **Step 4: Add Studio approve/reject controls**
 
 Display exact source/edit/render hashes, require nonempty notes for rejection, require the configured approver identity, and disable approval while unsaved edits exist.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run: `node --test tests/approval.test.mjs tests/studio-server.test.mjs && npm run test:browser && npm test`
 

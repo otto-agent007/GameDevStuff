@@ -75,6 +75,28 @@ function mutationHeaders(origin, editSha256, extra = {}) {
   };
 }
 
+function validStudioEdit(fixture) {
+  return {
+    schemaVersion: 1,
+    kind: 'frame-studio-edit',
+    projectSha256: fixture.project.sha256,
+    sourceSha256: sha256Value(fixture.manifest),
+    actionId: 'idle',
+    frames: [{
+      frameId: 'studio-frame',
+      included: true,
+      label: 'reviewed',
+      durationMs: 100,
+      translation: { x: 0, y: 0 },
+      transform: null,
+      markers: [],
+      contacts: [],
+      groundTravel: { x: 0, y: 0 },
+      tracks: ['actor', 'satchel']
+    }]
+  };
+}
+
 test('studio binds only to loopback and exposes a hash-bound session', async (t) => {
   const fixture = await studioFixture(t);
   await assert.rejects(
@@ -204,20 +226,34 @@ test('studio serializes concurrent edits so one stale writer loses', async (t) =
   assert.deepEqual(await fs.readdir(path.join(fixture.run.root, 'edits')), ['studio-edit-0001.json']);
 });
 
-test('studio approval endpoint writes an immutable revision against the current edit', async (t) => {
+test('studio render and approval endpoints bind immutable derivatives to the current edit', async (t) => {
   const fixture = await studioFixture(t);
   const studio = await startStudioServer({ projectDir: fixture.projectRoot, runId: fixture.run.id, stage: 'selection' });
   t.after(() => studio.close());
   const session = (await responseJson(`${studio.origin}/api/session`)).body;
+  const saved = await responseJson(`${studio.origin}/api/edits`, {
+    method: 'PUT',
+    headers: mutationHeaders(studio.origin, session.editSha256),
+    body: JSON.stringify(validStudioEdit(fixture))
+  });
+  assert.equal(saved.response.status, 200);
+  const rendered = await responseJson(`${studio.origin}/api/render`, {
+    method: 'POST',
+    headers: mutationHeaders(studio.origin, saved.body.sha256),
+    body: '{}'
+  });
+  assert.equal(rendered.response.status, 200);
+  assert.match(rendered.body.renderSha256, /^[a-f0-9]{64}$/);
   const approval = await responseJson(`${studio.origin}/api/approval`, {
     method: 'POST',
-    headers: mutationHeaders(studio.origin, session.editSha256),
-    body: JSON.stringify({ decision: 'pending-task-10' })
+    headers: mutationHeaders(studio.origin, saved.body.sha256),
+    body: JSON.stringify({ approver: 'owner', decision: 'approved', notes: 'reviewed in Studio' })
   });
   assert.equal(approval.response.status, 200);
   assert.equal(approval.body.revision, 1);
   assert.match(approval.body.sha256, /^[a-f0-9]{64}$/);
-  assert.equal((await fs.lstat(path.join(fixture.run.root, 'approved', 'studio-approval-0001.json'))).isFile(), true);
+  assert.equal(approval.body.renderSha256, rendered.body.renderSha256);
+  assert.equal((await fs.lstat(path.join(fixture.run.root, 'approved', 'selection-approval-0001.json'))).isFile(), true);
 });
 
 test('studio CLI prints readiness once and closes on SIGTERM without edits', async (t) => {

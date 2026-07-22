@@ -3,6 +3,14 @@ import { Command } from 'commander';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  loadEditRevision,
+  loadSourceReport,
+  renderReviewRevision,
+  requireProductionApproval,
+  verifyApproval,
+  writeApproval
+} from './lib/approval.mjs';
 import { createGenerationHandoff, importGeneratedCandidate, loadGenerationHandoff } from './lib/generated-still.mjs';
 import { decodeAnimatedImage } from './lib/animated-image.mjs';
 import { decodePngSequence } from './lib/png-sequence.mjs';
@@ -12,8 +20,6 @@ import { decodeVideo } from './lib/video.mjs';
 import { startStudioServer } from './studio/server.mjs';
 
 const commands = Object.freeze([
-  ['render', 'Render a non-destructive edit revision'],
-  ['approve', 'Approve or reject a rendered revision'],
   ['produce', 'Delegate approved frames to deterministic pixel production'],
   ['validate', 'Validate one complete character animation run'],
   ['audit', 'Compare reproducible run evidence']
@@ -38,6 +44,12 @@ function print(value) {
 function positiveInteger(value) {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) throw new Error('duration must be an integer from 1 to 65535');
+  return parsed;
+}
+
+function revisionInteger(value) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 999999) throw new Error('revision must be an integer from 1 to 999999');
   return parsed;
 }
 
@@ -185,6 +197,73 @@ program
     }
 
     print({ status: options.resume ? 'resumed' : 'created', runId: run.id, state: run.document.state });
+  });
+
+program
+  .command('render')
+  .description('Render a non-destructive edit revision')
+  .requiredOption('--project-dir <directory>', 'project directory')
+  .requiredOption('--run <id>', 'immutable run ID')
+  .requiredOption('--edit <revision>', 'immutable edit revision', revisionInteger)
+  .option('--allow-global-transform', 'confirm one integer transform for the entire clip', false)
+  .action(async (options) => {
+    const projectDir = path.resolve(options.projectDir);
+    const project = await loadInitializedProject(projectDir);
+    const run = await loadRun({ projectRoot: projectDir, id: options.run });
+    const rendered = await renderReviewRevision({
+      run,
+      project,
+      editRevision: options.edit,
+      allowGlobalTransform: options.allowGlobalTransform
+    });
+    print({
+      status: 'rendered',
+      runId: run.id,
+      editRevision: options.edit,
+      editSha256: rendered.editSha256,
+      renderSha256: rendered.sha256,
+      contactSheetSha256: rendered.contactSheet.sha256
+    });
+  });
+
+program
+  .command('approve')
+  .description('Approve or reject a rendered revision')
+  .requiredOption('--project-dir <directory>', 'project directory')
+  .requiredOption('--run <id>', 'immutable run ID')
+  .requiredOption('--edit <revision>', 'immutable edit revision', revisionInteger)
+  .requiredOption('--approver <id>', 'configured approval identity')
+  .requiredOption('--decision <decision>', 'approved or rejected')
+  .requiredOption('--notes <text>', 'owner review notes')
+  .option('--allow-global-transform', 'confirm one integer transform for the entire clip', false)
+  .action(async (options) => {
+    const projectDir = path.resolve(options.projectDir);
+    const project = await loadInitializedProject(projectDir);
+    const run = await loadRun({ projectRoot: projectDir, id: options.run });
+    const source = await loadSourceReport(run);
+    const revision = await loadEditRevision({ run, sourceSha256: source.sha256, revision: options.edit });
+    const approval = await writeApproval({
+      run,
+      project,
+      editRevision: options.edit,
+      approver: options.approver,
+      decision: options.decision,
+      notes: options.notes,
+      allowGlobalTransform: options.allowGlobalTransform
+    });
+    const verified = await verifyApproval({ run, file: approval.path, project, source: source.document, edit: revision.edit });
+    print({
+      status: verified.document.decision,
+      runId: run.id,
+      editRevision: options.edit,
+      approvalRevision: approval.revision,
+      approvalSha256: approval.sha256
+    });
+    if (verified.document.decision === 'rejected') {
+      process.exitCode = 4;
+      return;
+    }
+    requireProductionApproval(verified);
   });
 
 for (const [name, description] of commands) {
