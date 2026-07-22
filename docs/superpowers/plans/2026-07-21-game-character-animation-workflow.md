@@ -519,7 +519,7 @@ git commit -m "feat: import timestamped video motion"
 - API: `GET /api/session`, `GET /api/frame/:sha256`, `PUT /api/edits`, and `POST /api/approval`.
 - Mutations require `If-Match: <current-edit-sha256>` and return the new immutable revision/hash.
 
-- [ ] **Step 1: Write failing containment, method, origin, and concurrency tests**
+- [x] **Step 1: Write failing containment, method, origin, and concurrency tests**
 
 ```js
 test('studio serves only loopback and rejects stale edits', async () => {
@@ -531,21 +531,21 @@ test('studio serves only loopback and rejects stale edits', async () => {
 });
 ```
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
 Run: `node --test tests/studio-server.test.mjs`
 
 Expected: FAIL because the server is absent.
 
-- [ ] **Step 3: Implement the loopback-only server**
+- [x] **Step 3: Implement the loopback-only server**
 
 Reject non-loopback hosts, unknown methods, traversal and encoded traversal, missing content types, request bodies over 1 MiB, cross-origin mutation requests, and frames not present in the current source manifest. Send CSP `default-src 'self'; img-src 'self' blob:; connect-src 'self'`, `X-Content-Type-Options: nosniff`, and `Cache-Control: no-store` on state endpoints.
 
-- [ ] **Step 4: Wire the `studio` command**
+- [x] **Step 4: Wire the `studio` command**
 
 `studio --project-dir <dir> --run <id>` prints `{ status: "ready", origin, runId }` once and stays alive until SIGINT/SIGTERM, then closes without editing state.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run: `node --test tests/studio-server.test.mjs tests/cli.test.mjs && npm test`
 

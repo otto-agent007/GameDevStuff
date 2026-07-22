@@ -9,9 +9,9 @@ import { decodePngSequence } from './lib/png-sequence.mjs';
 import { createProject, createRun, loadInitializedProject, loadRun } from './lib/run-contract.mjs';
 import { decodeMotionSource, registerSourceAdapter } from './lib/source-adapter.mjs';
 import { decodeVideo } from './lib/video.mjs';
+import { startStudioServer } from './studio/server.mjs';
 
 const commands = Object.freeze([
-  ['studio', 'Open the local Frame Studio authoring surface'],
   ['render', 'Render a non-destructive edit revision'],
   ['approve', 'Approve or reject a rendered revision'],
   ['produce', 'Delegate approved frames to deterministic pixel production'],
@@ -54,6 +54,25 @@ for (const kind of ['gif', 'apng', 'webp']) {
 for (const kind of ['mp4', 'webm']) {
   registerSourceAdapter(kind, ({ source, run, options }) => decodeVideo({ source, run, ffmpegPath: options.ffmpegPath }));
 }
+
+program
+  .command('studio')
+  .description('Open the local Frame Studio authoring surface')
+  .requiredOption('--project-dir <directory>', 'project directory')
+  .requiredOption('--run <id>', 'immutable run ID')
+  .action(async (options) => {
+    const studio = await startStudioServer({
+      projectDir: path.resolve(options.projectDir),
+      runId: options.run,
+      stage: 'selection'
+    });
+    print({ status: 'ready', origin: studio.origin, runId: options.run });
+    await new Promise((resolve) => {
+      process.once('SIGINT', resolve);
+      process.once('SIGTERM', resolve);
+    });
+    await studio.close();
+  });
 
 program
   .command('init')
