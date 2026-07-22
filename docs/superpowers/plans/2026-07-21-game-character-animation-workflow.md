@@ -459,12 +459,13 @@ git commit -m "feat: decode animated motion sources"
 - Create: `skills/game-character-pipeline/tests/video.test.mjs`
 - Create: `skills/game-character-pipeline/tests/fixtures/video/variable-rate.webm`
 - Create: `skills/game-character-pipeline/tests/fixtures/video/expected.json`
+- Create: `skills/game-character-pipeline/tests/fixtures/video/fake-ffmpeg.mjs`
 
 **Interfaces:**
 - Produces `inspectMediaTool(file, expectedName)` and `decodeVideo({ source, run, ffmpegPath })`.
-- Tool identity is `{ path, sha256, size, version }`; frame timestamps and durations come from FFmpeg `framehash` output using its declared stream time base.
+- Tool identity is `{ path, sha256, size, version }`; frame timestamps and durations come from FFmpeg `framehash` output using its declared stream time base. Tests use an injected executable fixture because the workstation has no reviewed FFmpeg binary; production intake always requires the separately selected, hash-bound executable.
 
-- [ ] **Step 1: Write failing variable-frame-rate and subprocess tests**
+- [x] **Step 1: Write failing variable-frame-rate and subprocess tests**
 
 ```js
 test('video intake derives nonuniform durations from presentation timestamps', async () => {
@@ -479,21 +480,21 @@ test('video intake rejects missing timestamps and changed tool bytes', async () 
 });
 ```
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
 Run: `node --test tests/video.test.mjs`
 
 Expected: FAIL with missing `video.mjs`.
 
-- [ ] **Step 3: Implement external tool inspection and framehash parsing**
+- [x] **Step 3: Implement external tool inspection and framehash parsing**
 
 Resolve only an explicit `ffmpegPath`, `FFMPEG_BIN`, or deterministic PATH candidate; reject absent tools with a structured exit-2 handoff and reject candidates that are not regular executable files. Hash before and after use, capture version output, and run with `shell: false`, a 60-second timeout, 8 MiB stdout/stderr limits, and no inherited stdin. Run `ffmpeg -i <source> -map 0:v:0 -f framehash -hash sha256 -`, parse the declared stream time base plus ordered frame PTS and duration fields, and reject missing, negative, duplicate, or unordered presentation timestamps.
 
-- [ ] **Step 4: Extract dense lossless frames**
+- [x] **Step 4: Extract dense lossless frames**
 
 Run FFmpeg with `-i <source> -map 0:v:0 -vsync 0 -pix_fmt rgba <work>/decoded/frame-%06d.png`; inspect decoded PNGs for dimensions and alpha, and reject stderr indicating decode corruption, output-count disagreement, dimensions changing midstream, or absent final duration. Bind both exact argv arrays and the one executable identity into the source report.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run: `node --test tests/video.test.mjs && npm test`
 

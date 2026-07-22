@@ -8,6 +8,7 @@ import { decodeAnimatedImage } from './lib/animated-image.mjs';
 import { decodePngSequence } from './lib/png-sequence.mjs';
 import { createProject, createRun, loadInitializedProject, loadRun } from './lib/run-contract.mjs';
 import { decodeMotionSource, registerSourceAdapter } from './lib/source-adapter.mjs';
+import { decodeVideo } from './lib/video.mjs';
 
 const commands = Object.freeze([
   ['studio', 'Open the local Frame Studio authoring surface'],
@@ -50,6 +51,9 @@ registerSourceAdapter('generated-still', ({ source, run, options }) => importGen
 for (const kind of ['gif', 'apng', 'webp']) {
   registerSourceAdapter(kind, ({ source, run }) => decodeAnimatedImage({ source, run }));
 }
+for (const kind of ['mp4', 'webm']) {
+  registerSourceAdapter(kind, ({ source, run, options }) => decodeVideo({ source, run, ffmpegPath: options.ffmpegPath }));
+}
 
 program
   .command('init')
@@ -81,6 +85,7 @@ program
   .option('--duration-ms <milliseconds>', 'explicit candidate duration', positiveInteger)
   .option('--source-manifest <file>', 'explicit PNG sequence manifest')
   .option('--source <file>', 'animated image or video source file')
+  .option('--ffmpeg <file>', 'explicit FFmpeg executable')
   .action(async (options) => {
     const projectDir = path.resolve(options.projectDir);
     const project = await loadInitializedProject(projectDir);
@@ -149,6 +154,17 @@ program
       return;
     }
 
+    if (['mp4', 'webm'].includes(options.kind) && options.source) {
+      const result = await decodeMotionSource({
+        kind: options.kind,
+        source: path.resolve(options.source),
+        run,
+        options: { ffmpegPath: options.ffmpeg ? path.resolve(options.ffmpeg) : undefined }
+      });
+      print({ status: 'intake-complete', runId: run.id, sourceSha256: result.sourceSha256, approval: result.approval });
+      return;
+    }
+
     print({ status: options.resume ? 'resumed' : 'created', runId: run.id, state: run.document.state });
   });
 
@@ -159,6 +175,11 @@ for (const [name, description] of commands) {
 try {
   await program.parseAsync(process.argv);
 } catch (error) {
-  process.stderr.write(`${JSON.stringify({ error: error.message, exitCode: 1 })}\n`);
-  process.exitCode = 1;
+  if (error.exitCode === 2 && error.handoff) {
+    print(error.handoff);
+    process.exitCode = 2;
+  } else {
+    process.stderr.write(`${JSON.stringify({ error: error.message, exitCode: 1 })}\n`);
+    process.exitCode = 1;
+  }
 }

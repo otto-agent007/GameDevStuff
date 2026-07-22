@@ -60,7 +60,7 @@
       "tracks": ["actor", "satchel"],
       "sockets": ["hand"],
       "contacts": ["left-foot", "right-foot"],
-      "sources": { "preferred": "gif", "fallbacks": ["png-sequence", "apng", "webp"] }
+      "sources": { "preferred": "gif", "fallbacks": ["png-sequence", "apng", "webp", "mp4", "webm"] }
     },
     {
       "id": "unlock",
