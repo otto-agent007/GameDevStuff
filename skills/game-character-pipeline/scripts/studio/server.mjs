@@ -1,9 +1,10 @@
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { writeRevision } from '../lib/artifacts.mjs';
-import { loadRun } from '../lib/run-contract.mjs';
+import { loadInitializedProject, loadRun } from '../lib/run-contract.mjs';
 import {
   exactObject,
   portableId,
@@ -16,6 +17,14 @@ import {
 const HASH = /^[a-f0-9]{64}$/;
 const BODY_LIMIT = 1024 * 1024;
 const CSP = "default-src 'self'; img-src 'self' blob:; connect-src 'self'";
+const STUDIO_ROOT = fileURLToPath(new URL('../../studio/', import.meta.url));
+const STATIC_FILES = new Map([
+  ['/', ['index.html', 'text/html; charset=utf-8']],
+  ['/studio/app.mjs', ['app.mjs', 'text/javascript; charset=utf-8']],
+  ['/studio/frame-canvas.mjs', ['frame-canvas.mjs', 'text/javascript; charset=utf-8']],
+  ['/studio/timeline.mjs', ['timeline.mjs', 'text/javascript; charset=utf-8']],
+  ['/studio/styles.css', ['styles.css', 'text/css; charset=utf-8']]
+]);
 
 class HttpError extends Error {
   constructor(status, message, headers = {}) {
@@ -44,6 +53,19 @@ function sendJson(response, status, value, headers = {}) {
     ...headers
   });
   response.end(body);
+}
+
+async function sendStatic(response, pathname) {
+  const entry = STATIC_FILES.get(pathname);
+  if (!entry) return false;
+  const [relative, contentType] = entry;
+  const bytes = await fs.readFile(path.join(STUDIO_ROOT, relative));
+  response.writeHead(200, {
+    ...responseHeaders(contentType),
+    'Content-Length': bytes.length
+  });
+  response.end(bytes);
+  return true;
 }
 
 function plainObject(value, label) {
@@ -193,7 +215,9 @@ export async function startStudioServer({
   if (host !== '127.0.0.1') throw new Error('Frame Studio must bind to the IPv4 loopback host');
   if (stage !== 'selection' && stage !== 'post-snap') throw new Error('studio stage must be selection or post-snap');
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('studio port is invalid');
-  const run = await loadRun({ projectRoot: path.resolve(projectDir), id: runId });
+  const resolvedProjectDir = path.resolve(projectDir);
+  const project = await loadInitializedProject(resolvedProjectDir);
+  const run = await loadRun({ projectRoot: resolvedProjectDir, id: runId });
   const source = await loadReviewManifest(run, stage, reviewManifest);
   const sourceSha256 = sha256Value(source);
   const frameByHash = new Map(source.frames.map((frame) => [frame.sha256, frame]));
@@ -207,6 +231,18 @@ export async function startStudioServer({
       const url = new URL(request.url, origin);
       const pathname = url.pathname;
 
+      if (STATIC_FILES.has(pathname)) {
+        if (request.method !== 'GET' && request.method !== 'HEAD') throw methodError('GET, HEAD');
+        if (request.method === 'HEAD') {
+          const [, contentType] = STATIC_FILES.get(pathname);
+          response.writeHead(200, responseHeaders(contentType));
+          response.end();
+          return;
+        }
+        await sendStatic(response, pathname);
+        return;
+      }
+
       if (pathname === '/api/session') {
         if (request.method !== 'GET') throw methodError('GET');
         sendJson(response, 200, {
@@ -214,6 +250,8 @@ export async function startStudioServer({
           runId: run.id,
           stage,
           sourceSha256,
+          project: project.document,
+          actionId: run.document.sourceRequest.actionId,
           source,
           ...editState
         });

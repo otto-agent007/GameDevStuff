@@ -568,12 +568,13 @@ git commit -m "feat: serve local Frame Studio state"
 - Create: `skills/game-character-pipeline/studio/styles.css`
 - Create: `skills/game-character-pipeline/tests/browser/frame-studio.spec.mjs`
 - Create: `skills/game-character-pipeline/playwright.config.mjs`
+- Modify: `skills/game-character-pipeline/scripts/studio/server.mjs`
 
 **Interfaces:**
 - Defines `<frame-canvas>` attributes `frame`, `previous`, `next`, `first`, `last`, `zoom`, `onion-opacity`, and `seam`.
 - Defines `<frame-timeline>` property `frames` and events `frame-select`, `frame-include`, `frame-duplicate`, `frame-replace`, and `frame-label`.
 
-- [ ] **Step 1: Write failing browser interactions**
+- [x] **Step 1: Write failing browser interactions**
 
 ```js
 test('plays real durations and supports keyboard selection', async ({ page }) => {
@@ -591,27 +592,27 @@ test('uses integer zoom and disables interpolation', async ({ page }) => {
 });
 ```
 
-- [ ] **Step 2: Run browser tests**
+- [x] **Step 2: Run browser tests**
 
 Run: `npx playwright install chromium && npm run test:browser`
 
 Expected: FAIL because Frame Studio assets do not exist.
 
-- [ ] **Step 3: Implement accessible shell and exact-duration playback**
+- [x] **Step 3: Implement accessible shell and exact-duration playback**
 
 Use semantic buttons, labels, output/status regions, roving tab index on thumbnails, Space to play/pause, arrows to select, Home/End, and Delete only for exclusion. Playback advances by each selected frame's authored `durationMs`; `once` stops at the final frame and `hold-last` keeps it visible.
 
-- [ ] **Step 4: Implement canvas overlays**
+- [x] **Step 4: Implement canvas overlays**
 
 Render at source resolution into an offscreen canvas, then scale the visible canvas by an integer CSS size with smoothing disabled. Onion skin previous/next with adjustable alpha; seam mode overlays first/last; checkerboard, clipping bounds, duplicate, palette, and drift overlays are independent toggles.
 
-- [ ] **Step 5: Verify desktop, narrow viewport, focus, and reduced motion**
+- [x] **Step 5: Verify desktop, narrow viewport, focus, and reduced motion**
 
 Run: `npm run test:browser`
 
 Expected: PASS at 1440x1000 and 420x900; no horizontal page overflow; visible focus ring; reduced-motion mode removes animated UI transitions without changing clip playback timing.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/game-character-pipeline/studio skills/game-character-pipeline/tests/browser skills/game-character-pipeline/playwright.config.mjs skills/game-character-pipeline/package.json skills/game-character-pipeline/npm-shrinkwrap.json
