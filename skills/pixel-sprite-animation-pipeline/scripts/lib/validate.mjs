@@ -17,6 +17,8 @@ const CORRECTIONS = Object.freeze({
   PIVOT_DRIFT: 'realign',
   BASELINE_DRIFT: 'realign',
   LANDMARK_DRIFT: 'realign',
+  SOCKET_ATTACHMENT: 'realign',
+  GROUND_TRAVEL_CONTACT: 'realign',
   GLOBAL_SCALE_DRIFT: 'nearest-rescale',
   PALETTE_DRIFT: 'palette-remap-review',
   CLIPPED_FOREGROUND: 'stop-for-regeneration',
@@ -26,7 +28,8 @@ const CORRECTIONS = Object.freeze({
   PREVIEW_MISMATCH: 'reexport-preview',
   IDENTITY_DRIFT: 'stop-for-regeneration',
   DUPLICATE_POSE: 'stop-for-regeneration',
-  LOOP_SEAM: 'timing-or-transition-review'
+  LOOP_SEAM: 'timing-or-transition-review',
+  NONCYCLIC_RESTART: 'reexport-metadata'
 });
 
 const SEMANTIC_CODES = new Set(['IDENTITY_DRIFT', 'DUPLICATE_POSE', 'LOOP_SEAM']);
@@ -630,6 +633,251 @@ function loopApprovedByFrameManifest(verifiedApproval, clip) {
 
 function sameCoordinate(left, right) { return validCoordinate(left) && validCoordinate(right) && left.x === right.x && left.y === right.y; }
 
+function translatedImageMatches(source, output, delta) {
+  if (source.width !== output.width || source.height !== output.height) return false;
+  for (let y = 0; y < output.height; y += 1) {
+    for (let x = 0; x < output.width; x += 1) {
+      const outputOffset = (y * output.width + x) * 4;
+      const sourceX = x - delta.x;
+      const sourceY = y - delta.y;
+      if (sourceX < 0 || sourceY < 0 || sourceX >= source.width || sourceY >= source.height) {
+        if (output.data[outputOffset] !== 0 || output.data[outputOffset + 1] !== 0 || output.data[outputOffset + 2] !== 0 || output.data[outputOffset + 3] !== 0) return false;
+        continue;
+      }
+      const sourceOffset = (sourceY * source.width + sourceX) * 4;
+      for (let channel = 0; channel < 4; channel += 1) if (source.data[sourceOffset + channel] !== output.data[outputOffset + channel]) return false;
+    }
+  }
+  return true;
+}
+
+function translatedNamedLandmarks(values, delta) {
+  return Object.fromEntries((values ?? []).map((value) => [value.id, { x: value.x + delta.x, y: value.y + delta.y }]));
+}
+
+function nonzeroTravel(value) { return value?.x !== 0 || value?.y !== 0; }
+
+async function compositedFilesMatch(files, expected, width, height) {
+  if (!Array.isArray(files) || files.length === 0 || expected.width !== width || expected.height !== height) return false;
+  const { data, info } = await sharp({ create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite(files.map((input) => ({ input })))
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  return info.width === expected.width && info.height === expected.height && data.equals(expected.data);
+}
+
+async function validateV2ArtifactRecord(root, record, label) {
+  exactKeys(record, ['file', 'sha256'], label);
+  const file = await containedArtifact(root, record.file);
+  const actual = rawHash(await fs.readFile(file));
+  return { file, actual, matches: actual === record.sha256 };
+}
+
+function expectV2Artifact(entries, relative) {
+  const segments = relative.split('/');
+  for (let index = 1; index < segments.length; index += 1) entries.add(`dir:${segments.slice(0, index).join('/')}`);
+  entries.add(`file:${relative}`);
+}
+
+async function validateContractExportRunV2({ anchorReport, normalized, exported, config, animationContract, frameApproval }) {
+  anchorReport = structuredClone(anchorReport);
+  normalized = structuredClone(normalized);
+  exported = structuredClone(exported);
+  config = structuredClone(config);
+  animationContract = snapshotAnimationContract(animationContract);
+  if (!animationContract || animationContract.document.version !== 2) throw new Error('v2 contract validation requires an animation contract version 2');
+  const contract = animationContract.document;
+  const canonical = { width: contract.canvas.width, height: contract.canvas.height };
+  if (!jsonEqual(config?.canonical, canonical) || !jsonEqual(config?.runtime, contract.scale.runtime) || !jsonEqual(config?.pivot, contract.canvas.pivot)) throw new Error('validation animation contract geometry does not match the selected config');
+  if (frameApproval === undefined) throw new Error('a signed frame approval is required for animation contract validation');
+  frameApproval = snapshotFrameApproval(frameApproval, animationContract);
+  const verifiedApproval = await verifyFrameApproval({ projectDir: frameApproval.projectDir, file: frameApproval.file, contract: animationContract, snapReceipt: frameApproval.snapReceipt, version: frameApproval.version });
+  const failures = [];
+  const warnings = [];
+  const measurements = { animationContractSha256: animationContract.sha256, frameApprovalSha256: verifiedApproval.sha256, frames: [] };
+  const allowedPalette = new Set(contract.palette.rgba.map(rgbaKey));
+
+  try {
+    const capturedAnchor = await captureImage(anchorReport.path);
+    measurements.anchorHash = capturedAnchor.sha256;
+    if (capturedAnchor.sha256 !== contract.character.anchorSha256 || (anchorReport.sha256 && anchorReport.sha256 !== capturedAnchor.sha256)) contractExportFailure(failures, 'SOURCE_HASH_MISMATCH', { field: 'characterAnchor', expected: contract.character.anchorSha256, actual: capturedAnchor.sha256 });
+    const drift = colorsOutsidePalette(capturedAnchor.image, allowedPalette);
+    if (drift.length > 0) contractExportFailure(failures, 'PALETTE_DRIFT', { field: 'anchorPixels', colors: drift });
+  } catch (error) {
+    contractExportFailure(failures, 'SOURCE_HASH_MISMATCH', { field: 'characterAnchor', reason: error.message });
+  }
+
+  if (normalized?.version !== 2 || normalized.animationContractSha256 !== animationContract.sha256 || normalized.selectionApprovalSha256 !== contract.selectionApprovalSha256 || normalized.frameApprovalSha256 !== verifiedApproval.sha256 || normalized.snapReceiptSha256 !== verifiedApproval.document.payload.snapReceiptSha256 || !Array.isArray(normalized.frames)) throw new Error('v2 validation normalized provenance binding is invalid');
+  if (exported?.version !== 2 || !exported.clips || !exported.tracks || typeof exported.metadata !== 'string') throw new Error('v2 validation requires the complete contract export selection');
+  const definitions = contract.clips.flatMap((clip) => clip.frames.map((frame) => ({ ...frame, loopMode: clip.loopMode, clipId: clip.id })));
+  if (normalized.frames.length !== definitions.length || verifiedApproval.document.payload.frames.length !== definitions.length) throw new Error('v2 validation requires exact normalized and approved frame coverage');
+
+  const normalizedCaptures = new Map();
+  const trackById = new Map(contract.tracks.map((track) => [track.id, track]));
+  for (const [frameIndex, definition] of definitions.entries()) {
+    const frame = normalized.frames[frameIndex];
+    const approved = verifiedApproval.document.payload.frames[frameIndex];
+    const delta = { x: contract.canvas.pivot.x - approved.landmarks.root.x, y: contract.canvas.pivot.y - approved.landmarks.root.y };
+    const expectedSockets = translatedNamedLandmarks(approved.landmarks.sockets, delta);
+    const expectedContacts = translatedNamedLandmarks(approved.landmarks.contacts, delta);
+    const frameMeasurement = { id: definition.id, tracks: [] };
+    measurements.frames.push(frameMeasurement);
+    if (frame?.id !== definition.id || frame?.semantic !== definition.semantic || frame?.duration !== definition.duration || frame?.loopMode !== definition.loopMode || frame?.scale !== contract.scale.integer) contractExportFailure(failures, 'METADATA_MISMATCH', { field: 'normalizedFrame', frame: frameIndex });
+    if (!sameCoordinate(frame?.root, contract.canvas.pivot)) contractExportFailure(failures, 'LANDMARK_DRIFT', { field: 'root', frame: frameIndex, expected: contract.canvas.pivot, actual: frame?.root ?? null });
+    if (frame?.baseline !== contract.canvas.baseline || approved.landmarks.baseline + delta.y !== contract.canvas.baseline) contractExportFailure(failures, 'BASELINE_DRIFT', { frame: frameIndex, expected: contract.canvas.baseline, actual: frame?.baseline ?? null });
+    if (!jsonEqual(frame?.sockets, expectedSockets)) contractExportFailure(failures, 'LANDMARK_DRIFT', { field: 'sockets', frame: frameIndex, expected: expectedSockets, actual: frame?.sockets ?? null });
+    if (!jsonEqual(frame?.contacts, expectedContacts)) contractExportFailure(failures, 'LANDMARK_DRIFT', { field: 'contacts', frame: frameIndex, expected: expectedContacts, actual: frame?.contacts ?? null });
+    if (!jsonEqual(frame?.groundTravel, definition.groundTravel)) contractExportFailure(failures, 'METADATA_MISMATCH', { field: 'groundTravel', frame: frameIndex });
+    if (nonzeroTravel(definition.groundTravel) && definition.contacts.length === 0) contractExportFailure(failures, 'GROUND_TRAVEL_CONTACT', { frame: frameIndex, frameId: definition.id, groundTravel: definition.groundTravel });
+    if (!jsonEqual(Object.keys(frame?.tracks ?? {}), definition.tracks)) contractExportFailure(failures, 'FRAME_COUNT', { field: 'normalizedTracks', frame: frameIndex, expected: definition.tracks, actual: Object.keys(frame?.tracks ?? {}) });
+
+    const normalizedTrackFiles = [];
+    for (const [trackIndex, trackId] of definition.tracks.entries()) {
+      const track = trackById.get(trackId);
+      const record = frame?.tracks?.[trackId];
+      const approvedOutput = approved.outputs[trackIndex];
+      if (!record || !approvedOutput || approvedOutput.trackId !== trackId || record.sourceSha256 !== approvedOutput.sha256 || record.kind !== track.kind || record.attachTo !== track.attachTo) {
+        contractExportFailure(failures, 'SOURCE_HASH_MISMATCH', { field: 'trackBinding', frame: frameIndex, trackId });
+        continue;
+      }
+      if (track.attachTo !== null && !definition.sockets.includes(track.attachTo)) contractExportFailure(failures, 'SOCKET_ATTACHMENT', { frame: frameIndex, trackId, socket: track.attachTo });
+      const expectedSource = path.resolve(path.dirname(frameApproval.snapReceipt.path), approvedOutput.path);
+      if (path.resolve(record.sourcePath) !== expectedSource) contractExportFailure(failures, 'SOURCE_HASH_MISMATCH', { field: 'trackSourcePath', frame: frameIndex, trackId });
+      try {
+        const source = await captureImage(expectedSource);
+        const output = await captureImage(record.path);
+        normalizedTrackFiles.push(record.path);
+        normalizedCaptures.set(`${definition.id}\0${trackId}`, output);
+        frameMeasurement.tracks.push({ id: trackId, sourceSha256: source.sha256, normalizedSha256: output.sha256 });
+        if (source.sha256 !== approvedOutput.sha256 || output.sha256 !== record.normalizedSha256) contractExportFailure(failures, 'SOURCE_HASH_MISMATCH', { field: 'trackPixels', frame: frameIndex, trackId });
+        if (output.image.width !== canonical.width || output.image.height !== canonical.height) contractExportFailure(failures, 'CANVAS_SIZE', { frame: frameIndex, trackId, expected: [canonical.width, canonical.height], actual: [output.image.width, output.image.height] });
+        const drift = colorsOutsidePalette(output.image, allowedPalette);
+        if (drift.length > 0) contractExportFailure(failures, 'PALETTE_DRIFT', { frame: frameIndex, trackId, colors: drift });
+        if (!translatedImageMatches(source.image, output.image, delta)) contractExportFailure(failures, track.attachTo === null ? 'LANDMARK_DRIFT' : 'SOCKET_ATTACHMENT', { frame: frameIndex, trackId, delta });
+        if (track.required && record.clippedPixelCount !== 0) contractExportFailure(failures, 'CLIPPED_FOREGROUND', { frame: frameIndex, trackId, clippedPixelCount: record.clippedPixelCount ?? null });
+      } catch (error) {
+        contractExportFailure(failures, 'SOURCE_HASH_MISMATCH', { field: 'trackArtifact', frame: frameIndex, trackId, reason: error.message });
+      }
+    }
+    try {
+      const combined = await captureImage(frame.combined.path);
+      if (combined.sha256 !== frame.combined.sha256 || !await compositedFilesMatch(normalizedTrackFiles, combined.image, canonical.width, canonical.height)) contractExportFailure(failures, 'SOURCE_HASH_MISMATCH', { field: 'normalizedCombined', frame: frameIndex });
+    } catch (error) {
+      contractExportFailure(failures, 'SOURCE_HASH_MISMATCH', { field: 'normalizedCombined', frame: frameIndex, reason: error.message });
+    }
+  }
+
+  let index;
+  let root;
+  try {
+    const captured = await captureJson(exported.metadata);
+    index = captured.document;
+    root = await fs.realpath(path.dirname(exported.metadata));
+    exactKeys(index, ['version', 'animationContractSha256', 'animationContract', 'selectionApprovalSha256', 'frameApprovalSha256', 'snapReceiptSha256', 'character', 'canvas', 'scale', 'palette', 'tracks', 'sockets', 'contacts', 'clips'], 'v2 contract export index');
+  } catch (error) {
+    contractExportFailure(failures, 'METADATA_MISMATCH', { field: 'index', reason: error.message });
+    return { passed: false, failures: classifyFailures({ failures }), warnings, measurements };
+  }
+  if (index.version !== 2 || index.animationContractSha256 !== animationContract.sha256 || !jsonEqual(index.animationContract, contract) || index.selectionApprovalSha256 !== contract.selectionApprovalSha256 || index.frameApprovalSha256 !== verifiedApproval.sha256 || index.snapReceiptSha256 !== verifiedApproval.document.payload.snapReceiptSha256) contractExportFailure(failures, 'METADATA_MISMATCH', { field: 'provenanceBindings' });
+  for (const field of ['character', 'canvas', 'scale', 'palette', 'tracks', 'sockets', 'contacts']) if (!jsonEqual(index[field], contract[field])) contractExportFailure(failures, field === 'palette' ? 'PALETTE_DRIFT' : 'METADATA_MISMATCH', { field });
+  if (!Array.isArray(index.clips) || index.clips.length !== contract.clips.length) contractExportFailure(failures, 'FRAME_COUNT', { field: 'clips', expected: contract.clips.length, actual: index.clips?.length ?? null });
+
+  const expectedEntries = new Set([`file:${path.basename(exported.metadata)}`]);
+  let definitionOffset = 0;
+  for (const [clipIndex, clip] of contract.clips.entries()) {
+    const record = index.clips?.[clipIndex];
+    if (!record) { definitionOffset += clip.frames.length; continue; }
+    try { exactKeys(record, ['id', 'loopMode', 'restart', 'frames', 'sheet', 'contactSheet', 'metadata', 'preview'], 'v2 export clip'); }
+    catch (error) { contractExportFailure(failures, 'METADATA_MISMATCH', { field: 'clipSchema', clipId: clip.id, reason: error.message }); definitionOffset += clip.frames.length; continue; }
+    if (record.id !== clip.id || record.loopMode !== clip.loopMode) contractExportFailure(failures, 'METADATA_MISMATCH', { field: 'loopMode', clipId: clip.id });
+    const expectedRestart = clip.loopMode === 'loop' ? 'loop' : 'stop';
+    if (record.restart !== expectedRestart) contractExportFailure(failures, clip.loopMode === 'loop' ? 'METADATA_MISMATCH' : 'NONCYCLIC_RESTART', { clipId: clip.id, expected: expectedRestart, actual: record.restart });
+    if (!Array.isArray(record.frames) || record.frames.length !== clip.frames.length) contractExportFailure(failures, 'FRAME_COUNT', { field: 'clipFrames', clipId: clip.id });
+    const runtimeCombinedImages = [];
+    for (const [localIndex, definition] of clip.frames.entries()) {
+      const frameRecord = record.frames?.[localIndex];
+      const normalizedFrame = normalized.frames[definitionOffset + localIndex];
+      if (!frameRecord) continue;
+      try { exactKeys(frameRecord, ['id', 'semantic', 'duration', 'tracks', 'root', 'baseline', 'sockets', 'contacts', 'groundTravel', 'outputs', 'combined'], 'v2 export frame'); }
+      catch (error) { contractExportFailure(failures, 'METADATA_MISMATCH', { field: 'frameSchema', frameId: definition.id, reason: error.message }); continue; }
+      if (frameRecord.id !== definition.id || frameRecord.semantic !== definition.semantic || frameRecord.duration !== definition.duration || !jsonEqual(frameRecord.tracks, definition.tracks) || !sameCoordinate(frameRecord.root, contract.canvas.pivot) || frameRecord.baseline !== contract.canvas.baseline || !jsonEqual(frameRecord.sockets, normalizedFrame.sockets) || !jsonEqual(frameRecord.contacts, normalizedFrame.contacts) || !jsonEqual(frameRecord.groundTravel, definition.groundTravel)) contractExportFailure(failures, 'METADATA_MISMATCH', { field: 'engineFrame', frameId: definition.id });
+      if (nonzeroTravel(frameRecord.groundTravel) && Object.keys(frameRecord.contacts ?? {}).length === 0) contractExportFailure(failures, 'GROUND_TRAVEL_CONTACT', { frameId: definition.id, groundTravel: frameRecord.groundTravel });
+      if (!Array.isArray(frameRecord.outputs) || frameRecord.outputs.length !== definition.tracks.length) contractExportFailure(failures, 'FRAME_COUNT', { field: 'trackOutputs', frameId: definition.id });
+      const runtimeTrackFiles = [];
+      for (const [trackIndex, outputRecord] of (frameRecord.outputs ?? []).entries()) {
+        const trackId = definition.tracks[trackIndex];
+        try {
+          exactKeys(outputRecord, ['trackId', 'kind', 'attachTo', 'sourceSha256', 'normalizedSha256', 'file', 'sha256'], 'v2 track output');
+          expectV2Artifact(expectedEntries, outputRecord.file);
+          const artifact = await validateV2ArtifactRecord(root, { file: outputRecord.file, sha256: outputRecord.sha256 }, 'v2 runtime track artifact');
+          runtimeTrackFiles.push(artifact.file);
+          const image = await readRgba(artifact.file);
+          const normalizedImage = normalizedCaptures.get(`${definition.id}\0${trackId}`)?.image;
+          if (!artifact.matches || outputRecord.trackId !== trackId || outputRecord.sourceSha256 !== normalizedFrame.tracks[trackId].sourceSha256 || outputRecord.normalizedSha256 !== normalizedFrame.tracks[trackId].normalizedSha256) contractExportFailure(failures, 'SOURCE_HASH_MISMATCH', { field: 'runtimeTrack', frameId: definition.id, trackId });
+          if (!normalizedImage || !blockMatches(normalizedImage, image, contract.scale.integer)) contractExportFailure(failures, 'NON_INTEGER_SCALE', { frameId: definition.id, trackId });
+        } catch (error) {
+          contractExportFailure(failures, 'FRAME_COUNT', { field: 'runtimeTrack', frameId: definition.id, trackId, reason: error.message });
+        }
+      }
+      try {
+        expectV2Artifact(expectedEntries, frameRecord.combined.file);
+        const combined = await validateV2ArtifactRecord(root, frameRecord.combined, 'v2 combined artifact');
+        const image = await readRgba(combined.file);
+        runtimeCombinedImages.push(image);
+        if (!combined.matches || image.width !== contract.scale.runtime.width || image.height !== contract.scale.runtime.height || !await compositedFilesMatch(runtimeTrackFiles, image, contract.scale.runtime.width, contract.scale.runtime.height)) contractExportFailure(failures, 'SOURCE_HASH_MISMATCH', { field: 'combined', frameId: definition.id });
+      } catch (error) {
+        contractExportFailure(failures, 'FRAME_COUNT', { field: 'combined', frameId: definition.id, reason: error.message });
+      }
+    }
+    definitionOffset += clip.frames.length;
+    let clipMetadata = null;
+    try {
+      expectV2Artifact(expectedEntries, record.metadata.file);
+      const artifact = await validateV2ArtifactRecord(root, record.metadata, 'v2 metadata artifact');
+      clipMetadata = (await captureJson(artifact.file)).document;
+      if (!artifact.matches || !jsonEqual(clipMetadata.durations, clip.frames.map((frame) => frame.duration)) || clipMetadata.frames?.length !== clip.frames.length || clipMetadata.frameSize?.width !== contract.scale.runtime.width || clipMetadata.frameSize?.height !== contract.scale.runtime.height) contractExportFailure(failures, 'METADATA_MISMATCH', { field: 'clipMetadata', clipId: clip.id });
+    } catch (error) {
+      contractExportFailure(failures, 'FRAME_COUNT', { field: 'metadata', clipId: clip.id, reason: error.message });
+    }
+    for (const field of ['sheet', 'contactSheet']) {
+      try {
+        expectV2Artifact(expectedEntries, record[field].file);
+        const artifact = await validateV2ArtifactRecord(root, record[field], `v2 ${field} artifact`);
+        const image = await readRgba(artifact.file);
+        const matches = clipMetadata && sheetMatches(image, runtimeCombinedImages, clipMetadata.columns, clipMetadata.rows, contract.scale.runtime);
+        if (!artifact.matches || !matches) contractExportFailure(failures, 'FRAME_BLEED', { field, clipId: clip.id });
+      } catch (error) {
+        contractExportFailure(failures, 'FRAME_COUNT', { field, clipId: clip.id, reason: error.message });
+      }
+    }
+    try {
+      expectV2Artifact(expectedEntries, record.preview.file);
+      const artifact = await validateV2ArtifactRecord(root, record.preview, 'v2 preview artifact');
+      const preview = await capturePreview(artifact.file);
+      const metadata = preview.decoded.metadata;
+      const pages = preview.decoded.info.pages ?? 1;
+      const pageHeight = preview.decoded.info.pageHeight ?? preview.decoded.info.height / pages;
+      let pixelsMatch = pages === runtimeCombinedImages.length;
+      const pageBytes = preview.decoded.info.width * pageHeight * 4;
+      for (let index = 0; pixelsMatch && index < pages; index += 1) pixelsMatch = preview.decoded.data.subarray(index * pageBytes, (index + 1) * pageBytes).equals(runtimeCombinedImages[index].data);
+      if (!artifact.matches || (metadata.pages ?? 1) !== clip.frames.length || metadata.width !== contract.scale.runtime.width || (metadata.pageHeight ?? metadata.height) !== contract.scale.runtime.height || ((metadata.pages ?? 1) > 1 && !jsonEqual(metadata.delay, clip.frames.map((frame) => frame.duration))) || !pixelsMatch) contractExportFailure(failures, 'PREVIEW_MISMATCH', { field: 'timingGeometryOrPixels', clipId: clip.id });
+    } catch (error) {
+      contractExportFailure(failures, 'FRAME_COUNT', { field: 'preview', clipId: clip.id, reason: error.message });
+    }
+  }
+
+  try {
+    const actualEntries = await recursiveEntries(root);
+    if (!jsonEqual(actualEntries, [...expectedEntries].sort())) contractExportFailure(failures, 'FRAME_COUNT', { field: 'artifactSet', expected: [...expectedEntries].sort(), actual: actualEntries });
+  } catch (error) {
+    contractExportFailure(failures, 'FRAME_COUNT', { field: 'artifactSet', reason: error.message });
+  }
+
+  const classified = classifyFailures({ failures });
+  return { passed: classified.length === 0, failures: classified, warnings, measurements };
+}
+
 function validSourceLandmark(value) { return validCoordinate(value) && value.x >= 0 && value.y >= 0; }
 
 function validCanonicalLandmark(value, canonical) { return validSourceLandmark(value) && value.x < canonical.width && value.y < canonical.height; }
@@ -834,6 +1082,7 @@ async function validateFlatRun({ anchorReport, normalized, exported, config, sem
 
 export async function validateRun(request, options = {}) {
   if (!request || typeof request !== 'object') throw new Error('validation request is required');
+  if (request.animationContract?.document?.version === 2) return validateContractExportRunV2(request, options);
   return request.exported?.clips !== undefined
     ? validateContractExportRun(request, options)
     : validateFlatRun(request);

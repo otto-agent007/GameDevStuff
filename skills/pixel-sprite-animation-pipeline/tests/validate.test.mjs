@@ -12,6 +12,7 @@ import { writeFrameApproval } from '../scripts/lib/frame-approval.mjs';
 import { inspectImage } from '../scripts/lib/inspect.mjs';
 import { sha256 } from '../scripts/lib/image.mjs';
 import { normalizeFrames } from '../scripts/lib/normalize.mjs';
+import * as normalizeApi from '../scripts/lib/normalize.mjs';
 import { writeSnapReceipt } from '../scripts/lib/snap-receipt.mjs';
 import { stableHash, writeSignedState } from '../scripts/lib/state-auth.mjs';
 import { classifyFailures, validateIntegerScale, validateRun } from '../scripts/lib/validate.mjs';
@@ -114,6 +115,106 @@ async function makeApprovedContractExportRun(contractDocument = approvedContract
   return fixture;
 }
 
+function v2ApprovedContractDocument({ loopMode = 'loop', travelWithoutContact = false } = {}) {
+  const rgba = [[0, 0, 0, 0], [20, 30, 60, 255], [220, 60, 40, 255]];
+  return {
+    version: 2, selectionApprovalSha256: HASH('c'),
+    character: { id: 'clockwork-courier', anchorSha256: HASH('d') },
+    canvas: { width: 16, height: 16, pivot: { x: 8, y: 14 }, baseline: 13 },
+    scale: { integer: 2, runtime: { width: 32, height: 32 } },
+    palette: { rgba, sha256: stableHash(rgba), snapperPaletteHex: ['141e3c', 'dc3c28'] },
+    tracks: [
+      { id: 'actor', kind: 'actor', required: true, attachTo: null },
+      { id: 'satchel', kind: 'prop', required: true, attachTo: 'hand' }
+    ],
+    sockets: [{ id: 'hand', trackId: 'actor', required: true }],
+    contacts: [{ id: 'left-foot', trackId: 'actor', kind: 'planted-foot', required: true }],
+    clips: [{ id: 'walk', loopMode, frames: [
+      { id: 'walk-contact', semantic: 'contact', duration: 80, tracks: ['actor', 'satchel'], sockets: ['hand'], contacts: ['left-foot'], groundTravel: { x: 0, y: 0 } },
+      { id: 'walk-pass', semantic: 'passing', duration: 120, tracks: ['actor', 'satchel'], sockets: ['hand'], contacts: travelWithoutContact ? [] : ['left-foot'], groundTravel: { x: travelWithoutContact ? 2 : 0, y: 0 } }
+    ] }],
+    review: { checkpoints: ['identity', 'motion', 'landmarks'], approvers: ['owner'] }
+  };
+}
+
+async function makeV2ApprovedContractExportRun(options = {}) {
+  const projectDir = await temporaryDirectory('sprite-approved-v2-');
+  const runDir = path.join(projectDir, 'run');
+  await fs.mkdir(path.join(projectDir, '.pixel-sprite-pipeline'), { recursive: true, mode: 0o700 });
+  await fs.mkdir(runDir);
+  const document = v2ApprovedContractDocument(options);
+  const outputFiles = [];
+  for (const [frameIndex, definition] of document.clips[0].frames.entries()) {
+    for (const [trackIndex, trackId] of definition.tracks.entries()) {
+      const file = path.join(runDir, `${definition.id}--${trackId}.png`);
+      await makePose(file, { color: trackIndex === 0 && frameIndex === 0 ? [20, 30, 60, 255] : [220, 60, 40, 255], xOffset: frameIndex + trackIndex });
+      outputFiles.push(file);
+    }
+  }
+  document.character.anchorSha256 = await sha256(outputFiles[0]);
+  const contractFile = path.join(projectDir, 'animation-contract-v2.json');
+  await fs.writeFile(contractFile, `${JSON.stringify(document)}\n`);
+  const animationContract = await loadAnimationContract(contractFile);
+  const originalInput = path.join(projectDir, 'generated.png');
+  await makePose(originalInput);
+  const snapReceipt = await writeSnapReceipt({
+    projectDir, run: { id: 'run-v2', outputDir: runDir, manifestSha256: HASH('4') }, contract: animationContract,
+    inputs: [originalInput], outputs: outputFiles, args: ['16'],
+    identity: { origin: 'managed-cache', sha256: HASH('5'), size: 1, version: '1.2.3', helpSha256: HASH('6'), fixtureRgbaSha256: HASH('7'), pinnedReleaseTag: null, upstreamCommit: null }
+  });
+  let outputIndex = 0;
+  const requestFrames = [];
+  const approvals = [];
+  for (const [frameIndex, definition] of document.clips[0].frames.entries()) {
+    for (const trackId of definition.tracks) {
+      const output = snapReceipt.document.payload.outputs[outputIndex++];
+      requestFrames.push({ frameId: definition.id, trackId, path: output.path, sha256: output.sha256 });
+    }
+    approvals.push({
+      frameId: definition.id,
+      landmarks: {
+        root: { x: 8 + frameIndex, y: 12 }, baseline: 11,
+        sockets: [{ id: 'hand', x: 11 + frameIndex, y: 8 }],
+        contacts: definition.contacts.map((id) => ({ id, x: 8 + frameIndex, y: 11 })),
+        groundTravel: { ...definition.groundTravel }
+      },
+      approved: true, approvedBy: 'owner', checkpoints: ['identity', 'motion', 'landmarks']
+    });
+  }
+  const approval = await writeFrameApproval({ projectDir, runDir, contract: animationContract, snapReceipt, frames: requestFrames, approvals, version: 1 });
+  const normalized = await normalizeApi.normalizeContractFrames({ contract: animationContract, frameApproval: approval, outputDir: path.join(projectDir, 'normalized-v2') });
+  const config = { ...DEFAULT_CONFIG, canonical: { width: 16, height: 16 }, runtime: { width: 32, height: 32 }, pivot: { x: 8, y: 14 } };
+  const exported = await exportContractAnimation({ normalized, contract: animationContract, outputDir: path.join(projectDir, 'contract-export-v2'), config, columns: 2, frameApprovalSha256: approval.sha256 });
+  const anchorReport = await inspectImage(outputFiles[0]);
+  const frameApproval = { projectDir, file: approval.path, snapReceipt: { path: snapReceipt.path, sha256: snapReceipt.sha256 }, version: 1 };
+  return { projectDir, runDir, anchorReport, normalized, exported, animationContract, frameApproval, approval, snapReceipt, config };
+}
+
+test('v2 validation proves attachments and rejects foot travel outside contacts or noncyclic restart', async () => {
+  const passing = await makeV2ApprovedContractExportRun();
+  const passingReport = await validateRun(passing);
+  assert.equal(passingReport.passed, true, JSON.stringify(passingReport.failures));
+  assert.deepEqual(passingReport.failures, []);
+
+  const detached = await makeV2ApprovedContractExportRun();
+  const satchel = detached.normalized.frames[0].tracks.satchel;
+  await shiftForegroundRight(satchel.path);
+  satchel.normalizedSha256 = await sha256(satchel.path);
+  const detachedReport = await validateRun(detached);
+  assert.ok(detachedReport.failures.some(({ code }) => code === 'SOCKET_ATTACHMENT'), JSON.stringify(detachedReport.failures));
+
+  const travel = await makeV2ApprovedContractExportRun({ travelWithoutContact: true });
+  const travelReport = await validateRun(travel);
+  assert.ok(travelReport.failures.some(({ code }) => code === 'GROUND_TRAVEL_CONTACT'), JSON.stringify(travelReport.failures));
+
+  const once = await makeV2ApprovedContractExportRun({ loopMode: 'once' });
+  const index = JSON.parse(await fs.readFile(once.exported.metadata, 'utf8'));
+  index.clips[0].restart = 'loop';
+  await fs.writeFile(once.exported.metadata, `${JSON.stringify(index, null, 2)}\n`);
+  const onceReport = await validateRun(once);
+  assert.ok(onceReport.failures.some(({ code }) => code === 'NONCYCLIC_RESTART'), JSON.stringify(onceReport.failures));
+});
+
 async function shiftForegroundRight(file) {
   const image = await sharp(file).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const shifted = Buffer.alloc(image.data.length);
@@ -158,9 +259,9 @@ test('integer scaling requires equal positive whole-number factors on both axes'
 });
 
 test('classifies the complete correction taxonomy and gates unknown failures', () => {
-  const codes = ['CANVAS_SIZE', 'NON_INTEGER_SCALE', 'INTERMEDIATE_COLORS', 'BACKGROUND_REMAINS', 'PIVOT_DRIFT', 'BASELINE_DRIFT', 'LANDMARK_DRIFT', 'GLOBAL_SCALE_DRIFT', 'PALETTE_DRIFT', 'CLIPPED_FOREGROUND', 'FRAME_BLEED', 'FRAME_COUNT', 'TIMING_MISMATCH', 'METADATA_MISMATCH', 'SOURCE_HASH_MISMATCH', 'PREVIEW_MISMATCH', 'IDENTITY_DRIFT', 'DUPLICATE_POSE', 'LOOP_SEAM', 'NEW_FAILURE'];
+  const codes = ['CANVAS_SIZE', 'NON_INTEGER_SCALE', 'INTERMEDIATE_COLORS', 'BACKGROUND_REMAINS', 'PIVOT_DRIFT', 'BASELINE_DRIFT', 'LANDMARK_DRIFT', 'SOCKET_ATTACHMENT', 'GROUND_TRAVEL_CONTACT', 'GLOBAL_SCALE_DRIFT', 'PALETTE_DRIFT', 'CLIPPED_FOREGROUND', 'FRAME_BLEED', 'FRAME_COUNT', 'TIMING_MISMATCH', 'METADATA_MISMATCH', 'SOURCE_HASH_MISMATCH', 'PREVIEW_MISMATCH', 'IDENTITY_DRIFT', 'DUPLICATE_POSE', 'LOOP_SEAM', 'NONCYCLIC_RESTART', 'NEW_FAILURE'];
   const classified = classifyFailures({ failures: codes.map((code) => ({ code })) });
-  assert.deepEqual(classified.map(({ correction }) => correction), ['repad', 'nearest-rescale', 'nearest-rescale', 'rekey', 'realign', 'realign', 'realign', 'nearest-rescale', 'palette-remap-review', 'stop-for-regeneration', 'repad', 'stop-for-review', 'reexport-metadata', 'reexport-metadata', 'stop-for-review', 'reexport-preview', 'stop-for-regeneration', 'stop-for-regeneration', 'timing-or-transition-review', 'stop-for-review']);
+  assert.deepEqual(classified.map(({ correction }) => correction), ['repad', 'nearest-rescale', 'nearest-rescale', 'rekey', 'realign', 'realign', 'realign', 'realign', 'realign', 'nearest-rescale', 'palette-remap-review', 'stop-for-regeneration', 'repad', 'stop-for-review', 'reexport-metadata', 'reexport-metadata', 'stop-for-review', 'reexport-preview', 'stop-for-regeneration', 'stop-for-regeneration', 'timing-or-transition-review', 'reexport-metadata', 'stop-for-review']);
 });
 
 test('uses stage and trusted-artifact evidence for provenance correction classification', () => {

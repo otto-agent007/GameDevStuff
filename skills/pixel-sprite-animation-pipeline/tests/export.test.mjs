@@ -80,6 +80,81 @@ async function contractFixture() {
   };
 }
 
+async function v2ContractFixture() {
+  const dir = await temporaryDirectory();
+  const rgba = [[0, 0, 0, 0], [255, 0, 0, 255], [0, 0, 255, 255]];
+  const document = {
+    version: 2, selectionApprovalSha256: HASH('c'),
+    character: { id: 'clockwork-courier', anchorSha256: HASH('d') },
+    canvas: { width: 16, height: 16, pivot: { x: 8, y: 14 }, baseline: 13 },
+    scale: { integer: 2, runtime: { width: 32, height: 32 } },
+    palette: { rgba, sha256: stableHash(rgba), snapperPaletteHex: ['ff0000', '0000ff'] },
+    tracks: [
+      { id: 'actor', kind: 'actor', required: true, attachTo: null },
+      { id: 'satchel', kind: 'prop', required: true, attachTo: 'hand' }
+    ],
+    sockets: [{ id: 'hand', trackId: 'actor', required: true }],
+    contacts: [{ id: 'left-foot', trackId: 'actor', kind: 'planted-foot', required: true }],
+    clips: [{ id: 'walk', loopMode: 'loop', frames: [
+      { id: 'walk-contact', semantic: 'contact', duration: 80, tracks: ['actor', 'satchel'], sockets: ['hand'], contacts: ['left-foot'], groundTravel: { x: 0, y: 0 } },
+      { id: 'walk-pass', semantic: 'passing', duration: 120, tracks: ['actor', 'satchel'], sockets: ['hand'], contacts: ['left-foot'], groundTravel: { x: 2, y: 0 } }
+    ] }],
+    review: { checkpoints: ['identity', 'motion', 'landmarks'], approvers: ['owner'] }
+  };
+  const contract = { document, sha256: stableHash(document) };
+  const frames = [];
+  for (const [frameIndex, definition] of document.clips[0].frames.entries()) {
+    const tracks = {};
+    const layers = [];
+    for (const [trackIndex, trackId] of definition.tracks.entries()) {
+      const file = path.join(dir, `${definition.id}--${trackId}.png`);
+      await makeFrame(file, { width: 16, height: 16, x: 4 + frameIndex + trackIndex, color: rgba[trackIndex + 1] });
+      const normalizedSha256 = await sha256(file);
+      tracks[trackId] = {
+        kind: document.tracks.find((track) => track.id === trackId).kind,
+        attachTo: document.tracks.find((track) => track.id === trackId).attachTo,
+        sourcePath: path.join(dir, `source-${definition.id}--${trackId}.png`),
+        sourceSha256: HASH(String(trackIndex + 1)), path: file, normalizedSha256
+      };
+      layers.push({ input: file });
+    }
+    const combinedPath = path.join(dir, `${definition.id}.png`);
+    await sharp({ create: { width: 16, height: 16, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite(layers).png().toFile(combinedPath);
+    frames.push({
+      id: definition.id, semantic: definition.semantic, duration: definition.duration, loopMode: 'loop', scale: 2,
+      root: { x: 8, y: 14 }, baseline: 13, sockets: { hand: { x: 12, y: 8 } },
+      contacts: { 'left-foot': { x: 8 + frameIndex, y: 13 } }, groundTravel: { ...definition.groundTravel },
+      tracks, combined: { path: combinedPath, sha256: await sha256(combinedPath) }
+    });
+  }
+  const normalized = {
+    version: 2, animationContractSha256: contract.sha256, selectionApprovalSha256: document.selectionApprovalSha256,
+    frameApprovalSha256: HASH('e'), snapReceiptSha256: HASH('f'), frames
+  };
+  const config = { ...DEFAULT_CONFIG, canonical: { width: 16, height: 16 }, runtime: { width: 32, height: 32 }, pivot: { x: 8, y: 14 } };
+  return { dir, normalized, contract, outputDir: path.join(dir, 'contract-v2-out'), config, columns: 2, frameApprovalSha256: HASH('e') };
+}
+
+test('v2 contract export emits track frames and engine-neutral provenance', async () => {
+  const fixture = await v2ContractFixture();
+  const result = await exportContractAnimation(fixture);
+  const index = JSON.parse(await fs.readFile(result.metadata, 'utf8'));
+
+  assert.equal(index.version, 2);
+  assert.equal(index.selectionApprovalSha256, fixture.contract.document.selectionApprovalSha256);
+  assert.equal(index.frameApprovalSha256, fixture.normalized.frameApprovalSha256);
+  assert.equal(index.snapReceiptSha256, fixture.normalized.snapReceiptSha256);
+  assert.equal(index.clips[0].restart, 'loop');
+  assert.deepEqual(index.clips[0].frames.map(({ id, semantic, duration, tracks }) => ({ id, semantic, duration, tracks })), [
+    { id: 'walk-contact', semantic: 'contact', duration: 80, tracks: ['actor', 'satchel'] },
+    { id: 'walk-pass', semantic: 'passing', duration: 120, tracks: ['actor', 'satchel'] }
+  ]);
+  assert.ok(index.clips[0].frames.every((frame) => frame.outputs.every((output) => /^[a-f0-9]{64}$/.test(output.sha256))));
+  assert.deepEqual(Object.keys(result.tracks), ['actor', 'satchel']);
+  assert.equal(result.tracks.actor.frames.length, 2);
+  await fs.access(result.clips.walk.contactSheet);
+});
+
 test('contract export preserves exact clip order, frame IDs, nonuniform durations, loop modes, and bindings', async () => {
   const fixture = await contractFixture();
   const result = await exportContractAnimation(fixture);

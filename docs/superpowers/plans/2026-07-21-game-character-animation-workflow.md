@@ -809,7 +809,7 @@ git commit -m "feat: add generic animation contract v2"
 - Produces normalized actor/prop/effect PNGs using one integer scale and approved per-frame translations.
 - Produces engine-neutral JSON with semantic frame IDs, durations, loop mode, pivot, sockets, contacts, ground travel, track membership, source hashes, approval hash, snap receipt hash, and output hashes.
 
-- [ ] **Step 1: Write failing stable-scale, attachment, contact, and restart tests**
+- [x] **Step 1: Write failing stable-scale, attachment, contact, and restart tests**
 
 ```js
 test('normalization keeps scale fixed and maps sockets exactly', async () => {
@@ -824,21 +824,21 @@ test('validation rejects foot travel outside contact windows and noncyclic resta
 });
 ```
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
 Run: `node --test tests/normalize.test.mjs tests/export.test.mjs tests/validate.test.mjs`
 
 Expected: v1 tests PASS; new v2 tests FAIL.
 
-- [ ] **Step 3: Implement v2 normalization**
+- [x] **Step 3: Implement v2 normalization**
 
 Translate visible pixels from approved landmarks to the contract root without cropping, place prop/effect tracks relative to approved named sockets, and apply one project scale with nearest-neighbor only. Reject fractional transforms, clipped required pixels, source hash changes, and missing track frames.
 
-- [ ] **Step 4: Extend exports and objective validation**
+- [x] **Step 4: Extend exports and objective validation**
 
 Emit transparent per-track frames, combined frames, sheets, engine-neutral JSON, contact sheets, and lossless animated WebP. Validate palette, alpha, canvas, scale, root drift, socket attachment, contacts/travel, clip membership, durations, loop semantics, clipping, and every provenance hash.
 
-- [ ] **Step 5: Run suites and commit**
+- [x] **Step 5: Run suites and commit**
 
 Run: `npm test`
 
