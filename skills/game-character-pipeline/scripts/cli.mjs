@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createGenerationHandoff, importGeneratedCandidate, loadGenerationHandoff } from './lib/generated-still.mjs';
+import { decodeAnimatedImage } from './lib/animated-image.mjs';
 import { decodePngSequence } from './lib/png-sequence.mjs';
 import { createProject, createRun, loadInitializedProject, loadRun } from './lib/run-contract.mjs';
 import { decodeMotionSource, registerSourceAdapter } from './lib/source-adapter.mjs';
@@ -46,6 +47,9 @@ registerSourceAdapter('generated-still', ({ source, run, options }) => importGen
   run,
   durationMs: options.durationMs
 }));
+for (const kind of ['gif', 'apng', 'webp']) {
+  registerSourceAdapter(kind, ({ source, run }) => decodeAnimatedImage({ source, run }));
+}
 
 program
   .command('init')
@@ -76,6 +80,7 @@ program
   .option('--generated-image <file>', 'generated PNG returned by the environment')
   .option('--duration-ms <milliseconds>', 'explicit candidate duration', positiveInteger)
   .option('--source-manifest <file>', 'explicit PNG sequence manifest')
+  .option('--source <file>', 'animated image or video source file')
   .action(async (options) => {
     const projectDir = path.resolve(options.projectDir);
     const project = await loadInitializedProject(projectDir);
@@ -126,6 +131,17 @@ program
       const result = await decodeMotionSource({
         kind: 'png-sequence',
         source: path.resolve(options.sourceManifest),
+        run,
+        options: {}
+      });
+      print({ status: 'intake-complete', runId: run.id, sourceSha256: result.sourceSha256, approval: result.approval });
+      return;
+    }
+
+    if (['gif', 'apng', 'webp'].includes(options.kind) && options.source) {
+      const result = await decodeMotionSource({
+        kind: options.kind,
+        source: path.resolve(options.source),
         run,
         options: {}
       });

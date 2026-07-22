@@ -394,12 +394,15 @@ git commit -m "feat: import timed PNG sequences"
 - Create: `skills/game-character-pipeline/scripts/lib/animated-image.mjs`
 - Create: `skills/game-character-pipeline/tests/animated-image.test.mjs`
 - Create: `skills/game-character-pipeline/tests/fixtures/animated/`
+- Create: `skills/game-character-pipeline/tests/fixtures/animated/build-fixtures.mjs`
+- Modify: `skills/game-character-pipeline/scripts/cli.mjs`
+- Modify: `skills/game-character-pipeline/tests/fixtures/project.valid.json`
 
 **Interfaces:**
 - Produces `inspectGif(bytes)`, `inspectApng(bytes)`, and `inspectAnimatedWebp(bytes)` returning ordered `{ rect, durationMs, dispose, blend, hasAlpha }` records.
 - Produces `decodeAnimatedImage({ source, run }) -> MotionSourceResult` using Sharp/libvips for full composited RGBA pages and container parsers for auditable metadata.
 
-- [ ] **Step 1: Add purpose-built fixtures and failing tests**
+- [x] **Step 1: Add purpose-built fixtures and failing tests**
 
 ```js
 test('GIF disposal restores the prior composited pixels and keeps delays', async () => {
@@ -418,25 +421,25 @@ test('APNG and WebP retain alpha and blend metadata', async () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test**
+- [x] **Step 2: Run the focused test**
 
 Run: `node --test tests/animated-image.test.mjs`
 
 Expected: FAIL because the animated-image decoder does not exist.
 
-- [ ] **Step 3: Implement bounded container parsers**
+- [x] **Step 3: Implement bounded container parsers**
 
 GIF parsing walks headers, global/local color tables, GCE blocks, image descriptors, sub-block lengths, and trailer; APNG parsing validates PNG CRCs and reads `acTL`/ordered `fcTL`/`fdAT`; WebP parsing validates RIFF bounds and reads `VP8X`/`ANIM`/ordered `ANMF`. Reject truncated chunks, frame rectangles outside canvas, missing terminal data, frame-count disagreement, zero delays, and more than 10,000 frames or 512 MiB decoded RGBA.
 
-- [ ] **Step 4: Decode full composited pages**
+- [x] **Step 4: Decode full composited pages**
 
-Use `sharp(source, { animated: true, pages: -1, limitInputPixels: 268435456 }).ensureAlpha().raw().toBuffer({ resolveWithObject: true })`; split the stacked output by `pageHeight`, verify its page count and dimensions against parsed metadata, and write each full RGBA page as a new lossless PNG. Record `sharp.versions.vips`, format, source hash, parser version, and decoder arguments in `decoder`.
+Use `sharp(source, { animated: true, pages: -1, limitInputPixels: 268435456 }).ensureAlpha().raw().toBuffer({ resolveWithObject: true })` for GIF and WebP; split the stacked output by `pageHeight`, verify its page count and dimensions against parsed metadata, and write each full RGBA page as a new lossless PNG. Because the pinned libvips build does not expose APNG pages, reconstruct CRC-validated APNG subframe PNGs and composite them by their exact `fcTL` disposal/blend operations. Record `sharp.versions.vips`, format, source hash, parser version, and decoder arguments in `decoder`.
 
-- [ ] **Step 5: Add corruption and duplicate diagnostics**
+- [x] **Step 5: Add corruption and duplicate diagnostics**
 
 Emit only the closed codes `ZERO_DELAY`, `DUPLICATE_FRAME`, `EMPTY_FRAME`, `PARTIAL_SOURCE_RECT`, `DISPOSAL_RESTORE_BACKGROUND`, `DISPOSAL_RESTORE_PREVIOUS`, and `ALPHA_PRESENT`. Corruption is an exception and never a warning.
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 Run: `node --test tests/animated-image.test.mjs && npm test`
 
