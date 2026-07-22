@@ -21,3 +21,11 @@ and copied-file inventory live in
 `concept-only` with an empty copied-file list. If code is later copied or
 materially adapted, update that ledger before the code change and add the
 required per-file provenance and license notice here.
+
+## Public acceptance fixture
+
+The Clockwork Courier artwork and motion data under
+`skills/game-character-pipeline/examples/clockwork-courier/` were created
+originally for GameDevStuff. No donor pixels or private production assets are
+included. GameDevStuff dedicates those fixture assets to the public domain
+under CC0-1.0 for testing, examples, and downstream interoperability.

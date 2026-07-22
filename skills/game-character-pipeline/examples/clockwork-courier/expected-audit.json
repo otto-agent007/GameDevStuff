@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "passed": true,
+  "deterministicHashesSha256": "3297ebca8694bc1edb083f56b850add1127af62390553cd3d1b078144e8db66f",
+  "clips": [["idle", "loop"], ["walk", "loop"], ["unlock", "hold-last"]]
+}

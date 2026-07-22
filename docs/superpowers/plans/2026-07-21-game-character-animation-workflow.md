@@ -982,7 +982,7 @@ git commit -m "feat: audit reproducible animation runs"
 - Public fixture is an original right-facing brass courier with cap and satchel, actor/prop/effect tracks, `idle` loop, `walk` loop, and `unlock` hold-last action.
 - `npm run acceptance` executes the committed fixture twice and compares deterministic hashes.
 
-- [ ] **Step 1: Create the original fixture source and failing end-to-end test**
+- [x] **Step 1: Create the original fixture source and failing end-to-end test**
 
 ```js
 test('Clockwork Courier completes the public workflow reproducibly', async () => {
@@ -994,23 +994,23 @@ test('Clockwork Courier completes the public workflow reproducibly', async () =>
 });
 ```
 
-- [ ] **Step 2: Run the end-to-end test**
+- [x] **Step 2: Run the end-to-end test**
 
 Run: `node --test tests/e2e.test.mjs`
 
 Expected: FAIL until fixture manifests, source files, approvals, and expected hashes are complete.
 
-- [ ] **Step 3: Complete and license the fixture**
+- [x] **Step 3: Complete and license the fixture**
 
 Store only original GameDevStuff-owned artwork and media. Include explicit nonuniform timing, partial-frame animated-image behavior, one prop socket, one effect socket, planted-foot contacts, and ground travel. Record fixture authorship and CC0-1.0 dedication in `LICENSES/THIRD_PARTY.md`; keep generated or third-party donor pixels out.
 
 Add `"acceptance": "node --test tests/e2e.test.mjs"` to `package.json`; do not fold the browser suite into this command because the deterministic fixture gate and browser interaction gate report separately.
 
-- [ ] **Step 4: Add full CI gates**
+- [x] **Step 4: Add full CI gates**
 
 Add Ubuntu unit/integration/acceptance jobs, Ubuntu Playwright Chromium at 1440x1000 and 420x900, Windows unit/path tests, `npm pack --dry-run`, `python3` skill validation, dependency license checks, and an acceptance artifact upload containing only public reports/contact sheets/previews. Pin every action to a reviewed full commit SHA before merge.
 
-- [ ] **Step 5: Run the complete local gate and commit**
+- [x] **Step 5: Run the complete local gate and commit**
 
 Run: `cd skills/pixel-sprite-animation-pipeline && umask 0022 && npm test && cd ../game-character-pipeline && umask 0022 && npm test && npm run test:browser && npm run acceptance && npm pack --dry-run`
 

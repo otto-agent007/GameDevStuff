@@ -9,6 +9,7 @@
   "files": [
     "SKILL.md",
     "agents/",
+    "examples/",
     "scripts/",
     "studio/"
   ],
@@ -18,6 +19,7 @@
   "scripts": {
     "test": "node --test",
     "test:browser": "playwright test tests/browser",
+    "acceptance": "node --test tests/e2e.test.mjs",
     "validate-skill": "node scripts/validate-skill.mjs"
   },
   "dependencies": {

@@ -86,3 +86,9 @@ test('package test discovery does not depend on shell glob expansion', async () 
   const manifest = JSON.parse(await fs.readFile(path.join(packageDir, 'package.json'), 'utf8'));
   assert.equal(manifest.scripts.test, 'node --test');
 });
+
+test('character workflow CI pins actions and separates unit browser and acceptance gates', async () => {
+  const workflow = await fs.readFile(path.join(repositoryRoot, '.github', 'workflows', 'game-character-pipeline.yml'), 'utf8');
+  assert.doesNotMatch(workflow, /uses:\s+[^\s]+@v\d+/);
+  for (const gate of ['unit:', 'browser:', 'acceptance:', 'windows-latest', 'npm pack --dry-run', 'quick_validate.py', 'upload-artifact@']) assert.match(workflow, new RegExp(gate.replaceAll('.', '\\.')));
+});

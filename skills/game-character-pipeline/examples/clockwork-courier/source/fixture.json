@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "canvas": { "width": 32, "height": 32, "pivot": { "x": 16, "y": 27 }, "baseline": 27 },
+  "scale": { "integer": 2, "runtime": { "width": 64, "height": 64 } },
+  "palette": [
+    [0, 0, 0, 0], [32, 26, 24, 255], [178, 112, 48, 255],
+    [238, 203, 128, 255], [48, 90, 96, 255], [246, 190, 48, 255]
+  ],
+  "clips": [
+    { "id": "idle", "loopMode": "loop", "frames": [
+      { "id": "idle-settle", "semantic": "settle", "duration": 120, "pose": 0, "tracks": ["actor", "satchel"], "contacts": ["left-foot"], "groundTravel": { "x": 0, "y": 0 } },
+      { "id": "idle-breath-up", "semantic": "breath-up", "duration": 80, "pose": -1, "tracks": ["actor", "satchel"], "contacts": ["left-foot"], "groundTravel": { "x": 0, "y": 0 } },
+      { "id": "idle-breath-down", "semantic": "breath-down", "duration": 140, "pose": 0, "tracks": ["actor", "satchel"], "contacts": ["left-foot"], "groundTravel": { "x": 0, "y": 0 } }
+    ] },
+    { "id": "walk", "loopMode": "loop", "frames": [
+      { "id": "walk-contact-left", "semantic": "left-contact", "duration": 70, "pose": 0, "tracks": ["actor", "satchel"], "contacts": ["left-foot"], "groundTravel": { "x": 0, "y": 0 } },
+      { "id": "walk-pass-left", "semantic": "left-passing", "duration": 90, "pose": -1, "tracks": ["actor", "satchel"], "contacts": ["left-foot"], "groundTravel": { "x": 1, "y": 0 } },
+      { "id": "walk-contact-right", "semantic": "right-contact", "duration": 70, "pose": 0, "tracks": ["actor", "satchel"], "contacts": ["right-foot"], "groundTravel": { "x": 0, "y": 0 } },
+      { "id": "walk-pass-right", "semantic": "right-passing", "duration": 110, "pose": -1, "tracks": ["actor", "satchel"], "contacts": ["right-foot"], "groundTravel": { "x": 1, "y": 0 } }
+    ] },
+    { "id": "unlock", "loopMode": "hold-last", "frames": [
+      { "id": "unlock-ready", "semantic": "key-ready", "duration": 100, "pose": 0, "tracks": ["actor", "satchel", "unlock-spark"], "contacts": ["left-foot"], "groundTravel": { "x": 0, "y": 0 } },
+      { "id": "unlock-turn", "semantic": "key-turn", "duration": 130, "pose": -1, "tracks": ["actor", "satchel", "unlock-spark"], "contacts": ["left-foot"], "groundTravel": { "x": 0, "y": 0 } },
+      { "id": "unlock-success", "semantic": "success-hold", "duration": 240, "pose": 0, "tracks": ["actor", "satchel", "unlock-spark"], "contacts": ["left-foot"], "groundTravel": { "x": 0, "y": 0 } }
+    ] }
+  ]
+}
