@@ -21,6 +21,13 @@ test('CLI advertises the complete initial command surface', async () => {
   }
 });
 
+test('produce command exposes authenticated delegation and resume inputs', async () => {
+  const result = await execFile(process.execPath, ['scripts/cli.mjs', 'produce', '--help'], { cwd: packageDir });
+  for (const option of ['--project-dir', '--run', '--approval', '--snap-receipt', '--frame-approval', '--output']) {
+    assert.match(result.stdout, new RegExp(option));
+  }
+});
+
 test('skill validation fails clearly when the official validator is unavailable', async () => {
   const codexRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'game-character-validator-'));
   try {

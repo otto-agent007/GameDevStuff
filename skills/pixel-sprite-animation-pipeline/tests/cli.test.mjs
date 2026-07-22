@@ -8,7 +8,7 @@ import sharp from 'sharp';
 import { createProgram } from '../scripts/cli.mjs';
 import { DEFAULT_CONFIG } from '../scripts/lib/config.mjs';
 import { exportAnimation } from '../scripts/lib/export.mjs';
-import { paletteOf, readRgba, writeRgba } from '../scripts/lib/image.mjs';
+import { paletteOf, readRgba, sha256, writeRgba } from '../scripts/lib/image.mjs';
 import { inspectImage } from '../scripts/lib/inspect.mjs';
 import { normalizeFrames } from '../scripts/lib/normalize.mjs';
 import { prepareAnchor } from '../scripts/lib/prepare.mjs';
@@ -69,6 +69,40 @@ async function approvalCliFixture() {
   return { projectDir, contractFile, receipt, requestFile };
 }
 
+async function productionCliFixture() {
+  const projectDir = await tempProject('sprite production cli ');
+  const inputsDir = path.join(projectDir, 'inputs');
+  await fs.mkdir(inputsDir);
+  const input = path.join(inputsDir, 'walk-contact--actor.png');
+  const image = { width: 13, height: 14, channels: 4, data: Buffer.alloc(13 * 14 * 4, 0) };
+  for (let y = 3; y <= 11; y += 1) for (let x = 5; x <= 7; x += 1) image.data.set([20, 30, 60, 255], (y * image.width + x) * 4);
+  await writeRgba(input, image);
+  const discovered = paletteOf(await readRgba(input)).map(({ rgba: color }) => color);
+  const rgba = [discovered.find((color) => color[3] === 0), ...discovered.filter((color) => color[3] !== 0)];
+  const opaque = rgba.slice(1).map((color) => color.slice(0, 3).map((component) => component.toString(16).padStart(2, '0')).join(''));
+  const inputSha256 = await sha256(input);
+  const document = {
+    version: 2, selectionApprovalSha256: '1'.repeat(64),
+    character: { id: 'clockwork-courier', anchorSha256: inputSha256 },
+    canvas: { width: 13, height: 14, pivot: { x: 6, y: 11 }, baseline: 11 },
+    scale: { integer: 2, runtime: { width: 26, height: 28 } },
+    palette: { rgba, sha256: stableHash(rgba), snapperPaletteHex: opaque },
+    tracks: [{ id: 'actor', kind: 'actor', required: true, attachTo: null }],
+    sockets: [], contacts: [],
+    clips: [{ id: 'walk', loopMode: 'once', frames: [{ id: 'walk-contact', semantic: 'contact', duration: 80, tracks: ['actor'], sockets: [], contacts: [], groundTravel: { x: 0, y: 0 } }] }],
+    review: { checkpoints: ['identity', 'landmarks'], approvers: ['owner'] }
+  };
+  const contractFile = path.join(projectDir, 'animation-contract-v2.json');
+  await fs.writeFile(contractFile, `${JSON.stringify(document)}\n`);
+  await fs.writeFile(`${contractFile}.inputs.json`, `${JSON.stringify({
+    version: 1,
+    selectionApprovalSha256: document.selectionApprovalSha256,
+    anchor: { path: 'inputs/walk-contact--actor.png', sha256: inputSha256 },
+    frames: [{ frameId: 'walk-contact', trackId: 'actor', path: 'inputs/walk-contact--actor.png', sha256: inputSha256 }]
+  })}\n`);
+  return { projectDir, input, inputSha256, document, contractFile };
+}
+
 async function validationRequest(projectDir) {
   const input = path.join(projectDir, 'pilot anchor.png');
   await makeAnchor(input);
@@ -96,7 +130,7 @@ async function validationRequest(projectDir) {
 test('CLI exposes every independently callable pipeline stage', () => {
   const result = invoke(['--help']);
   assert.equal(result.status, 0, result.stderr);
-  for (const command of ['setup-snapper', 'inspect', 'prepare', 'snap', 'normalize', 'export', 'validate', 'correct', 'promote-profile', 'propose-rule', 'run', 'contract', 'approve-frames']) {
+  for (const command of ['setup-snapper', 'inspect', 'prepare', 'snap', 'normalize', 'export', 'validate', 'correct', 'promote-profile', 'propose-rule', 'run', 'contract', 'approve-frames', 'produce-contract']) {
     assert.match(result.stdout, new RegExp(`\\b${command}\\b`));
   }
 });
@@ -150,6 +184,35 @@ test('contract export CLI uses only contract timing and rejects a conflicting du
   assert.deepEqual(exported.clips.idle.durations, [137]);
   const preview = await sharp(exported.clips.idle.preview, { animated: true }).metadata();
   assert.deepEqual(preview.delay ?? [137], [137]);
+});
+
+test('produce-contract emits structured manual and post-snap owner handoffs', async () => {
+  const manual = await productionCliFixture();
+  const manualOutput = path.join(manual.projectDir, 'production');
+  const first = invoke(['produce-contract', '--contract', manual.contractFile, '--project-dir', manual.projectDir, '--output', manualOutput], { env: { PATH: '' } });
+  assert.equal(first.status, 2, first.stderr);
+  const manualResponse = json(first.stdout);
+  assert.equal(manualResponse.next.kind, 'pixel-snapper-manual');
+  assert.equal(manualResponse.next.cwd, manual.projectDir);
+  assert.ok(Array.isArray(manualResponse.next.argv));
+
+  const review = await productionCliFixture();
+  await fs.mkdir(path.join(review.projectDir, '.pixel-sprite-pipeline'), { recursive: true, mode: 0o700 });
+  const snapDir = path.join(review.projectDir, 'production', 'snapped');
+  await fs.mkdir(snapDir, { recursive: true });
+  const snapped = path.join(snapDir, 'walk-contact--actor.png');
+  await fs.copyFile(review.input, snapped);
+  const contract = await loadAnimationContract(review.contractFile);
+  const receipt = await writeSnapReceipt({
+    projectDir: review.projectDir, run: { id: null, outputDir: snapDir, manifestSha256: '2'.repeat(64) }, contract,
+    inputs: [review.input], outputs: [snapped], args: ['16'],
+    identity: { origin: 'managed-cache', sha256: '3'.repeat(64), size: 1, version: '1.2.3', helpSha256: '4'.repeat(64), fixtureRgbaSha256: '5'.repeat(64), pinnedReleaseTag: null, upstreamCommit: null }
+  });
+  const second = invoke(['produce-contract', '--contract', review.contractFile, '--project-dir', review.projectDir, '--output', path.join(review.projectDir, 'production'), '--snap-receipt', receipt.path]);
+  assert.equal(second.status, 4, second.stderr);
+  const reviewResponse = json(second.stdout);
+  assert.equal(reviewResponse.next.kind, 'post-snap-frame-approval');
+  assert.equal(reviewResponse.receipt.sha256, receipt.sha256);
 });
 
 test('skill instructions require structured argv handoff execution', async () => {

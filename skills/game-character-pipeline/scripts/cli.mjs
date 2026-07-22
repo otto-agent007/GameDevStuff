@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,6 +14,8 @@ import {
 } from './lib/approval.mjs';
 import { createGenerationHandoff, importGeneratedCandidate, loadGenerationHandoff } from './lib/generated-still.mjs';
 import { decodeAnimatedImage } from './lib/animated-image.mjs';
+import { createPixelProductionContract, publishExportRevision } from './lib/export-contract.mjs';
+import { runPixelProduction } from './lib/pixel-pipeline.mjs';
 import { decodePngSequence } from './lib/png-sequence.mjs';
 import { createProject, createRun, loadInitializedProject, loadRun } from './lib/run-contract.mjs';
 import { decodeMotionSource, registerSourceAdapter } from './lib/source-adapter.mjs';
@@ -20,7 +23,6 @@ import { decodeVideo } from './lib/video.mjs';
 import { startStudioServer } from './studio/server.mjs';
 
 const commands = Object.freeze([
-  ['produce', 'Delegate approved frames to deterministic pixel production'],
   ['validate', 'Validate one complete character animation run'],
   ['audit', 'Compare reproducible run evidence']
 ]);
@@ -264,6 +266,66 @@ program
       return;
     }
     requireProductionApproval(verified);
+  });
+
+program
+  .command('produce')
+  .description('Delegate approved frames to deterministic pixel production')
+  .requiredOption('--project-dir <directory>', 'project directory')
+  .requiredOption('--run <id>', 'immutable run ID')
+  .requiredOption('--approval <file>', 'verified selection approval')
+  .option('--snap-receipt <file>', 'signed Pixel Snapper receipt')
+  .option('--frame-approval <file>', 'signed post-snap frame approval')
+  .option('--output <directory>', 'new or resumable pixel-production directory')
+  .action(async (options) => {
+    const projectDir = path.resolve(options.projectDir);
+    const project = await loadInitializedProject(projectDir);
+    const run = await loadRun({ projectRoot: projectDir, id: options.run });
+    const source = await loadSourceReport(run);
+    const approvalFile = path.resolve(options.approval);
+    const approvalEnvelope = JSON.parse(await fs.readFile(approvalFile, 'utf8'));
+    if (!Number.isInteger(approvalEnvelope.editRevision) || approvalEnvelope.editRevision < 1 || approvalEnvelope.editRevision > 999999) throw new Error('selection approval edit revision is invalid');
+    const revision = await loadEditRevision({ run, sourceSha256: source.sha256, revision: approvalEnvelope.editRevision });
+    const selectionApproval = await verifyApproval({ run, file: approvalFile, project, source: source.document, edit: revision.edit });
+    requireProductionApproval(selectionApproval);
+    const contract = await createPixelProductionContract({ run, project, selectionApproval, edit: revision.edit });
+    const output = options.output ? path.resolve(options.output) : path.join(run.root, 'work', 'pixel-production');
+    const delegated = await runPixelProduction({
+      run,
+      project,
+      selectionApproval,
+      contract,
+      pipelineCli: fileURLToPath(new URL('../../pixel-sprite-animation-pipeline/scripts/cli.mjs', import.meta.url)),
+      output,
+      ...(options.snapReceipt ? { snapReceipt: { path: path.resolve(options.snapReceipt) } } : {}),
+      ...(options.frameApproval ? { frameApproval: { path: path.resolve(options.frameApproval) } } : {})
+    });
+    if (delegated.exitCode !== 0) {
+      print(delegated);
+      process.exitCode = delegated.exitCode;
+      return;
+    }
+    const published = await publishExportRevision({
+      run,
+      bindings: {
+        projectSha256: project.sha256,
+        sourceSha256: source.sha256,
+        editSha256: selectionApproval.document.editSha256,
+        selectionApprovalSha256: selectionApproval.sha256,
+        snapReceiptSha256: delegated.receipt.sha256,
+        frameApprovalSha256: delegated.frameApproval.sha256
+      },
+      pixelExport: delegated.exports
+    });
+    print({
+      status: 'complete',
+      runId: run.id,
+      contract: { path: contract.path, sha256: contract.sha256 },
+      receipt: delegated.receipt,
+      frameApproval: delegated.frameApproval,
+      export: { path: published.path, sha256: published.sha256, revision: published.revision },
+      report: delegated.report
+    });
   });
 
 for (const [name, description] of commands) {

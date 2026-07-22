@@ -867,7 +867,7 @@ git commit -m "feat: produce stable multi-track animations"
 - Orchestrator produces `runPixelProduction({ run, project, selectionApproval, pipelineCli, node, snapReceipt, frameApproval }) -> { exitCode, next, receipt, exports, report }`.
 - The v2 contract binds `selectionApprovalSha256`; the optional post-snap `frameApproval` binds the existing pixel pipeline's authenticated snap receipt.
 
-- [ ] **Step 1: Write failing structured-handoff and tamper tests**
+- [x] **Step 1: Write failing structured-handoff and tamper tests**
 
 ```js
 test('production uses argv without a shell and returns authenticated outputs', async () => {
@@ -889,21 +889,21 @@ test('production rejects approval or membership changes before spawning', async 
 });
 ```
 
-- [ ] **Step 2: Run focused tests in both packages**
+- [x] **Step 2: Run focused tests in both packages**
 
 Run: `cd skills/pixel-sprite-animation-pipeline && node --test tests/cli.test.mjs && cd ../game-character-pipeline && node --test tests/pixel-pipeline.test.mjs tests/export-contract.test.mjs`
 
 Expected: FAIL on missing `produce-contract` and delegation modules.
 
-- [ ] **Step 3: Add the machine-readable deterministic command**
+- [x] **Step 3: Add the machine-readable deterministic command**
 
 The pixel CLI verifies the v2 contract and its bound pre-production selection-approval hash before snapping. It prints exactly one JSON object; returns `2` with structured `next.cwd`/`next.argv` when Pixel Snapper is unavailable, returns `4` with the snap receipt and a structured post-snap Frame Studio handoff when the signed v2 frame approval is absent, returns `3` for objective failures, and continues to normalization only after the selected snap receipt and frame approval verify together.
 
-- [ ] **Step 4: Implement orchestrator delegation and package verification**
+- [x] **Step 4: Implement orchestrator delegation and package verification**
 
 Resolve the sibling CLI with `fileURLToPath`, verify the Task 10 selection approval before spawning, and spawn `process.execPath` plus argv with `shell: false`. Cap output at 8 MiB and forward exit `2`, `3`, and `4` without claiming completion. For exit `4`, reopen Frame Studio on the immutable snapped outputs so the owner can author v2 landmarks and sign the post-snap frame approval. On the resumed successful pass, re-hash every declared artifact, copy verified outputs into a new `exports/revision-<n>/`, and bind its manifest to project/source/edit/selection-approval/snap-receipt/frame-approval hashes.
 
-- [ ] **Step 5: Run suites and commit**
+- [x] **Step 5: Run suites and commit**
 
 Run: `cd skills/pixel-sprite-animation-pipeline && npm test && cd ../game-character-pipeline && npm test`
 
