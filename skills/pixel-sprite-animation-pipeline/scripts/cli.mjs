@@ -8,7 +8,7 @@ import { loadConfig } from './lib/config.mjs';
 import { exportAnimation, exportContractAnimation } from './lib/export.mjs';
 import { inspectImage } from './lib/inspect.mjs';
 import { createRun, promoteVerifiedProfile, proposeSkillRule, recordRunResult } from './lib/learning.mjs';
-import { normalizeFrames } from './lib/normalize.mjs';
+import { normalizeContractFrames, normalizeFrames } from './lib/normalize.mjs';
 import { prepareAnchor } from './lib/prepare.mjs';
 import { runPixelSnapper } from './lib/snapper.mjs';
 import { verifySnapReceipt, writeManualHandoffReceipt } from './lib/snap-receipt.mjs';
@@ -376,6 +376,49 @@ async function flatDirectoryManifest(directory, label) {
   }
   await visit(directory);
   return files;
+}
+
+async function productionInputs({ contractFile, contract, projectDir }) {
+  const file = `${contractFile}.inputs.json`;
+  const document = JSON.parse(await fs.readFile(file, 'utf8'));
+  const keys = Object.keys(document ?? {}).sort().join(',');
+  if (keys !== 'anchor,frames,selectionApprovalSha256,version' || document.version !== 1 || document.selectionApprovalSha256 !== contract.document.selectionApprovalSha256 || !Array.isArray(document.frames)) throw new Error('production input manifest approval binding mismatch');
+  if (!document.anchor || Object.keys(document.anchor).sort().join(',') !== 'path,sha256' || document.anchor.sha256 !== contract.document.character.anchorSha256) throw new Error('production input manifest character anchor binding mismatch');
+  const anchor = await safeRunArtifact(projectDir, document.anchor.path, document.anchor.sha256, 'production anchor');
+  const definitions = contract.document.clips.flatMap((clip) => clip.frames.flatMap((frame) => frame.tracks.map((trackId) => ({ frameId: frame.id, trackId }))));
+  if (document.frames.length !== definitions.length) throw new Error('production input manifest membership does not match the v2 contract');
+  const inputs = [];
+  for (const [index, record] of document.frames.entries()) {
+    if (!record || Object.keys(record).sort().join(',') !== 'frameId,path,sha256,trackId' || record.frameId !== definitions[index].frameId || record.trackId !== definitions[index].trackId || !/^[a-f0-9]{64}$/.test(record.sha256 ?? '')) throw new Error('production input manifest ordered membership is invalid');
+    const selected = await safeRunArtifact(projectDir, record.path, record.sha256, 'production input');
+    inputs.push(selected.path);
+  }
+  return { file, document, anchor, inputs };
+}
+
+function v2Config(contract, base) {
+  return {
+    ...base,
+    canonical: { width: contract.document.canvas.width, height: contract.document.canvas.height },
+    runtime: { ...contract.document.scale.runtime },
+    pivot: { ...contract.document.canvas.pivot }
+  };
+}
+
+function approvalVersion(file) {
+  const match = /frame-approval-(\d+)\.json$/.exec(path.basename(file));
+  if (!match || Number(match[1]) < 1) throw new Error('selected frame approval must use its immutable numbered filename');
+  return Number(match[1]);
+}
+
+async function productionArtifacts(root, areas) {
+  const artifacts = [];
+  for (const area of areas) {
+    for (const { name, sha256: artifactSha256 } of await flatDirectoryManifest(path.join(root, area), `pixel production ${area}`)) {
+      artifacts.push({ path: `${area}/${name}`, sha256: artifactSha256 });
+    }
+  }
+  return artifacts;
 }
 
 async function publishDirectory(stage, target, label) {
@@ -1207,6 +1250,96 @@ program.command('approve-frames')
       projectDir, runDir: path.dirname(path.resolve(options.snapReceipt)), contract: await loadAnimationContract(path.resolve(options.contract)),
       snapReceipt: { path: path.resolve(options.snapReceipt) }, frames: request.frames, approvals: request.approvals, version: options.version
     }));
+  });
+
+program.command('produce-contract')
+  .description('Produce one authenticated version-2 multi-track animation package')
+  .requiredOption('--contract <file>')
+  .requiredOption('--project-dir <dir>')
+  .requiredOption('--output <dir>')
+  .option('--snap-receipt <file>')
+  .option('--frame-approval <file>')
+  .action(async (options) => {
+    const projectDir = path.resolve(options.projectDir);
+    const contractFile = path.resolve(options.contract);
+    const contract = await loadAnimationContract(contractFile);
+    if (contract.document.version !== 2) throw new Error('produce-contract requires an animation contract version 2');
+    const selectedInputs = await productionInputs({ contractFile, contract, projectDir });
+    const productionBinding = {
+      contract: { path: contractFile, sha256: contract.sha256 },
+      inputManifest: { path: selectedInputs.file, sha256: stableHash(selectedInputs.document) }
+    };
+    const outputRoot = path.resolve(options.output);
+    const snapDir = path.join(outputRoot, 'snapped');
+    const config = v2Config(contract, await configFor({ projectDir }));
+    await ensureReceiptState(projectDir);
+    let receipt;
+    let snappedOutputs;
+    if (options.snapReceipt) {
+      receipt = await verifySnapReceipt({ projectDir, file: path.resolve(options.snapReceipt), expectedContract: contract });
+      snappedOutputs = receipt.document.payload.outputs.map((record) => path.resolve(path.dirname(receipt.path), record.path));
+    } else {
+      await refuseExisting(outputRoot, 'pixel production output');
+      await fs.mkdir(outputRoot, { recursive: true });
+      const snapped = await runPixelSnapper({
+        inputs: selectedInputs.inputs,
+        outputDir: snapDir,
+        config,
+        paletteHex: contract.document.palette.snapperPaletteHex,
+        resolverOptions: await snapperResolverOptions(projectDir, manifestPath),
+        receipt: { projectDir, run: { id: null, outputDir: snapDir, manifestSha256: stableHash(selectedInputs.document) }, contract }
+      });
+      if (snapped.status === 'manual-handoff') {
+        printImpl({
+          status: 'manual-handoff',
+          ...productionBinding,
+          handoffPath: snapped.handoffPath,
+          next: { kind: 'pixel-snapper-manual', cwd: projectDir, argv: [process.execPath, CLI_PATH, 'produce-contract', '--contract', contractFile, '--project-dir', projectDir, '--output', outputRoot, '--snap-receipt', '<SIGNED_SNAP_RECEIPT>'] }
+        });
+        process.exitCode = EXIT.handoff;
+        return;
+      }
+      receipt = await verifySnapReceipt({ projectDir, file: snapped.receipt.path, expectedContract: contract });
+      snappedOutputs = snapped.outputs;
+    }
+    const receiptSelection = { path: receipt.path, sha256: receipt.sha256 };
+    if (!options.frameApproval) {
+      printImpl({
+        status: 'awaiting-frame-approval',
+        ...productionBinding,
+        receipt: receiptSelection,
+        snapped: receipt.document.payload.outputs,
+        next: {
+          kind: 'post-snap-frame-approval',
+          cwd: projectDir,
+          argv: [process.execPath, CLI_PATH, 'approve-frames', '--contract', contractFile, '--snap-receipt', receipt.path, '--approval-request', '<POST_SNAP_LANDMARK_REQUEST>', '--version', '<NUMBER>', '--project-dir', projectDir]
+        }
+      });
+      process.exitCode = EXIT.review;
+      return;
+    }
+    const frameApprovalFile = path.resolve(options.frameApproval);
+    const version = approvalVersion(frameApprovalFile);
+    const verifiedApproval = await verifyFrameApproval({ projectDir, file: frameApprovalFile, contract, snapReceipt: receiptSelection, version });
+    if (snappedOutputs.length !== contract.document.clips.flatMap((clip) => clip.frames.flatMap((frame) => frame.tracks)).length) throw new Error('signed snap receipt membership does not match the v2 contract');
+    const normalized = await normalizeContractFrames({ contract, frameApproval: verifiedApproval, outputDir: path.join(outputRoot, 'normalized') });
+    const exported = await exportContractAnimation({ normalized, contract, outputDir: path.join(outputRoot, 'export'), config, frameApprovalSha256: verifiedApproval.sha256 });
+    const anchorReport = await inspectImage(selectedInputs.anchor.path);
+    const frameApprovalSelection = { projectDir, file: frameApprovalFile, snapReceipt: receiptSelection, version };
+    const report = await validateRun({ anchorReport, normalized, exported, config, animationContract: contract, frameApproval: frameApprovalSelection });
+    if (!report.passed) {
+      printImpl({ status: 'objective-failure', ...productionBinding, receipt: receiptSelection, frameApproval: { path: frameApprovalFile, sha256: verifiedApproval.sha256 }, report });
+      process.exitCode = EXIT.objectiveFailure;
+      return;
+    }
+    printImpl({
+      status: 'complete',
+      ...productionBinding,
+      receipt: receiptSelection,
+      frameApproval: { path: frameApprovalFile, sha256: verifiedApproval.sha256 },
+      exports: { root: outputRoot, metadata: exported.metadata, artifacts: await productionArtifacts(outputRoot, ['normalized', 'export']) },
+      report
+    });
   });
 
 program.command('prepare')

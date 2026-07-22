@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "frames": [
+    { "id": "step-contact", "path": "frame-01.png", "durationMs": 80 },
+    { "id": "step-pass", "path": "frame-02.png", "durationMs": 120 },
+    { "id": "step-contact-2", "path": "frame-03.png", "durationMs": 200 }
+  ]
+}

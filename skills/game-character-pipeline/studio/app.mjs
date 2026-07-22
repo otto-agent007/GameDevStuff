@@ -1,0 +1,375 @@
+import './frame-canvas.mjs';
+import './timeline.mjs';
+import { installMarkerAuthoring } from './markers.mjs';
+
+const shell = document.querySelector('.app-shell');
+const timeline = document.querySelector('frame-timeline');
+const canvas = document.querySelector('frame-canvas');
+const status = document.querySelector('#status');
+const playButton = document.querySelector('#play');
+let session;
+let frames = [];
+let selectedIndex = 0;
+let playing = false;
+let playbackTimer;
+let copyNumber = 0;
+let markerAuthoring;
+let dirty = false;
+let renderReceipt = null;
+
+const titleCase = (value) => value.split(/[-_]/).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+const frameUrl = (sha256) => `/api/frame/${sha256}`;
+const includedFrames = () => frames.filter((frame) => frame.included !== false);
+
+function updateApprovalControls() {
+  const hasSavedEdit = Boolean(session?.editRevision);
+  document.querySelector('#render-review').disabled = dirty || !hasSavedEdit;
+  const canDecide = !dirty && Boolean(renderReceipt) && hasSavedEdit;
+  document.querySelector('#approve-revision').disabled = !canDecide;
+  document.querySelector('#reject-revision').disabled = !canDecide;
+}
+
+function setDirty(value) {
+  dirty = value;
+  if (value) {
+    renderReceipt = null;
+    document.querySelector('#approval-render-hash').textContent = 'Not rendered';
+  }
+  updateApprovalControls();
+}
+
+function compatibleEdit(edit) {
+  return edit?.kind === 'frame-studio-edit' &&
+    Array.isArray(edit.frames) &&
+    edit.frames.length === session.source.frames.length &&
+    edit.frames.every((frame, index) => frame.frameId === session.source.frames[index].id);
+}
+
+function applyEdit(edit) {
+  if (!compatibleEdit(edit)) return false;
+  for (const [index, frameEdit] of edit.frames.entries()) {
+    frames[index].edit = structuredClone(frameEdit);
+    frames[index].included = frameEdit.included;
+    frames[index].label = frameEdit.label;
+    frames[index].durationMs = frameEdit.durationMs;
+  }
+  selectedIndex = Math.min(selectedIndex, frames.length - 1);
+  render();
+  return true;
+}
+
+function stopPlayback() {
+  playing = false;
+  clearTimeout(playbackTimer);
+  playButton.textContent = 'Play';
+}
+
+function updateCanvas() {
+  const frame = frames[selectedIndex];
+  if (!frame) return;
+  const previous = frames[(selectedIndex - 1 + frames.length) % frames.length];
+  const next = frames[(selectedIndex + 1) % frames.length];
+  canvas.setAttribute('frame', frame.url);
+  canvas.setAttribute('first', frames[0].url);
+  canvas.setAttribute('last', frames.at(-1).url);
+  canvas.markerState = { markers: frame.edit.markers, canvas: session.project.canvas };
+  if (document.querySelector('#overlay-previous').checked) canvas.setAttribute('previous', previous.url);
+  else canvas.removeAttribute('previous');
+  if (document.querySelector('#overlay-next').checked) canvas.setAttribute('next', next.url);
+  else canvas.removeAttribute('next');
+}
+
+function updateReadout() {
+  const frame = frames[selectedIndex];
+  const total = includedFrames().reduce((sum, item) => sum + item.edit.durationMs, 0);
+  document.querySelector('#frame-count').textContent = `${frames.length} frames`;
+  document.querySelector('#selected-name').textContent = frame?.id ?? '—';
+  document.querySelector('#frame-position').textContent = `Frame ${frames.length ? selectedIndex + 1 : 0} of ${frames.length}`;
+  document.querySelector('#total-duration').textContent = `${total} ms total`;
+  document.querySelector('#selection-frame').textContent = frame?.id ?? '—';
+  document.querySelector('#selection-duration').textContent = frame ? `${frame.edit.durationMs} ms` : '—';
+  document.querySelector('#scrub-progress').value = frames.length ? (selectedIndex + 1) / frames.length : 0;
+}
+
+function render({ focus = false } = {}) {
+  timeline.frames = frames;
+  timeline.selectedIndex = selectedIndex;
+  updateCanvas();
+  updateReadout();
+  markerAuthoring?.refresh();
+  if (focus) timeline.focusSelected();
+}
+
+function selectFrame(index, { manual = false, focus = false } = {}) {
+  if (!frames.length) return;
+  if (manual) stopPlayback();
+  selectedIndex = Math.max(0, Math.min(index, frames.length - 1));
+  render({ focus });
+}
+
+function scheduleNext() {
+  if (!playing) return;
+  const current = frames[selectedIndex];
+  playbackTimer = setTimeout(() => {
+    const nextIndex = (selectedIndex + 1) % frames.length;
+    selectFrame(nextIndex);
+    scheduleNext();
+  }, current.edit.durationMs);
+}
+
+function togglePlayback() {
+  if (playing) {
+    stopPlayback();
+    return;
+  }
+  playing = true;
+  playButton.textContent = 'Pause';
+  scheduleNext();
+}
+
+function setBooleanOverlay(input, attribute) {
+  input.addEventListener('change', () => {
+    if (attribute === 'previous' || attribute === 'next') updateCanvas();
+    else canvas.setAttribute(attribute, String(input.checked));
+  });
+}
+
+timeline.addEventListener('frame-select', ({ detail }) => selectFrame(detail.index, { manual: true, focus: detail.focus }));
+timeline.addEventListener('frame-include', ({ detail }) => {
+  frames[detail.index].included = detail.included;
+  frames[detail.index].edit.included = detail.included;
+  setDirty(true);
+  render();
+  status.textContent = `${detail.included ? 'Included' : 'Excluded'} ${frames[detail.index].id}; save to create a revision.`;
+});
+timeline.addEventListener('frame-duplicate', ({ detail }) => {
+  const original = frames[detail.index];
+  copyNumber += 1;
+  const duplicate = { ...original, id: `${original.id}-copy-${copyNumber}`, edit: structuredClone(original.edit) };
+  duplicate.edit.frameId = duplicate.id;
+  frames.splice(detail.index + 1, 0, duplicate);
+  selectedIndex = detail.index + 1;
+  setDirty(true);
+  render();
+  status.textContent = `Duplicated ${original.id}; save to create a revision.`;
+});
+timeline.addEventListener('frame-label', ({ detail }) => {
+  frames[detail.index].label = detail.label;
+  frames[detail.index].edit.label = detail.label;
+  setDirty(true);
+});
+
+playButton.addEventListener('click', togglePlayback);
+document.querySelector('#previous-frame').addEventListener('click', () => selectFrame((selectedIndex - 1 + frames.length) % frames.length, { manual: true }));
+document.querySelector('#next-frame').addEventListener('click', () => selectFrame((selectedIndex + 1) % frames.length, { manual: true }));
+document.querySelector('#zoom').addEventListener('input', (event) => {
+  const zoom = Math.max(1, Math.min(12, Math.trunc(Number(event.target.value) || 1)));
+  event.target.value = String(zoom);
+  canvas.setAttribute('zoom', String(zoom));
+});
+document.querySelector('#onion-opacity').addEventListener('input', (event) => canvas.setAttribute('onion-opacity', event.target.value));
+setBooleanOverlay(document.querySelector('#overlay-previous'), 'previous');
+setBooleanOverlay(document.querySelector('#overlay-next'), 'next');
+setBooleanOverlay(document.querySelector('#overlay-seam'), 'seam');
+setBooleanOverlay(document.querySelector('#overlay-clipping'), 'clipping');
+setBooleanOverlay(document.querySelector('#overlay-duplicates'), 'duplicates');
+setBooleanOverlay(document.querySelector('#overlay-palette'), 'palette');
+setBooleanOverlay(document.querySelector('#overlay-drift'), 'drift');
+
+document.querySelector('#save-revision').addEventListener('click', async () => {
+  stopPlayback();
+  status.textContent = 'Saving immutable edit revision…';
+  const edit = {
+    schemaVersion: 1,
+    kind: 'frame-studio-edit',
+    projectSha256: session.projectSha256,
+    sourceSha256: session.sourceSha256,
+    actionId: session.actionId,
+    frames: frames.map(({ edit }) => structuredClone(edit))
+  };
+  try {
+    const response = await fetch('/api/edits', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'If-Match': session.editSha256 },
+      body: JSON.stringify(edit)
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? 'revision save failed');
+    session.editSha256 = result.sha256;
+    session.editRevision = result.revision;
+    document.querySelector('#restore-revision').disabled = result.revision < 2;
+    renderReceipt = null;
+    document.querySelector('#approval-edit-hash').textContent = result.editSha256;
+    document.querySelector('#approval-render-hash').textContent = 'Not rendered';
+    setDirty(false);
+    status.textContent = `Saved edit revision ${result.revision}.`;
+  } catch (error) {
+    status.textContent = `Could not save revision: ${error.message}`;
+  }
+});
+
+document.querySelector('#restore-revision').addEventListener('click', async () => {
+  stopPlayback();
+  const target = session.editRevision - 1;
+  if (target < 1) return;
+  status.textContent = `Loading immutable edit revision ${target}…`;
+  try {
+    const response = await fetch(`/api/edits/${target}`);
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? 'revision load failed');
+    if (!applyEdit(result.edit)) throw new Error('prior revision is not compatible with this source frame set');
+    setDirty(true);
+    status.textContent = `Restored edit revision ${target}; save to create a new revision.`;
+  } catch (error) {
+    status.textContent = `Could not restore revision: ${error.message}`;
+  }
+});
+
+document.querySelector('#render-review').addEventListener('click', async () => {
+  status.textContent = 'Rendering hash-bound review derivatives…';
+  try {
+    const response = await fetch('/api/render', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'If-Match': session.editSha256 },
+      body: '{}'
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? 'review render failed');
+    renderReceipt = result;
+    document.querySelector('#approval-edit-hash').textContent = result.editSha256;
+    document.querySelector('#approval-render-hash').textContent = result.renderSha256;
+    updateApprovalControls();
+    status.textContent = `Rendered edit revision ${result.editRevision} for owner review.`;
+  } catch (error) {
+    renderReceipt = null;
+    updateApprovalControls();
+    status.textContent = `Could not render review: ${error.message}`;
+  }
+});
+
+async function submitDecision(decision) {
+  const notes = document.querySelector('#approval-notes').value;
+  if (decision === 'rejected' && notes.trim() === '') {
+    status.textContent = 'Rejection notes are required.';
+    return;
+  }
+  status.textContent = `${decision === 'approved' ? 'Approving' : 'Rejecting'} hash-bound selection…`;
+  try {
+    const response = await fetch('/api/approval', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'If-Match': session.editSha256 },
+      body: JSON.stringify({
+        approver: document.querySelector('#approval-identity').value,
+        decision,
+        notes
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? 'approval write failed');
+    status.textContent = `${decision === 'approved' ? 'Approved' : 'Rejected'} selection revision ${result.revision}.`;
+  } catch (error) {
+    status.textContent = `Could not record owner decision: ${error.message}`;
+  }
+}
+
+document.querySelector('#approve-revision').addEventListener('click', () => submitDecision('approved'));
+document.querySelector('#reject-revision').addEventListener('click', () => submitDecision('rejected'));
+
+document.addEventListener('keydown', (event) => {
+  if (event.target.matches('input, textarea, select')) return;
+  const keyActions = {
+    ArrowLeft: () => selectFrame(selectedIndex - 1, { manual: true, focus: true }),
+    ArrowRight: () => selectFrame(selectedIndex + 1, { manual: true, focus: true }),
+    Home: () => selectFrame(0, { manual: true, focus: true }),
+    End: () => selectFrame(frames.length - 1, { manual: true, focus: true })
+  };
+  if (Object.hasOwn(keyActions, event.key)) {
+    event.preventDefault();
+    keyActions[event.key]();
+  } else if (event.code === 'Space') {
+    event.preventDefault();
+    togglePlayback();
+  } else if (event.key === 'Delete' && frames[selectedIndex]) {
+    event.preventDefault();
+    frames[selectedIndex].included = false;
+    frames[selectedIndex].edit.included = false;
+    setDirty(true);
+    render();
+  }
+});
+
+async function initialize() {
+  try {
+    const response = await fetch('/api/session');
+    if (!response.ok) throw new Error(`session returned ${response.status}`);
+    session = await response.json();
+    const action = session.project.actions.find(({ id }) => id === session.actionId);
+    const actionTracks = action?.tracks ?? ['actor'];
+    frames = session.source.frames.map((frame) => ({
+      ...frame,
+      included: true,
+      label: '',
+      url: frameUrl(frame.sha256),
+      edit: {
+        frameId: frame.id,
+        included: true,
+        label: '',
+        durationMs: frame.durationMs,
+        translation: { x: 0, y: 0 },
+        transform: null,
+        markers: [],
+        contacts: [],
+        groundTravel: { x: 0, y: 0 },
+        tracks: [...actionTracks]
+      }
+    }));
+    if (compatibleEdit(session.edit)) {
+      for (const [index, frameEdit] of session.edit.frames.entries()) {
+        frames[index].edit = structuredClone(frameEdit);
+        frames[index].included = frameEdit.included;
+        frames[index].label = frameEdit.label;
+        frames[index].durationMs = frameEdit.durationMs;
+      }
+    } else if (session.edit) {
+      dirty = true;
+    }
+    document.querySelector('#project-title').textContent = `${session.project.character.name} / ${titleCase(action?.id ?? session.actionId)}`;
+    document.querySelector('#source-hash').textContent = session.sourceSha256.slice(0, 12);
+    document.querySelector('#approval-source-hash').textContent = session.sourceSha256;
+    document.querySelector('#approval-edit-hash').textContent = session.editSha256;
+    const approver = document.querySelector('#approval-identity');
+    for (const identity of session.project.approvals.identities) {
+      const option = document.createElement('option');
+      option.value = identity;
+      option.textContent = identity;
+      approver.append(option);
+    }
+    status.textContent = `Immutable ${session.stage} source loaded.`;
+    document.querySelector('#restore-revision').disabled = session.editRevision < 2;
+    markerAuthoring = installMarkerAuthoring({
+      root: document.querySelector('#authoring-tools'),
+      canvas,
+      project: session.project,
+      actionId: session.actionId,
+      getFrame: () => frames[selectedIndex],
+      getFrames: () => frames,
+      onChange: (message, { render: shouldRender }) => {
+        const frame = frames[selectedIndex];
+        frame.durationMs = frame.edit.durationMs;
+        frame.included = frame.edit.included;
+        frame.label = frame.edit.label;
+        if (shouldRender) setDirty(true);
+        status.textContent = `${message} Save to create a revision.`;
+        if (shouldRender) render();
+      }
+    });
+    render();
+    updateApprovalControls();
+    shell.dataset.loading = 'false';
+  } catch (error) {
+    status.textContent = `Frame Studio could not load: ${error.message}`;
+    shell.dataset.loading = 'error';
+  }
+}
+
+initialize();

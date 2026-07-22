@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-07-21",
+  "policy": "Donors are pinned and reviewed as concept sources only. No donor code or assets are copied by this revision.",
+  "donors": [
+    {
+      "repository": "https://github.com/openai/skills",
+      "commit": "49f948faa9258a0c61caceaf225e179651397431",
+      "license": "Apache-2.0",
+      "contribution": [
+        "run manifests and canonical sources",
+        "layout guides and scoped repair",
+        "contact sheets and deterministic validation"
+      ],
+      "rejected": [
+        "copying the donor architecture wholesale",
+        "unsafe agent invocations that bypass approval or sandbox boundaries"
+      ],
+      "mode": "concept-only",
+      "files": []
+    },
+    {
+      "repository": "https://github.com/0x0funky/agent-sprite-forge",
+      "commit": "64fd0b57d3f2ae117ef0a95e4c2decc25b4c9dd2",
+      "license": "MIT",
+      "contribution": [
+        "anchor sheets and identity locking",
+        "body and effect separation",
+        "scale profiles, cross-action checks, and engine contracts"
+      ],
+      "rejected": [
+        "per-frame fit scaling",
+        "Lanczos resampling in pixel stages"
+      ],
+      "mode": "concept-only",
+      "files": []
+    },
+    {
+      "repository": "https://github.com/kyh/vibedgames",
+      "commit": "902ec9e2c42d799446631b9dfb3162b3c61fbc17",
+      "license": "MIT",
+      "contribution": [
+        "pose-board prompting",
+        "animated-sprite concepts",
+        "chroma cleanup and sequence-wide pixel snapping"
+      ],
+      "rejected": [
+        "treating a pose board as a finished spritesheet",
+        "silently changing an approved source or scale contract"
+      ],
+      "mode": "concept-only",
+      "files": []
+    },
+    {
+      "repository": "https://github.com/notque/vexjoy-agent",
+      "commit": "8b07c8eecf0d56d72f00fb44d2d41d4d54e8c4c1",
+      "license": "MIT",
+      "contribution": [
+        "video frame intake and selection",
+        "timing metadata",
+        "quality-assurance artifacts"
+      ],
+      "rejected": [
+        "naive equal-cell slicing",
+        "naive equal-time slicing",
+        "banning image-to-video as an input category"
+      ],
+      "mode": "concept-only",
+      "files": []
+    }
+  ]
+}

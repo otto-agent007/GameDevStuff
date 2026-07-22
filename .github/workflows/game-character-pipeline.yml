@@ -1,0 +1,100 @@
+name: Game character pipeline
+
+on:
+  push:
+    paths: [".github/workflows/game-character-pipeline.yml", "skills/game-character-pipeline/**", "skills/pixel-sprite-animation-pipeline/**", "LICENSES/THIRD_PARTY.md"]
+  pull_request:
+    paths: [".github/workflows/game-character-pipeline.yml", "skills/game-character-pipeline/**", "skills/pixel-sprite-animation-pipeline/**", "LICENSES/THIRD_PARTY.md"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: game-character-pipeline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [20, 24]
+    defaults:
+      run:
+        working-directory: skills/game-character-pipeline
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: skills/game-character-pipeline/npm-shrinkwrap.json
+      - run: npm ci
+      - name: Install locked pixel pipeline dependencies
+        run: npm ci --ignore-scripts
+        working-directory: skills/pixel-sprite-animation-pipeline
+      - run: npm test
+      - name: Check dependency and fixture license ledger
+        run: node --test tests/cli.test.mjs
+      - run: npm pack --dry-run
+      - name: Validate skill when the official Python validator is installed
+        if: runner.os == 'Linux' && matrix.node == 24
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+          roots = [Path.home() / ".codex"]
+          if os.environ.get("CODEX_HOME"):
+              roots.insert(0, Path(os.environ["CODEX_HOME"]))
+          candidates = [root / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py" for root in roots]
+          validator = next((candidate for candidate in candidates if candidate.is_file()), None)
+          if validator is None:
+              print("Official quick_validate.py is not installed on this runner; skipping.")
+          else:
+              raise SystemExit(subprocess.call([sys.executable, str(validator), "."]))
+
+  browser:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: skills/game-character-pipeline
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: skills/game-character-pipeline/npm-shrinkwrap.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+
+  acceptance:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: skills/game-character-pipeline
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: skills/game-character-pipeline/npm-shrinkwrap.json
+      - run: npm ci
+      - name: Install locked pixel pipeline dependencies
+        run: npm ci --ignore-scripts
+        working-directory: skills/pixel-sprite-animation-pipeline
+      - run: npm run acceptance
+        env:
+          ACCEPTANCE_ARTIFACT_DIR: ${{ github.workspace }}/acceptance-artifacts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: clockwork-courier-public-evidence
+          path: acceptance-artifacts
+          if-no-files-found: error

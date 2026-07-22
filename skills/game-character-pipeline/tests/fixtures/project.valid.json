@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "id": "clockwork-courier",
+  "character": {
+    "name": "Clockwork Courier",
+    "identity": "A right-facing brass courier with a navy cap and satchel.",
+    "logicalHeight": 72,
+    "anchors": [
+      {
+        "id": "canonical-right",
+        "role": "canonical",
+        "path": "source/anchors/canonical-right.png",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "canvas": {
+    "width": 96,
+    "height": 96,
+    "pivot": { "x": 48, "y": 84 },
+    "baseline": 83
+  },
+  "scale": {
+    "integer": 2,
+    "runtime": { "width": 192, "height": 192 }
+  },
+  "palette": {
+    "rgba": [
+      [0, 0, 0, 0],
+      [32, 26, 24, 255],
+      [178, 112, 48, 255],
+      [238, 203, 128, 255],
+      [48, 90, 96, 255]
+    ],
+    "sha256": "f508bcf545c7d7428cc477ea57e778e94b0b20ba400be880f64c7d23ad50511b"
+  },
+  "tracks": [
+    { "id": "actor", "kind": "actor", "required": true, "attachTo": null },
+    { "id": "satchel", "kind": "prop", "required": true, "attachTo": "hand" },
+    { "id": "unlock-spark", "kind": "effect", "required": false, "attachTo": "effect-origin" }
+  ],
+  "sockets": [
+    { "id": "hand", "trackId": "actor", "required": true },
+    { "id": "effect-origin", "trackId": "actor", "required": true }
+  ],
+  "contacts": [
+    { "id": "left-foot", "trackId": "actor", "kind": "planted-foot", "required": true },
+    { "id": "right-foot", "trackId": "actor", "kind": "planted-foot", "required": true }
+  ],
+  "sources": {
+    "allowedKinds": ["generated-still", "png-sequence", "gif", "apng", "webp", "mp4", "webm"],
+    "defaultStillKind": "generated-still"
+  },
+  "actions": [
+    {
+      "id": "idle",
+      "semantic": "Breathe gently while keeping both feet planted and the satchel attached.",
+      "loopMode": "loop",
+      "poses": ["settle", "breath-up", "breath-down"],
+      "tracks": ["actor", "satchel"],
+      "sockets": ["hand"],
+      "contacts": ["left-foot", "right-foot"],
+      "sources": { "preferred": "gif", "fallbacks": ["png-sequence", "apng", "webp", "mp4", "webm"] }
+    },
+    {
+      "id": "unlock",
+      "semantic": "Raise the key, turn it once, and hold the successful final pose.",
+      "loopMode": "hold-last",
+      "poses": ["key-ready", "key-turn", "success-hold"],
+      "tracks": ["actor", "satchel", "unlock-spark"],
+      "sockets": ["hand", "effect-origin"],
+      "contacts": ["left-foot", "right-foot"],
+      "sources": { "preferred": "generated-still", "fallbacks": ["png-sequence", "webp"] }
+    }
+  ],
+  "engineTargets": [
+    { "id": "generic-json", "kind": "generic", "version": null },
+    { "id": "godot-4", "kind": "godot", "version": "4.7.1" }
+  ],
+  "approvals": {
+    "status": "anchor-approved",
+    "identities": ["owner"],
+    "requiredGates": ["canonical-anchor", "annotated-animation", "final-preview"]
+  }
+}

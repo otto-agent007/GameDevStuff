@@ -384,12 +384,180 @@ function snapshotMeasurement(measurement, normalizedSha256) {
   };
 }
 
+function v2GeometryConfig(contract, config) {
+  const expected = {
+    canonical: { width: contract.document.canvas.width, height: contract.document.canvas.height },
+    runtime: { ...contract.document.scale.runtime },
+    pivot: { ...contract.document.canvas.pivot }
+  };
+  if (!config || !jsonLikeEqual(config.canonical, expected.canonical) || !jsonLikeEqual(config.runtime, expected.runtime) || !jsonLikeEqual(config.pivot, expected.pivot)) throw new Error('v2 contract export config geometry does not match the animation contract');
+  return expected;
+}
+
+function jsonLikeEqual(left, right) { return JSON.stringify(left) === JSON.stringify(right); }
+
+async function capturedV2Normalized(contract, normalized, config, frameApprovalSha256) {
+  if (!normalized || normalized.version !== 2 || normalized.animationContractSha256 !== contract.sha256 || normalized.selectionApprovalSha256 !== contract.document.selectionApprovalSha256 || normalized.frameApprovalSha256 !== frameApprovalSha256 || !SHA256.test(normalized.snapReceiptSha256 ?? '') || !Array.isArray(normalized.frames)) throw new Error('v2 contract export normalized provenance binding is invalid');
+  const definitions = contract.document.clips.flatMap((clip) => clip.frames.map((frame) => ({ ...frame, loopMode: clip.loopMode })));
+  if (normalized.frames.length !== definitions.length) throw new Error('v2 contract export requires exact ordered normalized frame coverage');
+  const trackById = new Map(contract.document.tracks.map((track) => [track.id, track]));
+  const palette = new Set(contract.document.palette.rgba.map((color) => color.join(',')));
+  const frames = [];
+  for (const [index, definition] of definitions.entries()) {
+    const frame = immutableSnapshot(normalized.frames[index], `v2 normalized frame ${index}`);
+    if (frame.id !== definition.id || frame.semantic !== definition.semantic || frame.duration !== definition.duration || frame.loopMode !== definition.loopMode || frame.scale !== contract.document.scale.integer || !jsonLikeEqual(frame.root, contract.document.canvas.pivot) || frame.baseline !== contract.document.canvas.baseline || !jsonLikeEqual(frame.groundTravel, definition.groundTravel) || !jsonLikeEqual(Object.keys(frame.tracks ?? {}), definition.tracks)) throw new Error(`v2 contract export normalized frame order or metadata drift at ${index}`);
+    if (!jsonLikeEqual(Object.keys(frame.sockets ?? {}), definition.sockets) || !jsonLikeEqual(Object.keys(frame.contacts ?? {}), definition.contacts)) throw new Error(`v2 contract export normalized landmark coverage drift for ${definition.id}`);
+    const tracks = {};
+    for (const trackId of definition.tracks) {
+      const record = frame.tracks[trackId];
+      const track = trackById.get(trackId);
+      if (!record || record.kind !== track.kind || record.attachTo !== track.attachTo || typeof record.path !== 'string' || !SHA256.test(record.sourceSha256 ?? '') || !SHA256.test(record.normalizedSha256 ?? '')) throw new Error(`v2 contract export normalized track binding is invalid for ${definition.id}/${trackId}`);
+      const captured = (await captureFrames([record.path], config.canonical))[0];
+      if (captured.sha256 !== record.normalizedSha256) throw new Error(`v2 contract export normalized track hash changed for ${definition.id}/${trackId}`);
+      const drift = paletteOf(captured.image).filter(({ rgba }) => !palette.has(rgba.join(',')));
+      if (drift.length > 0) throw new Error(`v2 contract export normalized track palette drift for ${definition.id}/${trackId}`);
+      tracks[trackId] = { record, track, captured };
+    }
+    if (!frame.combined || typeof frame.combined.path !== 'string' || !SHA256.test(frame.combined.sha256 ?? '')) throw new Error(`v2 contract export combined frame binding is invalid for ${definition.id}`);
+    const combined = (await captureFrames([frame.combined.path], config.canonical))[0];
+    if (combined.sha256 !== frame.combined.sha256) throw new Error(`v2 contract export combined frame hash changed for ${definition.id}`);
+    frames.push({ definition, frame, tracks, combined });
+  }
+  return frames;
+}
+
+async function artifactRecord(file, root) {
+  return { file: portableRelative(path.relative(root, file).replaceAll('\\', '/'), 'v2 export artifact path'), sha256: bufferSha256(await fs.readFile(file)) };
+}
+
+async function exportContractAnimationV2({ contract, normalized, outputDir, config, columns, frameApprovalSha256 }) {
+  if (typeof outputDir !== 'string' || outputDir.trim() === '') throw new Error('outputDir must be a nonempty path');
+  if (!SHA256.test(frameApprovalSha256 ?? '')) throw new Error('contract export selected frame approval sha256 is required');
+  requirePositiveInteger(columns, 'columns');
+  v2GeometryConfig(contract, config);
+  const captured = await capturedV2Normalized(contract, normalized, config, frameApprovalSha256);
+  const resolvedOutput = path.resolve(outputDir);
+  if (await exists(resolvedOutput)) throw new Error(`output directory already exists: ${resolvedOutput}`);
+  const parent = path.dirname(resolvedOutput);
+  await fs.mkdir(parent, { recursive: true });
+  const stage = await fs.mkdtemp(path.join(parent, '.sprite-contract-v2-stage-'));
+  try {
+    const stagedTracks = Object.fromEntries(contract.document.tracks.map((track) => [track.id, { kind: track.kind, attachTo: track.attachTo, frames: [] }]));
+    for (const item of captured) {
+      for (const trackId of item.definition.tracks) {
+        const selected = item.tracks[trackId];
+        const directory = path.join(stage, 'tracks', trackId);
+        await fs.mkdir(directory, { recursive: true });
+        const file = path.join(directory, `${item.definition.id}.png`);
+        await sharp(selected.captured.bytes).resize(config.runtime.width, config.runtime.height, { kernel: sharp.kernel.nearest }).png().toFile(file);
+        stagedTracks[trackId].frames.push({ id: item.definition.id, file });
+      }
+    }
+
+    const stagedClips = {};
+    const clipIndex = [];
+    let offset = 0;
+    for (const clip of contract.document.clips) {
+      const selected = captured.slice(offset, offset + clip.frames.length);
+      offset += clip.frames.length;
+      const clipDir = path.join(stage, 'clips', clip.id);
+      const rendered = await renderAnimation({
+        frames: selected.map((item) => item.combined.path),
+        durations: clip.frames.map((frame) => frame.duration),
+        outputDir: clipDir,
+        config,
+        columns,
+        name: clip.id,
+        capturedFrames: selected.map((item) => item.combined)
+      });
+      const contactSheet = path.join(clipDir, `${clip.id}-contact-sheet.png`);
+      await fs.copyFile(rendered.sheet, contactSheet, fs.constants.COPYFILE_EXCL);
+      const frameRecords = [];
+      for (const [frameIndex, item] of selected.entries()) {
+        const runtimeCombined = rendered.runtimeFrames[frameIndex];
+        const outputs = [];
+        for (const trackId of item.definition.tracks) {
+          const trackFrame = stagedTracks[trackId].frames.find((frame) => frame.id === item.definition.id);
+          outputs.push({
+            trackId,
+            kind: item.tracks[trackId].track.kind,
+            attachTo: item.tracks[trackId].track.attachTo,
+            sourceSha256: item.tracks[trackId].record.sourceSha256,
+            normalizedSha256: item.tracks[trackId].record.normalizedSha256,
+            ...await artifactRecord(trackFrame.file, stage)
+          });
+        }
+        frameRecords.push({
+          id: item.definition.id,
+          semantic: item.definition.semantic,
+          duration: item.definition.duration,
+          tracks: [...item.definition.tracks],
+          root: { ...item.frame.root },
+          baseline: item.frame.baseline,
+          sockets: structuredClone(item.frame.sockets),
+          contacts: structuredClone(item.frame.contacts),
+          groundTravel: { ...item.frame.groundTravel },
+          outputs,
+          combined: await artifactRecord(runtimeCombined, stage)
+        });
+      }
+      const restart = clip.loopMode === 'loop' ? 'loop' : 'stop';
+      clipIndex.push({
+        id: clip.id,
+        loopMode: clip.loopMode,
+        restart,
+        frames: frameRecords,
+        sheet: await artifactRecord(rendered.sheet, stage),
+        contactSheet: await artifactRecord(contactSheet, stage),
+        metadata: await artifactRecord(rendered.metadata, stage),
+        preview: await artifactRecord(rendered.preview, stage)
+      });
+      stagedClips[clip.id] = { ...rendered, contactSheet, frames: frameRecords, loopMode: clip.loopMode, restart };
+    }
+    const indexName = 'animation-contract-export.json';
+    const indexFile = path.join(stage, indexName);
+    const index = {
+      version: 2,
+      animationContractSha256: contract.sha256,
+      animationContract: contract.document,
+      selectionApprovalSha256: contract.document.selectionApprovalSha256,
+      frameApprovalSha256,
+      snapReceiptSha256: normalized.snapReceiptSha256,
+      character: contract.document.character,
+      canvas: contract.document.canvas,
+      scale: contract.document.scale,
+      palette: contract.document.palette,
+      tracks: contract.document.tracks,
+      sockets: contract.document.sockets,
+      contacts: contract.document.contacts,
+      clips: clipIndex
+    };
+    await fs.writeFile(indexFile, `${JSON.stringify(index, null, 2)}\n`, { flag: 'wx' });
+    await fs.rename(stage, resolvedOutput);
+    const rebase = (file) => rebaseArtifact(file, stage, resolvedOutput);
+    const clips = Object.fromEntries(Object.entries(stagedClips).map(([id, clip]) => [id, {
+      ...clip,
+      runtimeFrames: clip.runtimeFrames.map(rebase),
+      sheet: rebase(clip.sheet),
+      metadata: rebase(clip.metadata),
+      preview: rebase(clip.preview),
+      contactSheet: rebase(clip.contactSheet)
+    }]));
+    const tracks = Object.fromEntries(Object.entries(stagedTracks).map(([id, track]) => [id, { ...track, frames: track.frames.map((frame) => ({ id: frame.id, file: rebase(frame.file) })) }]));
+    return { version: 2, clips, tracks, metadata: path.join(resolvedOutput, indexName) };
+  } catch (error) {
+    await fs.rm(stage, { recursive: true, force: true });
+    throw error;
+  }
+}
+
 export async function exportContractAnimation(args) {
   const contract = snapshotContract(args?.contract);
   const config = immutableSnapshot(args?.config, 'config');
   const outputDir = args?.outputDir;
   const columns = args?.columns ?? 8;
   const frameApprovalSha256 = args?.frameApprovalSha256;
+  if (contract.document.version === 2) return exportContractAnimationV2({ contract, normalized: args?.normalized, outputDir, config, columns, frameApprovalSha256 });
   if (typeof outputDir !== 'string' || outputDir.trim() === '') throw new Error('outputDir must be a nonempty path');
   if (!SHA256.test(frameApprovalSha256 ?? '')) throw new Error('contract export selected frame approval sha256 is required');
   requirePositiveInteger(columns, 'columns');

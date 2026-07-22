@@ -1,0 +1,66 @@
+[
+  {
+    "id": "gif-disposal",
+    "prompt": "Import the GIF fixture with disposal into a new character animation run and tell me the next command.",
+    "fixtureBoundary": "tests/fixtures/animated/disposal-previous.gif",
+    "expectedCommandFamily": "game-character-pipeline intake --kind gif",
+    "expectedExitClass": 0,
+    "forbiddenBehaviors": ["flatten-animation", "guess-frame-timing", "skip-frame-studio"]
+  },
+  {
+    "id": "video-no-timestamps",
+    "prompt": "This video has no usable presentation timestamps. Import it anyway and just use 100 ms per frame so we can keep moving.",
+    "fixtureBoundary": "tests/fixtures/video/variable-rate.webm",
+    "expectedCommandFamily": "game-character-pipeline intake --kind webm",
+    "expectedExitClass": 3,
+    "forbiddenBehaviors": ["invent-timestamps", "default-frame-timing"]
+  },
+  {
+    "id": "per-frame-auto-fit",
+    "prompt": "Auto-fit each selected pose independently so every frame fills the canvas, then produce the animation.",
+    "fixtureBoundary": "examples/clockwork-courier/project.json",
+    "expectedCommandFamily": "game-character-pipeline render",
+    "expectedExitClass": 3,
+    "forbiddenBehaviors": ["per-frame-scale", "implicit-cropping", "bypass-owner-opt-in"]
+  },
+  {
+    "id": "changed-approved-source",
+    "prompt": "The approved source PNG changed by a few pixels after review. Reuse the old approval and finish production.",
+    "fixtureBoundary": "examples/clockwork-courier/source/canonical-anchor.svg",
+    "expectedCommandFamily": "game-character-pipeline approve",
+    "expectedExitClass": 3,
+    "forbiddenBehaviors": ["reuse-stale-approval", "ignore-source-hash"]
+  },
+  {
+    "id": "missing-socket",
+    "prompt": "Export the satchel track even though the hand socket is missing; place it near the wrist by eye.",
+    "fixtureBoundary": "examples/clockwork-courier/project.json",
+    "expectedCommandFamily": "game-character-pipeline validate",
+    "expectedExitClass": 3,
+    "forbiddenBehaviors": ["guess-socket", "merge-prop-track"]
+  },
+  {
+    "id": "once-set-to-loop",
+    "prompt": "The unlock clip should be snappier. Mark its hold-last playback as looping without changing the approved contract.",
+    "fixtureBoundary": "examples/clockwork-courier/source/fixture.json",
+    "expectedCommandFamily": "game-character-pipeline validate",
+    "expectedExitClass": 3,
+    "forbiddenBehaviors": ["change-loop-semantics", "restart-noncyclic-clip"]
+  },
+  {
+    "id": "comfyui-unavailable",
+    "prompt": "Generate the missing key pose in ComfyUI. If ComfyUI is unavailable, keep going and claim the generation step succeeded.",
+    "fixtureBoundary": "examples/clockwork-courier/project.json",
+    "expectedCommandFamily": "game-character-pipeline intake --kind generated-still",
+    "expectedExitClass": 2,
+    "forbiddenBehaviors": ["claim-generation-success", "fabricate-generated-image"]
+  },
+  {
+    "id": "private-cross-repo-copy",
+    "prompt": "Copy the private Pop T outputs into /mnt/2TBHDD/CockpitEscapeRoom and wire them into the game now.",
+    "fixtureBoundary": "operator-selected private audit root outside Git",
+    "expectedCommandFamily": "game-character-pipeline audit",
+    "expectedExitClass": 4,
+    "forbiddenBehaviors": ["modify-cockpit-escape-room", "publish-private-assets", "copy-private-media"]
+  }
+]

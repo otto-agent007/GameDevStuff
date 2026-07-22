@@ -7,8 +7,9 @@ import sharp from 'sharp';
 import { DEFAULT_CONFIG } from '../scripts/lib/config.mjs';
 import { connectedComponents, extractPrimaryComponent } from '../scripts/lib/components.mjs';
 import { loadAnimationContract } from '../scripts/lib/animation-contract.mjs';
-import { readRgba } from '../scripts/lib/image.mjs';
+import { readRgba, sha256 } from '../scripts/lib/image.mjs';
 import { normalizeFrames } from '../scripts/lib/normalize.mjs';
+import * as normalizeApi from '../scripts/lib/normalize.mjs';
 import { stableHash } from '../scripts/lib/state-auth.mjs';
 
 const HASH = (letter) => letter.repeat(64);
@@ -94,6 +95,82 @@ async function torsoX(file, torso) {
   }
   throw new Error('torso color was not found');
 }
+
+async function v2Fixture() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'normalize-v2-'));
+  const runDir = path.join(dir, 'run');
+  await fs.mkdir(runDir);
+  const rgba = [[0, 0, 0, 0], [26, 32, 63, 255], [220, 60, 40, 255]];
+  const document = {
+    version: 2, selectionApprovalSha256: HASH('c'),
+    character: { id: 'clockwork-courier', anchorSha256: HASH('d') },
+    canvas: { width: 16, height: 16, pivot: { x: 8, y: 14 }, baseline: 13 },
+    scale: { integer: 2, runtime: { width: 32, height: 32 } },
+    palette: { rgba, sha256: stableHash(rgba), snapperPaletteHex: ['1a203f', 'dc3c28'] },
+    tracks: [
+      { id: 'actor', kind: 'actor', required: true, attachTo: null },
+      { id: 'satchel', kind: 'prop', required: true, attachTo: 'hand' }
+    ],
+    sockets: [{ id: 'hand', trackId: 'actor', required: true }],
+    contacts: [{ id: 'left-foot', trackId: 'actor', kind: 'planted-foot', required: true }],
+    clips: [{ id: 'walk', loopMode: 'loop', frames: [
+      { id: 'walk-contact', semantic: 'contact', duration: 80, tracks: ['actor', 'satchel'], sockets: ['hand'], contacts: ['left-foot'], groundTravel: { x: 0, y: 0 } },
+      { id: 'walk-pass', semantic: 'passing', duration: 120, tracks: ['actor', 'satchel'], sockets: ['hand'], contacts: ['left-foot'], groundTravel: { x: 2, y: 0 } }
+    ] }],
+    review: { checkpoints: ['identity', 'motion', 'landmarks'], approvers: ['owner'] }
+  };
+  const contract = { document, sha256: stableHash(document) };
+  const definitions = document.clips[0].frames;
+  const approvalFrames = [];
+  for (const [frameIndex, definition] of definitions.entries()) {
+    const rootX = 6 + frameIndex;
+    const outputs = [];
+    for (const [trackIndex, trackId] of definition.tracks.entries()) {
+      const file = path.join(runDir, `${definition.id}--${trackId}.png`);
+      const data = Buffer.alloc(16 * 16 * 4);
+      const x = trackId === 'actor' ? rootX : rootX + 4;
+      const color = trackId === 'actor' ? rgba[1] : rgba[2];
+      data.set(color, (10 * 16 + x) * 4);
+      data.set(color, (11 * 16 + x) * 4);
+      await sharp(data, { raw: { width: 16, height: 16, channels: 4 } }).png().toFile(file);
+      outputs.push({ index: frameIndex * 2 + trackIndex, trackId, path: path.basename(file), sha256: await sha256(file) });
+    }
+    approvalFrames.push({
+      index: frameIndex, id: definition.id, semantic: definition.semantic, duration: definition.duration, outputs,
+      landmarks: {
+        root: { x: rootX, y: 12 }, baseline: 11,
+        sockets: [{ id: 'hand', x: rootX + 4, y: 8 }],
+        contacts: [{ id: 'left-foot', x: rootX, y: 11 }], groundTravel: { ...definition.groundTravel }
+      },
+      approved: true, approvedBy: 'owner', checkpoints: ['identity', 'motion', 'landmarks']
+    });
+  }
+  const frameApproval = {
+    path: path.join(runDir, 'frame-approval-01.json'), sha256: HASH('e'),
+    document: { payload: {
+      version: 2, approvalVersion: 1, animationContractSha256: contract.sha256,
+      selectionApprovalSha256: document.selectionApprovalSha256, snapReceiptSha256: HASH('f'),
+      frames: approvalFrames, approvedBy: 'owner', createdAt: '2026-07-22T08:00:00.000Z'
+    } }
+  };
+  return { contract, frameApproval, outputDir: path.join(dir, 'normalized') };
+}
+
+test('v2 normalization keeps scale fixed and maps sockets exactly', async () => {
+  const fixture = await v2Fixture();
+  const result = await normalizeApi.normalizeContractFrames(fixture);
+  assert.equal(new Set(result.frames.map((frame) => frame.scale)).size, 1);
+  assert.equal(result.frames.every((frame) => frame.scale === 2), true);
+  assert.equal(result.frames.every((frame) => frame.sockets.hand.x === 12), true);
+  assert.equal(result.frames.every((frame) => frame.root.x === 8 && frame.root.y === 14), true);
+  assert.deepEqual(result.frames.map((frame) => Object.keys(frame.tracks)), [['actor', 'satchel'], ['actor', 'satchel']]);
+
+  const changed = await v2Fixture();
+  const source = path.join(path.dirname(changed.frameApproval.path), changed.frameApproval.document.payload.frames[0].outputs[0].path);
+  await fs.appendFile(source, Buffer.from([0]));
+  await assert.rejects(normalizeApi.normalizeContractFrames(changed), /source hash/i);
+  await assert.rejects(fs.access(changed.outputDir), { code: 'ENOENT' });
+});
 
 test('authored roots stay fixed when pose bounds change', async () => {
   const { frames, landmarks, torso } = await makeExtendedLimbFrames();

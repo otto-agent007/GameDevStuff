@@ -3,7 +3,17 @@
 node_modules/
 .pixel-sprite-pipeline/
 **/.pixel-sprite-pipeline/tools/
+.game-character-pipeline/
+**/.game-character-pipeline/
 examples/private/
 **/examples/private/
 generated/
+private-audits/
+**/private-audits/
+.private-audits/
+**/.private-audits/
+test-results/
+**/test-results/
+playwright-report/
+**/playwright-report/
 *.log

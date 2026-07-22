@@ -50,12 +50,113 @@ async function fixture() {
   return { projectDir, runDir, contract, snapReceipt, frames, approvals };
 }
 
+function v2ContractDocument() {
+  const rgba = [[0, 0, 0, 0], [121, 85, 54, 255], [245, 158, 11, 255]];
+  return {
+    version: 2,
+    selectionApprovalSha256: HASH('c'),
+    character: { id: 'clockwork-courier', anchorSha256: HASH('d') },
+    canvas: { width: 96, height: 96, pivot: { x: 48, y: 84 }, baseline: 83 },
+    scale: { integer: 2, runtime: { width: 192, height: 192 } },
+    palette: { rgba, sha256: stableHash(rgba), snapperPaletteHex: ['795536', 'f59e0b'] },
+    tracks: [
+      { id: 'actor', kind: 'actor', required: true, attachTo: null },
+      { id: 'satchel', kind: 'prop', required: true, attachTo: 'hand' },
+      { id: 'unlock-spark', kind: 'effect', required: false, attachTo: 'effect-origin' }
+    ],
+    sockets: [
+      { id: 'hand', trackId: 'actor', required: true },
+      { id: 'effect-origin', trackId: 'actor', required: true }
+    ],
+    contacts: [{ id: 'left-foot', trackId: 'actor', kind: 'planted-foot', required: true }],
+    clips: [{ id: 'unlock', loopMode: 'hold-last', frames: [
+      { id: 'unlock-release', semantic: 'release', duration: 140, tracks: ['actor', 'satchel', 'unlock-spark'], sockets: ['hand', 'effect-origin'], contacts: ['left-foot'], groundTravel: { x: 0, y: 0 } }
+    ] }],
+    review: { checkpoints: ['identity', 'motion', 'landmarks'], approvers: ['owner'] }
+  };
+}
+
+async function v2Fixture() {
+  const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pixel-frame-approval-v2-'));
+  const runDir = path.join(projectDir, 'run');
+  await fs.mkdir(path.join(projectDir, '.pixel-sprite-pipeline'), { recursive: true, mode: 0o700 });
+  await fs.mkdir(runDir);
+  const document = v2ContractDocument();
+  const contractFile = path.join(projectDir, 'animation-contract.json');
+  await fs.writeFile(contractFile, `${JSON.stringify(document, null, 2)}\n`);
+  const contract = await loadAnimationContract(contractFile);
+  const input = path.join(projectDir, 'source.png');
+  const outputFiles = ['actor', 'satchel', 'unlock-spark'].map((trackId) => path.join(runDir, `unlock-release--${trackId}.png`));
+  await Promise.all([
+    fs.writeFile(input, 'source-v2'),
+    ...outputFiles.map((file, index) => fs.writeFile(file, `snapped-v2-${index}`))
+  ]);
+  const snapReceipt = await writeSnapReceipt({
+    projectDir, run: { id: 'run-v2', outputDir: runDir, manifestSha256: HASH('e') }, contract,
+    inputs: [input], outputs: outputFiles, args: ['16'],
+    identity: { origin: 'managed-cache', sha256: HASH('f'), size: 1, version: '1.2.3', helpSha256: HASH('0'), fixtureRgbaSha256: HASH('1'), pinnedReleaseTag: null, upstreamCommit: null }
+  });
+  const trackIds = document.clips[0].frames[0].tracks;
+  const frames = snapReceipt.document.payload.outputs.map((output, index) => ({
+    frameId: 'unlock-release', trackId: trackIds[index], path: output.path, sha256: output.sha256
+  }));
+  const approvals = [{
+    frameId: 'unlock-release',
+    landmarks: {
+      root: { x: 48, y: 84 }, baseline: 83,
+      sockets: [{ id: 'hand', x: 58, y: 50 }, { id: 'effect-origin', x: 64, y: 44 }],
+      contacts: [{ id: 'left-foot', x: 43, y: 83 }], groundTravel: { x: 0, y: 0 }
+    },
+    approved: true, approvedBy: 'owner', checkpoints: ['identity', 'motion', 'landmarks']
+  }];
+  return { projectDir, runDir, contract, snapReceipt, frames, approvals };
+}
+
 test('frame approval is created only after snap and covers every ordered output hash', async () => {
   const value = await fixture();
   const approval = await writeFrameApproval({ ...value, version: 1 });
   assert.equal(approval.document.payload.snapReceiptSha256, value.snapReceipt.sha256);
   assert.deepEqual(approval.document.payload.frames.map((item) => item.landmark), [{ x: 61, y: 109 }, { x: 62, y: 110 }]);
   await assert.rejects(writeFrameApproval({ ...value, approvals: value.approvals.slice(1), version: 2 }), /approval for every snapped frame/);
+});
+
+test('v2 frame approval binds every track hash and all named landmarks', async () => {
+  const value = await v2Fixture();
+  const approval = await writeFrameApproval({ ...value, version: 1 });
+  assert.equal(approval.document.payload.version, 2);
+  assert.equal(approval.document.payload.selectionApprovalSha256, value.contract.document.selectionApprovalSha256);
+  assert.deepEqual(
+    approval.document.payload.frames[0].outputs.map(({ trackId, sha256 }) => ({ trackId, sha256 })),
+    value.frames.map(({ trackId, sha256 }) => ({ trackId, sha256 }))
+  );
+  assert.deepEqual(approval.document.payload.frames[0].landmarks, value.approvals[0].landmarks);
+  await verifyFrameApproval({ projectDir: value.projectDir, file: approval.path, contract: value.contract, snapReceipt: value.snapReceipt, version: 1 });
+
+  const missingTrack = await v2Fixture();
+  await assert.rejects(
+    writeFrameApproval({ ...missingTrack, frames: missingTrack.frames.slice(0, -1), version: 1 }),
+    /coverage|every snapped frame|track/i
+  );
+});
+
+test('v2 frame approvals reject unknown landmarks and cross-version signatures', async () => {
+  const unknown = await v2Fixture();
+  unknown.approvals[0].landmarks.sockets[0].id = 'missing-socket';
+  await assert.rejects(writeFrameApproval({ ...unknown, version: 1 }), /unknown socket/i);
+
+  const value = await v2Fixture();
+  const approval = await writeFrameApproval({ ...value, version: 1 });
+  const crossVersion = path.join(value.runDir, 'frame-approval-02.json');
+  await writeSignedState({
+    projectDir: value.projectDir,
+    file: crossVersion,
+    domain: 'pixel-sprite-frame-approval/v1',
+    payload: approval.document.payload
+  });
+  await assert.rejects(
+    verifyFrameApproval({ projectDir: value.projectDir, file: crossVersion, contract: value.contract, snapReceipt: value.snapReceipt, version: 1 }),
+    /signature/i
+  );
 });
 
 test('frame approval rejects a symlinked signed snap receipt', async (t) => {

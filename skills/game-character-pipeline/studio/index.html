@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Frame Studio</title>
+    <link rel="stylesheet" href="/studio/styles.css">
+    <script type="module" src="/studio/app.mjs"></script>
+  </head>
+  <body>
+    <div class="app-shell" data-loading="true">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <h1>Frame Studio</h1>
+            <p id="project-title">Loading project…</p>
+          </div>
+        </div>
+        <div class="revision-actions">
+          <span class="stage-chip">Selection</span>
+          <button class="primary" id="save-revision" type="button">Save revision</button>
+        </div>
+      </header>
+
+      <aside class="timeline-panel panel" aria-labelledby="frames-heading">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">Source frames</span>
+            <h2 id="frames-heading">Timeline</h2>
+          </div>
+          <span id="frame-count">0 frames</span>
+        </div>
+        <frame-timeline aria-label="Source frame timeline"></frame-timeline>
+      </aside>
+
+      <main class="workspace">
+        <section class="canvas-panel panel" aria-label="Frame preview">
+          <div class="canvas-toolbar">
+            <div>
+              <span class="eyebrow">Selected frame</span>
+              <strong id="selected-name">—</strong>
+            </div>
+            <label class="compact-field" for="zoom">
+              <span>Zoom</span>
+              <input id="zoom" type="number" min="1" max="12" step="1" value="4">
+              <span aria-hidden="true">×</span>
+            </label>
+          </div>
+          <div class="canvas-stage">
+            <frame-canvas zoom="4" onion-opacity="0.28" seam="false"></frame-canvas>
+          </div>
+        </section>
+
+        <section class="playback-panel panel" aria-label="Playback controls">
+          <button id="previous-frame" class="icon-button" type="button" aria-label="Previous frame">◀</button>
+          <button id="play" class="play-button" type="button">Play</button>
+          <button id="next-frame" class="icon-button" type="button" aria-label="Next frame">▶</button>
+          <div class="playback-readout" aria-live="polite">
+            <strong id="frame-position">Frame 0 of 0</strong>
+            <span id="total-duration">0 ms total</span>
+          </div>
+          <progress id="scrub-progress" class="scrub-track" max="1" value="0" aria-label="Playback position"></progress>
+        </section>
+      </main>
+
+      <aside class="inspector panel" aria-labelledby="overlays-heading">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">Review tools</span>
+            <h2 id="overlays-heading">Overlays</h2>
+          </div>
+        </div>
+
+        <fieldset class="control-group">
+          <legend>Onion skin</legend>
+          <label><input id="overlay-previous" type="checkbox"> Previous</label>
+          <label><input id="overlay-next" type="checkbox"> Next</label>
+          <label class="range-field">
+            <span>Opacity</span>
+            <input id="onion-opacity" type="range" min="0" max="0.8" step="0.05" value="0.28">
+          </label>
+        </fieldset>
+
+        <fieldset class="control-group">
+          <legend>Cycle review</legend>
+          <label><input id="overlay-seam" type="checkbox"> First / last seam</label>
+        </fieldset>
+
+        <fieldset class="control-group diagnostic-grid">
+          <legend>Diagnostics</legend>
+          <label><input id="overlay-clipping" type="checkbox"> Clipping</label>
+          <label><input id="overlay-duplicates" type="checkbox"> Duplicates</label>
+          <label><input id="overlay-palette" type="checkbox"> Palette</label>
+          <label><input id="overlay-drift" type="checkbox"> Drift</label>
+        </fieldset>
+
+        <section class="selection-card" aria-labelledby="selection-heading">
+          <span class="eyebrow">Current</span>
+          <h3 id="selection-heading">Frame details</h3>
+          <dl>
+            <div><dt>Frame</dt><dd id="selection-frame">—</dd></div>
+            <div><dt>Duration</dt><dd id="selection-duration">—</dd></div>
+            <div><dt>Source</dt><dd>Lossless PNG</dd></div>
+          </dl>
+        </section>
+
+        <section class="authoring-card" aria-labelledby="authoring-heading">
+          <div class="authoring-heading-row">
+            <div>
+              <span class="eyebrow">Metadata only</span>
+              <h3 id="authoring-heading">Landmarks &amp; motion</h3>
+            </div>
+            <button id="undo-edit" type="button" disabled>Undo change</button>
+          </div>
+          <button id="restore-revision" class="restore-button" type="button" disabled>Restore prior revision</button>
+          <div id="authoring-tools"></div>
+        </section>
+
+        <section class="approval-card" aria-labelledby="approval-heading">
+          <span class="eyebrow">Owner decision</span>
+          <h3 id="approval-heading">Approval gate</h3>
+          <dl class="hash-list">
+            <div><dt>Source hash</dt><dd><code id="approval-source-hash" aria-label="Source hash">—</code></dd></div>
+            <div><dt>Edit hash</dt><dd><code id="approval-edit-hash" aria-label="Edit hash">—</code></dd></div>
+            <div><dt>Render hash</dt><dd><code id="approval-render-hash" aria-label="Render hash">Not rendered</code></dd></div>
+          </dl>
+          <label class="approval-field">
+            <span>Approver identity</span>
+            <select id="approval-identity" aria-label="Approver identity"></select>
+          </label>
+          <label class="approval-field">
+            <span>Review notes</span>
+            <textarea id="approval-notes" aria-label="Approval notes" maxlength="4096" rows="3"></textarea>
+          </label>
+          <button id="render-review" type="button">Render review</button>
+          <div class="decision-buttons">
+            <button id="approve-revision" class="approve-button" type="button" disabled>Approve revision</button>
+            <button id="reject-revision" class="reject-button" type="button" disabled>Reject revision</button>
+          </div>
+        </section>
+      </aside>
+
+      <footer class="statusbar">
+        <span class="status-dot" aria-hidden="true"></span>
+        <div role="status" id="status">Loading immutable source…</div>
+        <code id="source-hash"></code>
+      </footer>
+    </div>
+  </body>
+</html>
