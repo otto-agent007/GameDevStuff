@@ -199,7 +199,7 @@ git commit -m "chore: scaffold game character pipeline"
 - Produces `loadProjectContract(file) -> Promise<{ document, sha256 }>`.
 - `ProjectContract` fixes `schemaVersion: 1`, character anchors, canvas, global integer scale, palette, actions, tracks, sockets, contacts, engine targets, sources, and approval identities.
 
-- [ ] **Step 1: Write failing closed-schema and invariant tests**
+- [x] **Step 1: Write failing closed-schema and invariant tests**
 
 ```js
 test('project contract binds one global scale and explicit action behavior', () => {
@@ -216,13 +216,13 @@ test('project contract rejects unknown fields and per-action scale', () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test**
+- [x] **Step 2: Run the focused test**
 
 Run: `node --test tests/project-contract.test.mjs`
 
 Expected: FAIL with `ERR_MODULE_NOT_FOUND` for `project-contract.mjs`.
 
-- [ ] **Step 3: Implement reusable strict validators**
+- [x] **Step 3: Implement reusable strict validators**
 
 ```js
 export function exactObject(value, keys, label) {
@@ -240,11 +240,11 @@ export function portableId(value, label) {
 
 Also implement `sha256Value`, `sha256File`, `hashString`, `integer`, `finiteNumber`, `isoDate`, `uniqueList`, `portableRelativePath`, and recursive `deepFreeze` with unit coverage through the project-contract tests.
 
-- [ ] **Step 4: Implement and freeze the project contract**
+- [x] **Step 4: Implement and freeze the project contract**
 
 Validate exact keys for every nested record. Require a leading transparent palette entry, at most 16 opaque colors for Pixel Snapper, one actor track, unique prop/effect tracks, unique named sockets, contact names that reference known tracks, `loop|once|hold-last`, and one preferred plus ordered fallback source kind per action. Hash the stable JSON value after validation.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run: `node --test tests/project-contract.test.mjs && npm test`
 
