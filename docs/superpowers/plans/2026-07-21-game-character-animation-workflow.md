@@ -133,7 +133,7 @@ Expected: FAIL because `package.json` and `scripts/cli.mjs` do not exist.
   "engines": { "node": ">=20.9.0" },
   "bin": { "game-character-pipeline": "scripts/cli.mjs" },
   "scripts": {
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test",
     "test:browser": "playwright test tests/browser",
     "validate-skill": "node scripts/validate-skill.mjs"
   },

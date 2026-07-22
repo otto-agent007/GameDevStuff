@@ -67,3 +67,8 @@ test('package installation never downloads an unauthenticated media executable',
   assert.equal(Object.hasOwn(manifest.dependencies, 'ffmpeg-static'), false);
   assert.equal(Object.hasOwn(manifest.dependencies, 'ffprobe-static'), false);
 });
+
+test('package test discovery does not depend on shell glob expansion', async () => {
+  const manifest = JSON.parse(await fs.readFile(path.join(packageDir, 'package.json'), 'utf8'));
+  assert.equal(manifest.scripts.test, 'node --test');
+});
