@@ -6,7 +6,7 @@
 
 **Architecture:** A new sibling Node.js skill owns immutable source intake, versioned run state, Frame Studio, approvals, and orchestration. Format-specific adapters converge on composited RGBA frames plus exact durations; Frame Studio writes edit metadata rather than mutating sources; the existing pixel pipeline gains a generic version-2 animation contract and remains the only snap/normalize/export validation boundary. ComfyUI is excluded from this initial plan and may later implement the same motion-source interface.
 
-**Tech Stack:** Node.js 20.9+ ESM, `commander` 15.0.0, `sharp` 0.35.3/libvips, `ffmpeg-static` 5.2.0, `ffprobe-static` 3.1.0, browser-native ES modules and Web Components, Node `node:test`, Playwright 1.54.1, Python 3 skill validation, GitHub Actions on Ubuntu and Windows.
+**Tech Stack:** Node.js 20.9+ ESM, `commander` 15.0.0, `sharp` 0.35.3/libvips, an explicitly selected and hash-bound external FFmpeg for video, browser-native ES modules and Web Components, Node `node:test`, Playwright 1.61.1, Python 3 skill validation, GitHub Actions on Ubuntu and Windows.
 
 **Scope and sequencing:** The approved design spans contracts, media decoding, an authoring UI, deterministic production, and acceptance audits. They remain in one ordered plan because each stage produces the authenticated contract consumed by the next, but Tasks 1-3, 4-6, 7-10, 11-13, and 14-16 are deliberate review checkpoints and may ship as separate PRs. Do not start a later checkpoint until the prior checkpoint is green and reviewed.
 
@@ -48,7 +48,7 @@
 - `skills/game-character-pipeline/scripts/lib/png-sequence.mjs` — ordered lossless sequence intake.
 - `skills/game-character-pipeline/scripts/lib/animated-image.mjs` — GIF/APNG/WebP metadata inspection and composited RGBA extraction.
 - `skills/game-character-pipeline/scripts/lib/gif-container.mjs`, `apng-container.mjs`, and `webp-container.mjs` — disposal, blend, rectangle, alpha, duration, and corruption diagnostics.
-- `skills/game-character-pipeline/scripts/lib/video.mjs` — pinned ffprobe/ffmpeg timestamp extraction and dense PNG decode.
+- `skills/game-character-pipeline/scripts/lib/video.mjs` — verified external FFmpeg framehash timestamp extraction and dense PNG decode.
 - `skills/game-character-pipeline/scripts/lib/edits.mjs` — non-destructive edit validation and deterministic replay.
 - `skills/game-character-pipeline/scripts/lib/approval.mjs` — authenticated approval records and selected-frame binding.
 - `skills/game-character-pipeline/scripts/lib/pixel-pipeline.mjs` — structured delegation to the existing sibling package.
@@ -105,7 +105,7 @@
 - Produces CLI process contract: JSON on stdout, actionable errors on stderr, exit `0` success, `1` usage/runtime error, `2` resumable external handoff, `3` objective validation failure, `4` owner review required.
 - Produces donor record fields `{ repository, commit, license, contribution, rejected, mode, files }`.
 
-- [ ] **Step 1: Write the failing package and CLI tests**
+- [x] **Step 1: Write the failing package and CLI tests**
 
 ```js
 test('CLI advertises the complete initial command surface', async () => {
@@ -116,13 +116,13 @@ test('CLI advertises the complete initial command surface', async () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and verify the package is absent**
+- [x] **Step 2: Run the test and verify the package is absent**
 
 Run: `cd skills/game-character-pipeline && node --test tests/cli.test.mjs`
 
 Expected: FAIL because `package.json` and `scripts/cli.mjs` do not exist.
 
-- [ ] **Step 3: Create the package and closed CLI skeleton**
+- [x] **Step 3: Create the package and closed CLI skeleton**
 
 ```json
 {
@@ -139,22 +139,20 @@ Expected: FAIL because `package.json` and `scripts/cli.mjs` do not exist.
   },
   "dependencies": {
     "commander": "15.0.0",
-    "ffmpeg-static": "5.2.0",
-    "ffprobe-static": "3.1.0",
     "sharp": "0.35.3"
   },
-  "devDependencies": { "@playwright/test": "1.54.1" },
+  "devDependencies": { "@playwright/test": "1.61.1" },
   "files": ["SKILL.md", "agents/", "scripts/", "studio/"]
 }
 ```
 
 Use `Command` from Commander, set `.showHelpAfterError()`, register every command, and make each not-yet-available action throw `command is not available in this package revision`; each later task replaces the corresponding action and its test, so an incomplete command can never report success.
 
-- [ ] **Step 4: Add the exact donor and dependency review records**
+- [x] **Step 4: Add the exact donor and dependency review records**
 
-Record the four repositories and commits from the design, their Apache-2.0/MIT licenses, `mode: "concept-only"`, empty `files`, the adopted concepts, and every explicitly rejected behavior. Record `sharp`, `ffmpeg-static`, `ffprobe-static`, `commander`, and Playwright in `LICENSES/THIRD_PARTY.md`; block package installation if any license or binary redistribution entry lacks a reviewed disposition.
+Record the four repositories and commits from the design, their Apache-2.0/MIT licenses, `mode: "concept-only"`, empty `files`, the adopted concepts, and every explicitly rejected behavior. Record `sharp`, `commander`, and Playwright in `LICENSES/THIRD_PARTY.md`; block package installation if any license or binary redistribution entry lacks a reviewed disposition. Do not add an npm dependency whose install script downloads a mutable media executable; video intake must inspect and hash an explicitly selected external FFmpeg and otherwise emit a resumable handoff.
 
-- [ ] **Step 5: Add portable validator discovery and lock dependencies**
+- [x] **Step 5: Add portable validator discovery and lock dependencies**
 
 ```js
 import os from 'node:os';
@@ -175,7 +173,7 @@ Run: `cd skills/game-character-pipeline && npm install && npm shrinkwrap`
 
 Expected: `npm-shrinkwrap.json` is created and every direct dependency exactly matches `package.json`.
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 Run: `cd skills/game-character-pipeline && npm test && npm pack --dry-run`
 
@@ -458,14 +456,14 @@ git commit -m "feat: decode animated motion sources"
 - Create: `skills/game-character-pipeline/tests/fixtures/video/expected.json`
 
 **Interfaces:**
-- Produces `inspectMediaTool(file, expectedName)` and `decodeVideo({ source, run, ffmpegPath, ffprobePath })`.
-- Tool identity is `{ path, sha256, size, version }`; frame timestamps come from ffprobe `best_effort_timestamp_time` and durations from adjacent timestamps plus the final packet duration.
+- Produces `inspectMediaTool(file, expectedName)` and `decodeVideo({ source, run, ffmpegPath })`.
+- Tool identity is `{ path, sha256, size, version }`; frame timestamps and durations come from FFmpeg `framehash` output using its declared stream time base.
 
 - [ ] **Step 1: Write failing variable-frame-rate and subprocess tests**
 
 ```js
 test('video intake derives nonuniform durations from presentation timestamps', async () => {
-  const result = await decodeVideo({ source: fixture('video/variable-rate.webm'), run, ffmpegPath, ffprobePath });
+  const result = await decodeVideo({ source: fixture('video/variable-rate.webm'), run, ffmpegPath });
   assert.deepEqual(result.frames.map((frame) => frame.timestampMs), [0, 40, 140, 180]);
   assert.deepEqual(result.frames.map((frame) => frame.durationMs), [40, 100, 40, 80]);
 });
@@ -482,13 +480,13 @@ Run: `node --test tests/video.test.mjs`
 
 Expected: FAIL with missing `video.mjs`.
 
-- [ ] **Step 3: Implement pinned tool inspection and ffprobe parsing**
+- [ ] **Step 3: Implement external tool inspection and framehash parsing**
 
-Resolve defaults from `ffmpeg-static` and `ffprobe-static`, reject caller paths that are not regular executable files, hash before and after use, capture version output, and run with `shell: false`, a 60-second timeout, 8 MiB stdout/stderr limits, and no inherited stdin. Ask ffprobe for stream dimensions, alpha pixel format, frame timestamps, and packet durations in JSON.
+Resolve only an explicit `ffmpegPath`, `FFMPEG_BIN`, or deterministic PATH candidate; reject absent tools with a structured exit-2 handoff and reject candidates that are not regular executable files. Hash before and after use, capture version output, and run with `shell: false`, a 60-second timeout, 8 MiB stdout/stderr limits, and no inherited stdin. Run `ffmpeg -i <source> -map 0:v:0 -f framehash -hash sha256 -`, parse the declared stream time base plus ordered frame PTS and duration fields, and reject missing, negative, duplicate, or unordered presentation timestamps.
 
 - [ ] **Step 4: Extract dense lossless frames**
 
-Run ffmpeg with `-i <source> -map 0:v:0 -vsync 0 -pix_fmt rgba <work>/decoded/frame-%06d.png`; reject stderr indicating decode corruption, output-count disagreement, dimensions changing midstream, or absent final duration. Bind exact argv and both executable identities into the source report.
+Run FFmpeg with `-i <source> -map 0:v:0 -vsync 0 -pix_fmt rgba <work>/decoded/frame-%06d.png`; inspect decoded PNGs for dimensions and alpha, and reject stderr indicating decode corruption, output-count disagreement, dimensions changing midstream, or absent final duration. Bind both exact argv arrays and the one executable identity into the source report.
 
 - [ ] **Step 5: Run tests and commit**
 
