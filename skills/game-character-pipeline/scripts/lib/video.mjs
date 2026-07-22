@@ -40,9 +40,17 @@ async function executableIdentity(file) {
   return { path: selected, sha256: await sha256File(selected), size: stat.size };
 }
 
+export function mediaToolInvocation(file, args) {
+  const scriptExtensions = new Set(['.js', '.cjs', '.mjs']);
+  return scriptExtensions.has(path.extname(file).toLowerCase())
+    ? { file: process.execPath, args: [file, ...args] }
+    : { file, args };
+}
+
 async function execute(file, args) {
+  const invocation = mediaToolInvocation(file, args);
   try {
-    return await execFile(file, args, {
+    return await execFile(invocation.file, invocation.args, {
       encoding: 'utf8',
       maxBuffer: MAX_BUFFER,
       timeout: TIMEOUT_MS,

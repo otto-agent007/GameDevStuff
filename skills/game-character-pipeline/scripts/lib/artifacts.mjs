@@ -42,6 +42,10 @@ async function ensureDirectories(root, relativeDirectory) {
 
 async function readSingleLinkFile(file, label) {
   const noFollow = constants.O_NOFOLLOW ?? 0;
+  const lexical = await fs.lstat(file);
+  if (!lexical.isFile() || lexical.isSymbolicLink() || lexical.nlink !== 1) {
+    throw new Error(`${label} must be a regular single-link file`);
+  }
   let handle;
   try {
     handle = await fs.open(file, constants.O_RDONLY | noFollow);
@@ -51,7 +55,7 @@ async function readSingleLinkFile(file, label) {
   }
   try {
     const before = await handle.stat();
-    if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1) {
+    if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1 || lexical.dev !== before.dev || lexical.ino !== before.ino) {
       throw new Error(`${label} must be a regular single-link file`);
     }
     const bytes = await handle.readFile();

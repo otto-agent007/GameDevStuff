@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { createProject, createRun } from '../scripts/lib/run-contract.mjs';
-import { decodeVideo, inspectMediaTool } from '../scripts/lib/video.mjs';
+import { decodeVideo, inspectMediaTool, mediaToolInvocation } from '../scripts/lib/video.mjs';
 
 const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const execFile = promisify(execFileCallback);
@@ -16,6 +16,13 @@ const cliPath = path.join(packageDir, 'scripts', 'cli.mjs');
 const projectFixture = path.join(packageDir, 'tests', 'fixtures', 'project.valid.json');
 const fixtureRoot = path.join(packageDir, 'tests', 'fixtures', 'video');
 const fakeFfmpeg = path.join(fixtureRoot, 'fake-ffmpeg.mjs');
+
+test('JavaScript media tool fixtures use the current Node executable portably', () => {
+  assert.deepEqual(mediaToolInvocation(fakeFfmpeg, ['-version']), {
+    file: process.execPath,
+    args: [fakeFfmpeg, '-version']
+  });
+});
 
 async function freshRun(t, kind = 'webm') {
   const parent = await fs.mkdtemp(path.join(os.tmpdir(), `game-character-video-${kind}-`));
@@ -66,8 +73,8 @@ test('media tool inspection binds executable bytes and rejects a changed probe',
 
   const parent = await fs.mkdtemp(path.join(os.tmpdir(), 'game-character-changing-tool-'));
   t.after(() => fs.rm(parent, { recursive: true, force: true }));
-  const changing = path.join(parent, 'ffmpeg');
-  await fs.writeFile(changing, `#!/bin/sh\nprintf 'ffmpeg version changing\\n'\nprintf '\\n' >> "$0"\n`);
+  const changing = path.join(parent, 'ffmpeg.mjs');
+  await fs.writeFile(changing, `import fs from 'node:fs';\nprocess.stdout.write('ffmpeg version changing\\n');\nfs.appendFileSync(process.argv[1], '\\n');\n`);
   await fs.chmod(changing, 0o700);
   await assert.rejects(inspectMediaTool(changing, 'ffmpeg'), /tool identity changed/);
 });

@@ -288,7 +288,8 @@ test('studio CLI prints readiness once and closes on SIGTERM without edits', asy
   assert.match(ready.origin, /^http:\/\/127\.0\.0\.1:\d+$/);
   child.kill('SIGTERM');
   const exit = await new Promise((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
-  assert.equal(exit.code, 0);
+  if (process.platform === 'win32') assert.deepEqual(exit, { code: null, signal: 'SIGTERM' });
+  else assert.deepEqual(exit, { code: 0, signal: null });
   assert.equal(stdout.trim().split('\n').length, 1);
   assert.deepEqual(await fs.readdir(path.join(fixture.run.root, 'edits')), []);
 });

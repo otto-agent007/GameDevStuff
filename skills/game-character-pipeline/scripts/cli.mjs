@@ -70,11 +70,12 @@ program
       runId: options.run,
       stage: 'selection'
     });
-    print({ status: 'ready', origin: studio.origin, runId: options.run });
-    await new Promise((resolve) => {
+    const shutdown = new Promise((resolve) => {
       process.once('SIGINT', resolve);
       process.once('SIGTERM', resolve);
     });
+    print({ status: 'ready', origin: studio.origin, runId: options.run });
+    await shutdown;
     await studio.close();
   });
 

@@ -33,7 +33,7 @@ test('skill scenarios have complete, unique evaluation contracts', async () => {
 
 test('the skill directly links every operational reference and packages them', async () => {
   const references = ['workflow.md', 'frame-studio.md', 'motion-sources.md', 'private-audit.md'];
-  const skill = await fs.readFile(path.join(packageRoot, 'SKILL.md'), 'utf8');
+  const skill = (await fs.readFile(path.join(packageRoot, 'SKILL.md'), 'utf8')).replaceAll('\r\n', '\n');
   const packageDocument = JSON.parse(await fs.readFile(path.join(packageRoot, 'package.json'), 'utf8'));
 
   assert.match(skill, /^---\nname: game-character-pipeline\ndescription: Use when[^\n]+\n---\n/);

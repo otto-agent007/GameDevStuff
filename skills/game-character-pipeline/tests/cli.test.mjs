@@ -88,13 +88,13 @@ test('package test discovery does not depend on shell glob expansion', async () 
 });
 
 test('character workflow CI pins actions and separates unit browser and acceptance gates', async () => {
-  const workflow = await fs.readFile(path.join(repositoryRoot, '.github', 'workflows', 'game-character-pipeline.yml'), 'utf8');
+  const workflow = (await fs.readFile(path.join(repositoryRoot, '.github', 'workflows', 'game-character-pipeline.yml'), 'utf8')).replaceAll('\r\n', '\n');
   assert.doesNotMatch(workflow, /uses:\s+[^\s]+@v\d+/);
   for (const gate of ['unit:', 'browser:', 'acceptance:', 'windows-latest', 'npm pack --dry-run', 'quick_validate.py', 'upload-artifact@']) assert.match(workflow, new RegExp(gate.replaceAll('.', '\\.')));
 });
 
 test('cross-package CI gates install the locked pixel pipeline dependencies', async () => {
-  const workflow = await fs.readFile(path.join(repositoryRoot, '.github', 'workflows', 'game-character-pipeline.yml'), 'utf8');
+  const workflow = (await fs.readFile(path.join(repositoryRoot, '.github', 'workflows', 'game-character-pipeline.yml'), 'utf8')).replaceAll('\r\n', '\n');
   const unit = workflow.slice(workflow.indexOf('  unit:'), workflow.indexOf('  browser:'));
   const acceptance = workflow.slice(workflow.indexOf('  acceptance:'));
   for (const gate of [unit, acceptance]) {

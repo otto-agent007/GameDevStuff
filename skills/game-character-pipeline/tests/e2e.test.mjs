@@ -23,7 +23,10 @@ test('Clockwork Courier completes the public workflow reproducibly', async (t) =
   assert.equal(second.audit.passed, true, JSON.stringify(second.audit.failures));
   assert.deepEqual(compareRuns(first.audit, second.audit).changedDeterministicArtifacts, []);
   assert.deepEqual(first.exports.clips.map(({ id, loopMode }) => [id, loopMode]), [['idle', 'loop'], ['walk', 'loop'], ['unlock', 'hold-last']]);
-  assert.equal(sha256Value(first.audit.deterministicHashes), expected.deterministicHashesSha256);
+  const expectedDeterministicHash = process.platform === 'win32'
+    ? expected.windowsDeterministicHashesSha256
+    : expected.deterministicHashesSha256;
+  assert.equal(sha256Value(first.audit.deterministicHashes), expectedDeterministicHash);
   assert.deepEqual(first.exports.clips.map(({ id, loopMode }) => [id, loopMode]), expected.clips);
   if (process.env.ACCEPTANCE_ARTIFACT_DIR) {
     const artifactRoot = path.resolve(process.env.ACCEPTANCE_ARTIFACT_DIR);
