@@ -15,6 +15,7 @@ export class FrameCanvas extends HTMLElement {
 
   #canvas;
   #renderToken = 0;
+  #markerState = { markers: [], canvas: null };
 
   constructor() {
     super();
@@ -25,6 +26,11 @@ export class FrameCanvas extends HTMLElement {
 
   connectedCallback() { this.#render(); }
   attributeChangedCallback() { if (this.isConnected) this.#render(); }
+
+  set markerState(value) {
+    this.#markerState = structuredClone(value ?? { markers: [], canvas: null });
+    if (this.isConnected) this.#render();
+  }
 
   async #render() {
     const token = ++this.#renderToken;
@@ -76,6 +82,34 @@ export class FrameCanvas extends HTMLElement {
       sourceContext.moveTo(0, height / 2);
       sourceContext.lineTo(width, height / 2);
       sourceContext.stroke();
+    }
+    const logical = this.#markerState.canvas;
+    if (logical) {
+      for (const marker of this.#markerState.markers ?? []) {
+        const x = ((marker.x + 0.5) / logical.width) * width;
+        const y = ((marker.y + 0.5) / logical.height) * height;
+        sourceContext.save();
+        sourceContext.strokeStyle = marker.kind === 'planted-foot' ? '#f59e0b' : '#63d5e8';
+        sourceContext.fillStyle = sourceContext.strokeStyle;
+        sourceContext.lineWidth = 1;
+        if (marker.kind === 'baseline') {
+          sourceContext.beginPath();
+          sourceContext.moveTo(0, y);
+          sourceContext.lineTo(width, y);
+          sourceContext.stroke();
+        } else {
+          sourceContext.beginPath();
+          sourceContext.arc(x, y, Math.max(1, width / 64), 0, Math.PI * 2);
+          sourceContext.fill();
+          sourceContext.beginPath();
+          sourceContext.moveTo(x - 2, y);
+          sourceContext.lineTo(x + 2, y);
+          sourceContext.moveTo(x, y - 2);
+          sourceContext.lineTo(x, y + 2);
+          sourceContext.stroke();
+        }
+        sourceContext.restore();
+      }
     }
     this.#canvas.width = width * zoom;
     this.#canvas.height = height * zoom;

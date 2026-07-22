@@ -145,6 +145,36 @@ test('supports inclusion, duplication, labels, and immutable save revisions', as
   await expect(page.getByRole('status')).toContainText(/Saved edit revision \d+/);
 });
 
+test('authors landmarks, contact intervals, travel, timing, and explicit tracks', async ({ page }) => {
+  for (const name of ['Root pivot', 'Baseline', 'Left foot', 'Right foot', 'Hand', 'Prop grip', 'Effect origin']) {
+    await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+  }
+  for (const name of ['Actor track', 'Prop track', 'Effect track']) {
+    await expect(page.getByText(name, { exact: true })).toBeVisible();
+  }
+  await page.getByRole('button', { name: 'Root pivot', exact: true }).click();
+  await page.locator('frame-canvas canvas').click({ position: { x: 32, y: 48 } });
+  await page.getByLabel('Planted left foot').check();
+  await expect(page.getByText('left-foot', { exact: true })).toBeVisible();
+  await page.getByLabel('Ground travel X').fill('2');
+  await page.getByLabel('Duration step-contact').fill('96');
+  await page.getByRole('button', { name: 'Save revision' }).click();
+  await expect(page.getByRole('status')).toContainText(/Saved edit revision \d+/);
+  const session = await page.evaluate(() => fetch('/api/session').then((response) => response.json()));
+  const current = session.edit.frames.find(({ frameId }) => frameId === 'step-contact');
+  expect(session.edit.kind).toBe('frame-studio-edit');
+  expect(current.markers).toContainEqual(expect.objectContaining({ id: 'root', kind: 'root-pivot' }));
+  expect(current.contacts).toContain('left-foot');
+  expect(current.groundTravel.x).toBe(2);
+  expect(current.durationMs).toBe(96);
+  await page.getByLabel('Ground travel X').fill('3');
+  await page.getByRole('button', { name: 'Save revision' }).click();
+  await expect(page.getByRole('status')).toContainText(/Saved edit revision \d+/);
+  await page.getByRole('button', { name: 'Restore prior revision' }).click();
+  await expect(page.getByRole('status')).toContainText(/Restored edit revision \d+/);
+  await expect(page.getByLabel('Ground travel X')).toHaveValue('2');
+});
+
 test('fits desktop and narrow viewports with visible focus and reduced motion', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.reload();

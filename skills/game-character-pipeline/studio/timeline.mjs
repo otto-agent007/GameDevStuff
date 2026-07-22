@@ -115,6 +115,12 @@ export class FrameTimeline extends HTMLElement {
       label.placeholder = 'Add label';
       label.setAttribute('aria-label', `Label ${frame.id}`);
       copy.append(ordinal, name, duration, label);
+      if (frame.edit?.contacts?.length) {
+        const contacts = document.createElement('span');
+        contacts.className = 'contact-span';
+        contacts.textContent = frame.edit.contacts.join(' · ');
+        copy.append(contacts);
+      }
 
       const actions = document.createElement('div');
       actions.className = 'frame-actions';

@@ -635,7 +635,7 @@ git commit -m "feat: add Frame Studio playback"
 - Edit frame record is `{ frameId, included, label, durationMs, translation, transform, markers, contacts, groundTravel, tracks }`.
 - `transform` is `null` unless explicit owner opt-in supplies integer `rotationQuarterTurns` and integer `scale` for the entire clip revision.
 
-- [ ] **Step 1: Write failing edit and browser tests**
+- [x] **Step 1: Write failing edit and browser tests**
 
 ```js
 test('edit manifest permits translation but rejects implicit fitting', () => {
@@ -657,21 +657,21 @@ test('authors pivot, foot contact, socket, and travel without changing source', 
 });
 ```
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 Run: `node --test tests/edits.test.mjs && npm run test:browser`
 
 Expected: FAIL with missing edit/marker implementations.
 
-- [ ] **Step 3: Implement edit validation and replay**
+- [x] **Step 3: Implement edit validation and replay**
 
 Require exact frame coverage in source order, explicit inclusion, positive duration, integer translations, marker coordinates inside logical canvas, known track/socket/contact names, travel only during declared intervals, and one global opt-in transform. Replaying the same source/edit hashes must produce byte-identical transparent PNG derivatives.
 
-- [ ] **Step 4: Implement marker authoring UI**
+- [x] **Step 4: Implement marker authoring UI**
 
 Add tools for root pivot, baseline, left/right planted foot, hand, prop grip, effect origin, and custom sockets. Separate actor/prop/effect tracks in the timeline, display contact spans, constrain numerical fields, expose undo by returning to the prior immutable revision, and require explicit confirmation before global rotation or scale repair.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run: `node --test tests/edits.test.mjs && npm run test:browser && npm test`
 

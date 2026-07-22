@@ -22,6 +22,7 @@ const STATIC_FILES = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/studio/app.mjs', ['app.mjs', 'text/javascript; charset=utf-8']],
   ['/studio/frame-canvas.mjs', ['frame-canvas.mjs', 'text/javascript; charset=utf-8']],
+  ['/studio/markers.mjs', ['markers.mjs', 'text/javascript; charset=utf-8']],
   ['/studio/timeline.mjs', ['timeline.mjs', 'text/javascript; charset=utf-8']],
   ['/studio/styles.css', ['styles.css', 'text/css; charset=utf-8']]
 ]);
@@ -250,6 +251,7 @@ export async function startStudioServer({
           runId: run.id,
           stage,
           sourceSha256,
+          projectSha256: project.sha256,
           project: project.document,
           actionId: run.document.sourceRequest.actionId,
           source,
@@ -292,6 +294,17 @@ export async function startStudioServer({
           return written;
         });
         sendJson(response, 200, { revision: result.revision, sha256: result.sha256 });
+        return;
+      }
+
+      const editRevisionMatch = pathname.match(/^\/api\/edits\/(\d{1,6})$/);
+      if (editRevisionMatch) {
+        if (request.method !== 'GET') throw methodError('GET');
+        const revision = Number(editRevisionMatch[1]);
+        if (revision < 1 || revision > editState.editRevision) throw new HttpError(404, 'studio edit revision does not exist');
+        const file = path.join(run.root, 'edits', `studio-edit-${String(revision).padStart(4, '0')}.json`);
+        const document = await readCanonicalJson(file, run.root, 'studio edit revision');
+        sendJson(response, 200, { revision, sha256: await sha256File(file), edit: document.edit });
         return;
       }
 

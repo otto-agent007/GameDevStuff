@@ -1,5 +1,6 @@
 import './frame-canvas.mjs';
 import './timeline.mjs';
+import { installMarkerAuthoring } from './markers.mjs';
 
 const shell = document.querySelector('.app-shell');
 const timeline = document.querySelector('frame-timeline');
@@ -12,10 +13,31 @@ let selectedIndex = 0;
 let playing = false;
 let playbackTimer;
 let copyNumber = 0;
+let markerAuthoring;
 
 const titleCase = (value) => value.split(/[-_]/).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
 const frameUrl = (sha256) => `/api/frame/${sha256}`;
 const includedFrames = () => frames.filter((frame) => frame.included !== false);
+
+function compatibleEdit(edit) {
+  return edit?.kind === 'frame-studio-edit' &&
+    Array.isArray(edit.frames) &&
+    edit.frames.length === session.source.frames.length &&
+    edit.frames.every((frame, index) => frame.frameId === session.source.frames[index].id);
+}
+
+function applyEdit(edit) {
+  if (!compatibleEdit(edit)) return false;
+  for (const [index, frameEdit] of edit.frames.entries()) {
+    frames[index].edit = structuredClone(frameEdit);
+    frames[index].included = frameEdit.included;
+    frames[index].label = frameEdit.label;
+    frames[index].durationMs = frameEdit.durationMs;
+  }
+  selectedIndex = Math.min(selectedIndex, frames.length - 1);
+  render();
+  return true;
+}
 
 function stopPlayback() {
   playing = false;
@@ -31,6 +53,7 @@ function updateCanvas() {
   canvas.setAttribute('frame', frame.url);
   canvas.setAttribute('first', frames[0].url);
   canvas.setAttribute('last', frames.at(-1).url);
+  canvas.markerState = { markers: frame.edit.markers, canvas: session.project.canvas };
   if (document.querySelector('#overlay-previous').checked) canvas.setAttribute('previous', previous.url);
   else canvas.removeAttribute('previous');
   if (document.querySelector('#overlay-next').checked) canvas.setAttribute('next', next.url);
@@ -39,13 +62,13 @@ function updateCanvas() {
 
 function updateReadout() {
   const frame = frames[selectedIndex];
-  const total = includedFrames().reduce((sum, item) => sum + item.durationMs, 0);
+  const total = includedFrames().reduce((sum, item) => sum + item.edit.durationMs, 0);
   document.querySelector('#frame-count').textContent = `${frames.length} frames`;
   document.querySelector('#selected-name').textContent = frame?.id ?? '—';
   document.querySelector('#frame-position').textContent = `Frame ${frames.length ? selectedIndex + 1 : 0} of ${frames.length}`;
   document.querySelector('#total-duration').textContent = `${total} ms total`;
   document.querySelector('#selection-frame').textContent = frame?.id ?? '—';
-  document.querySelector('#selection-duration').textContent = frame ? `${frame.durationMs} ms` : '—';
+  document.querySelector('#selection-duration').textContent = frame ? `${frame.edit.durationMs} ms` : '—';
   document.querySelector('#scrub-progress').value = frames.length ? (selectedIndex + 1) / frames.length : 0;
 }
 
@@ -54,6 +77,7 @@ function render({ focus = false } = {}) {
   timeline.selectedIndex = selectedIndex;
   updateCanvas();
   updateReadout();
+  markerAuthoring?.refresh();
   if (focus) timeline.focusSelected();
 }
 
@@ -71,7 +95,7 @@ function scheduleNext() {
     const nextIndex = (selectedIndex + 1) % frames.length;
     selectFrame(nextIndex);
     scheduleNext();
-  }, current.durationMs);
+  }, current.edit.durationMs);
 }
 
 function togglePlayback() {
@@ -94,13 +118,15 @@ function setBooleanOverlay(input, attribute) {
 timeline.addEventListener('frame-select', ({ detail }) => selectFrame(detail.index, { manual: true, focus: detail.focus }));
 timeline.addEventListener('frame-include', ({ detail }) => {
   frames[detail.index].included = detail.included;
+  frames[detail.index].edit.included = detail.included;
   render();
   status.textContent = `${detail.included ? 'Included' : 'Excluded'} ${frames[detail.index].id}; save to create a revision.`;
 });
 timeline.addEventListener('frame-duplicate', ({ detail }) => {
   const original = frames[detail.index];
   copyNumber += 1;
-  const duplicate = { ...original, id: `${original.id}-copy-${copyNumber}`, label: `${original.label ?? ''}` };
+  const duplicate = { ...original, id: `${original.id}-copy-${copyNumber}`, edit: structuredClone(original.edit) };
+  duplicate.edit.frameId = duplicate.id;
   frames.splice(detail.index + 1, 0, duplicate);
   selectedIndex = detail.index + 1;
   render();
@@ -108,6 +134,7 @@ timeline.addEventListener('frame-duplicate', ({ detail }) => {
 });
 timeline.addEventListener('frame-label', ({ detail }) => {
   frames[detail.index].label = detail.label;
+  frames[detail.index].edit.label = detail.label;
 });
 
 playButton.addEventListener('click', togglePlayback);
@@ -132,13 +159,11 @@ document.querySelector('#save-revision').addEventListener('click', async () => {
   status.textContent = 'Saving immutable edit revision…';
   const edit = {
     schemaVersion: 1,
-    selectedFrameId: frames[selectedIndex]?.id ?? null,
-    frames: frames.map(({ id, sha256, included, label, durationMs }) => ({ id, sha256, included, label, durationMs })),
-    overlays: {
-      previous: document.querySelector('#overlay-previous').checked,
-      next: document.querySelector('#overlay-next').checked,
-      seam: document.querySelector('#overlay-seam').checked
-    }
+    kind: 'frame-studio-edit',
+    projectSha256: session.projectSha256,
+    sourceSha256: session.sourceSha256,
+    actionId: session.actionId,
+    frames: frames.map(({ edit }) => structuredClone(edit))
   };
   try {
     const response = await fetch('/api/edits', {
@@ -150,9 +175,26 @@ document.querySelector('#save-revision').addEventListener('click', async () => {
     if (!response.ok) throw new Error(result.error ?? 'revision save failed');
     session.editSha256 = result.sha256;
     session.editRevision = result.revision;
+    document.querySelector('#restore-revision').disabled = result.revision < 2;
     status.textContent = `Saved edit revision ${result.revision}.`;
   } catch (error) {
     status.textContent = `Could not save revision: ${error.message}`;
+  }
+});
+
+document.querySelector('#restore-revision').addEventListener('click', async () => {
+  stopPlayback();
+  const target = session.editRevision - 1;
+  if (target < 1) return;
+  status.textContent = `Loading immutable edit revision ${target}…`;
+  try {
+    const response = await fetch(`/api/edits/${target}`);
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? 'revision load failed');
+    if (!applyEdit(result.edit)) throw new Error('prior revision is not compatible with this source frame set');
+    status.textContent = `Restored edit revision ${target}; save to create a new revision.`;
+  } catch (error) {
+    status.textContent = `Could not restore revision: ${error.message}`;
   }
 });
 
@@ -183,10 +225,45 @@ async function initialize() {
     if (!response.ok) throw new Error(`session returned ${response.status}`);
     session = await response.json();
     const action = session.project.actions.find(({ id }) => id === session.actionId);
-    frames = session.source.frames.map((frame) => ({ ...frame, included: true, label: '', url: frameUrl(frame.sha256) }));
+    const actionTracks = action?.tracks ?? ['actor'];
+    frames = session.source.frames.map((frame) => ({
+      ...frame,
+      included: true,
+      label: '',
+      url: frameUrl(frame.sha256),
+      edit: {
+        frameId: frame.id,
+        included: true,
+        label: '',
+        durationMs: frame.durationMs,
+        translation: { x: 0, y: 0 },
+        transform: null,
+        markers: [],
+        contacts: [],
+        groundTravel: { x: 0, y: 0 },
+        tracks: [...actionTracks]
+      }
+    }));
     document.querySelector('#project-title').textContent = `${session.project.character.name} / ${titleCase(action?.id ?? session.actionId)}`;
     document.querySelector('#source-hash').textContent = session.sourceSha256.slice(0, 12);
     status.textContent = `Immutable ${session.stage} source loaded.`;
+    document.querySelector('#restore-revision').disabled = session.editRevision < 2;
+    markerAuthoring = installMarkerAuthoring({
+      root: document.querySelector('#authoring-tools'),
+      canvas,
+      project: session.project,
+      actionId: session.actionId,
+      getFrame: () => frames[selectedIndex],
+      getFrames: () => frames,
+      onChange: (message, { render: shouldRender }) => {
+        const frame = frames[selectedIndex];
+        frame.durationMs = frame.edit.durationMs;
+        frame.included = frame.edit.included;
+        frame.label = frame.edit.label;
+        status.textContent = `${message} Save to create a revision.`;
+        if (shouldRender) render();
+      }
+    });
     render();
     shell.dataset.loading = 'false';
   } catch (error) {
