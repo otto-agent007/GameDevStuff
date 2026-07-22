@@ -6,7 +6,7 @@ import { validateAnimationContract } from './animation-contract.mjs';
 import { extractPrimaryComponent, foregroundPredicate } from './components.mjs';
 import { verifyFrameApproval } from './frame-approval.mjs';
 import { captureRgba, paletteOf, readRgba } from './image.mjs';
-import { canonicalPath } from './path-security.mjs';
+import { canonicalPath, sameCanonicalPath } from './path-security.mjs';
 import { stableHash } from './state-auth.mjs';
 
 const CORRECTIONS = Object.freeze({
@@ -33,6 +33,10 @@ const CORRECTIONS = Object.freeze({
 });
 
 const SEMANTIC_CODES = new Set(['IDENTITY_DRIFT', 'DUPLICATE_POSE', 'LOOP_SEAM']);
+
+export async function sourcePathsMatch(actual, expected, options = {}) {
+  return sameCanonicalPath(actual, expected, options);
+}
 
 export function classifyFailures(report) {
   if (!report || !Array.isArray(report.failures)) throw new Error('report failures must be an array');
@@ -743,7 +747,7 @@ async function validateContractExportRunV2({ anchorReport, normalized, exported,
       }
       if (track.attachTo !== null && !definition.sockets.includes(track.attachTo)) contractExportFailure(failures, 'SOCKET_ATTACHMENT', { frame: frameIndex, trackId, socket: track.attachTo });
       const expectedSource = path.resolve(path.dirname(frameApproval.snapReceipt.path), approvedOutput.path);
-      if (path.resolve(record.sourcePath) !== expectedSource) contractExportFailure(failures, 'SOURCE_HASH_MISMATCH', { field: 'trackSourcePath', frame: frameIndex, trackId });
+      if (!await sourcePathsMatch(record.sourcePath, expectedSource)) contractExportFailure(failures, 'SOURCE_HASH_MISMATCH', { field: 'trackSourcePath', frame: frameIndex, trackId });
       try {
         const source = await captureImage(expectedSource);
         const output = await captureImage(record.path);

@@ -15,8 +15,21 @@ import { normalizeFrames } from '../scripts/lib/normalize.mjs';
 import * as normalizeApi from '../scripts/lib/normalize.mjs';
 import { writeSnapReceipt } from '../scripts/lib/snap-receipt.mjs';
 import { stableHash, writeSignedState } from '../scripts/lib/state-auth.mjs';
-import { classifyFailures, validateIntegerScale, validateRun } from '../scripts/lib/validate.mjs';
+import { classifyFailures, sourcePathsMatch, validateIntegerScale, validateRun } from '../scripts/lib/validate.mjs';
 import { applyDeterministicCorrections } from '../scripts/lib/correct.mjs';
+
+test('validator accepts canonical Windows aliases for the same track source', async () => {
+  const aliases = new Map([
+    ['C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\run\\frames\\idle.png', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\run\\frames\\idle.png']
+  ]);
+  const fsImpl = { realpath: async (file) => aliases.get(file) ?? file };
+
+  assert.equal(await sourcePathsMatch(
+    'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\run\\frames\\idle.png',
+    'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\run\\frames\\idle.png',
+    { fsImpl, pathApi: path.win32 }
+  ), true);
+});
 
 async function temporaryDirectory(prefix = 'sprite-validate-') {
   return fs.mkdtemp(path.join(os.tmpdir(), prefix));
