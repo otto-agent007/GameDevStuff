@@ -752,7 +752,7 @@ git commit -m "feat: bind animation owner approvals"
 - Produces v2 `{ version: 2, selectionApprovalSha256, character, canvas, scale, palette, tracks, sockets, contacts, clips, review }`.
 - Produces named post-snap per-frame landmarks `{ root, baseline, sockets, contacts, groundTravel }` bound to the snap receipt and snapped frame hashes; this is distinct from the pre-production Frame Studio selection approval in Task 10.
 
-- [ ] **Step 1: Write failing v1-regression and generic-v2 tests**
+- [x] **Step 1: Write failing v1-regression and generic-v2 tests**
 
 ```js
 test('v1 remains byte-for-byte valid while v2 permits generic geometry', () => {
@@ -768,21 +768,21 @@ test('v2 rejects per-frame scale and unknown socket references', () => {
 });
 ```
 
-- [ ] **Step 2: Run existing and new focused tests**
+- [x] **Step 2: Run existing and new focused tests**
 
 Run: `cd skills/pixel-sprite-animation-pipeline && node --test tests/animation-contract.test.mjs tests/frame-approval.test.mjs`
 
 Expected: existing v1 tests PASS; new v2 tests FAIL.
 
-- [ ] **Step 3: Add version-dispatched closed validation**
+- [x] **Step 3: Add version-dispatched closed validation**
 
 Keep the current v1 validator unchanged behind `validateAnimationContractV1`. Add `validateAnimationContractV2`, dispatch only versions 1 and 2, require a 64-character `selectionApprovalSha256`, one global integer scale, stable canvas, leading transparent palette entry, known track/socket/contact references, explicit per-frame duration and loop mode, and exact ordered semantic frame IDs.
 
-- [ ] **Step 4: Extend signed frame approvals**
+- [x] **Step 4: Extend signed frame approvals**
 
 Bind v2 approval payloads to every actor/prop/effect frame hash and all named landmarks. Keep the existing domain and payload for v1; use domain `pixel-sprite-frame-approval/v2` and reject cross-version verification.
 
-- [ ] **Step 5: Run suites and commit**
+- [x] **Step 5: Run suites and commit**
 
 Run: `node --test tests/animation-contract.test.mjs tests/frame-approval.test.mjs && npm test`
 
