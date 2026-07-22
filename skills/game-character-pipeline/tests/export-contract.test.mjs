@@ -33,7 +33,7 @@ async function fixture() {
 test('verified pixel outputs publish into a new provenance-bound export revision', async () => {
   const value = await fixture();
   const result = await publishExportRevision(value);
-  assert.equal(path.relative(value.run.root, result.path), path.join('exports', 'revision-0001', 'manifest.json'));
+  assert.equal(path.relative(await fs.realpath(value.run.root), result.path), path.join('exports', 'revision-0001', 'manifest.json'));
   assert.equal(result.document.selectionApprovalSha256, value.bindings.selectionApprovalSha256);
   assert.deepEqual(result.document.artifacts.map(({ path: artifactPath }) => artifactPath), ['animation-contract-export.json', 'clips/walk/walk-00.png', 'validation-report.json']);
   for (const artifact of result.document.artifacts) assert.equal(await sha256File(path.join(path.dirname(result.path), artifact.path)), artifact.sha256);
