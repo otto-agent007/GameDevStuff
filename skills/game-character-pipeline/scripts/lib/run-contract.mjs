@@ -32,7 +32,28 @@ async function stateRoot(projectRoot, { create = false } = {}) {
 
 export async function loadInitializedProject(projectRoot) {
   const state = await stateRoot(projectRoot);
-  return loadProjectContract(path.join(state, 'project.json'));
+  const project = await loadProjectContract(path.join(state, 'project.json'));
+  return { ...project, root: path.resolve(projectRoot), stateRoot: state };
+}
+
+export async function loadRun({ projectRoot, id }) {
+  portableId(id, 'run ID');
+  const project = await loadInitializedProject(projectRoot);
+  const state = await stateRoot(projectRoot);
+  const runsRoot = await ensureRealDirectory(path.join(state, 'runs'), { privateMode: true });
+  const selected = path.join(runsRoot, id);
+  const root = await ensureRealDirectory(selected, { privateMode: true });
+  const document = JSON.parse(await fs.readFile(path.join(root, 'run.json'), 'utf8'));
+  exactObject(document, ['schemaVersion', 'id', 'projectSha256', 'createdAt', 'sourceRequest', 'state', 'artifacts', 'decoder'], 'run');
+  if (document.schemaVersion !== 1 || document.id !== id) throw new Error('run identity is invalid');
+  if (document.projectSha256 !== project.sha256) throw new Error('run project hash mismatch');
+  isoDate(document.createdAt, 'run createdAt');
+  validateSourceRequest(document.sourceRequest, project);
+  if (document.state !== 'created' || !Array.isArray(document.artifacts) || document.artifacts.length !== 0 || document.decoder !== null) {
+    throw new Error('run initial state is invalid');
+  }
+  for (const area of RUN_AREAS) await ensureRealDirectory(path.join(root, area), { privateMode: true });
+  return { id, root, document, sha256: sha256Value(document) };
 }
 
 export async function createProject({ root, contractFile }) {

@@ -323,14 +323,16 @@ git commit -m "feat: add immutable character runs"
 - Create: `skills/game-character-pipeline/tests/generated-still.test.mjs`
 - Create: `skills/game-character-pipeline/tests/png-sequence.test.mjs`
 - Create: `skills/game-character-pipeline/tests/fixtures/png-sequence/manifest.json`
+- Modify: `skills/game-character-pipeline/scripts/lib/run-contract.mjs`
+- Modify: `skills/game-character-pipeline/scripts/cli.mjs`
 
 **Interfaces:**
 - Produces `registerSourceAdapter(kind, decode)` and `decodeMotionSource({ kind, source, run, options })`.
-- Every adapter returns `{ kind, sourceSha256, decoder, canvas, alpha, timeBase, frames, diagnostics }`.
+- Every adapter returns `{ kind, sourceSha256, decoder, canvas, alpha, timeBase, frames, diagnostics, approval: null }` until a later approval revision binds it.
 - Every frame is `{ index, id, path, sha256, width, height, timestampMs, durationMs, sourceRect, duplicateOf }`.
-- Produces `createGenerationHandoff({ project, run, actionId })` with approved anchor hashes, pose delta, palette/canvas constraints, and structured resume argv; the environment performs image generation, then `importGeneratedCandidate` copies returned bytes into immutable source state.
+- Produces `createGenerationHandoff({ project, run, actionId, poseId })` with approved anchor hashes, pose delta, palette/canvas constraints, and structured resume argv; the environment performs image generation, then `importGeneratedCandidate` copies returned bytes and an explicit candidate duration into immutable source state.
 
-- [ ] **Step 1: Write failing ordering and timing tests**
+- [x] **Step 1: Write failing ordering and timing tests**
 
 ```js
 test('PNG intake preserves explicit order and nonuniform durations', async () => {
@@ -352,25 +354,25 @@ test('generated candidates remain unapproved immutable sources', async () => {
 });
 ```
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
 Run: `node --test tests/source-adapter.test.mjs tests/generated-still.test.mjs tests/png-sequence.test.mjs`
 
 Expected: FAIL with missing modules.
 
-- [ ] **Step 3: Implement the closed adapter registry and result validator**
+- [x] **Step 3: Implement the closed adapter registry and result validator**
 
 Reject unregistered kinds, adapter results with absolute paths, absent timing, unordered indices, mismatched canvases, changed hashes, negative timestamps, zero durations, and unknown diagnostics. Freeze the returned result before writing `reports/source.json`.
 
-- [ ] **Step 4: Implement lossless PNG intake**
+- [x] **Step 4: Implement lossless PNG intake**
 
 Read the manifest in declared order, verify every source file is a single-link PNG, copy it into `source/`, decode RGBA with Sharp, preserve alpha, and publish an independently encoded lossless PNG under `work/decoded/`. Mark byte-identical decoded frames with `duplicateOf` but never remove them.
 
-- [ ] **Step 5: Implement built-in image-generation handoff and resume**
+- [x] **Step 5: Implement built-in image-generation handoff and resume**
 
 When no still candidate is supplied, print exit `2` JSON containing the exact approved anchor paths/hashes, action pose delta, negative constraints, canvas/palette requirements, and structured `next.cwd`/`next.argv` with a `<GENERATED_IMAGE>` token. On resume, verify the canonical handoff hash, copy the returned PNG into `source/generated/`, decode it through the same lossless path, and require Frame Studio approval; never treat a chat image URL, generation event, or successful copy as artistic approval.
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 Run: `node --test tests/source-adapter.test.mjs tests/generated-still.test.mjs tests/png-sequence.test.mjs && npm test`
 

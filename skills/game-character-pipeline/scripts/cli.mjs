@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { createProject, createRun, loadInitializedProject } from './lib/run-contract.mjs';
+import { createGenerationHandoff, importGeneratedCandidate, loadGenerationHandoff } from './lib/generated-still.mjs';
+import { decodePngSequence } from './lib/png-sequence.mjs';
+import { createProject, createRun, loadInitializedProject, loadRun } from './lib/run-contract.mjs';
+import { decodeMotionSource, registerSourceAdapter } from './lib/source-adapter.mjs';
 
 const commands = Object.freeze([
   ['studio', 'Open the local Frame Studio authoring surface'],
@@ -29,6 +33,20 @@ function print(value) {
   process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
+function positiveInteger(value) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) throw new Error('duration must be an integer from 1 to 65535');
+  return parsed;
+}
+
+registerSourceAdapter('png-sequence', ({ source, run }) => decodePngSequence({ manifest: source, run }));
+registerSourceAdapter('generated-still', ({ source, run, options }) => importGeneratedCandidate({
+  handoff: options.handoff,
+  source,
+  run,
+  durationMs: options.durationMs
+}));
+
 program
   .command('init')
   .description('Create a versioned character project from a validated brief')
@@ -52,15 +70,70 @@ program
   .requiredOption('--project-dir <directory>', 'project directory')
   .requiredOption('--action <id>', 'contracted action ID')
   .requiredOption('--kind <kind>', 'motion source kind')
+  .option('--resume <run-id>', 'resume an immutable run')
+  .option('--pose <id>', 'generated still pose ID')
+  .option('--handoff <file>', 'canonical generation handoff')
+  .option('--generated-image <file>', 'generated PNG returned by the environment')
+  .option('--duration-ms <milliseconds>', 'explicit candidate duration', positiveInteger)
+  .option('--source-manifest <file>', 'explicit PNG sequence manifest')
   .action(async (options) => {
     const projectDir = path.resolve(options.projectDir);
     const project = await loadInitializedProject(projectDir);
-    const result = await createRun({
-      projectRoot: projectDir,
-      project,
-      sourceRequest: { actionId: options.action, kind: options.kind }
-    });
-    print({ status: 'created', runId: result.id, state: result.document.state });
+    const run = options.resume
+      ? await loadRun({ projectRoot: projectDir, id: options.resume })
+      : await createRun({
+        projectRoot: projectDir,
+        project,
+        sourceRequest: { actionId: options.action, kind: options.kind }
+      });
+
+    if (run.document.sourceRequest.actionId !== options.action || run.document.sourceRequest.kind !== options.kind) {
+      throw new Error('resume arguments do not match the immutable run request');
+    }
+
+    if (options.kind === 'generated-still') {
+      if (!options.pose) throw new Error('generated-still intake requires --pose');
+      if (!options.generatedImage) {
+        const handoff = await createGenerationHandoff({
+          project,
+          run,
+          actionId: options.action,
+          poseId: options.pose,
+          cliPath: fileURLToPath(import.meta.url)
+        });
+        print({
+          status: 'awaiting-generated-image',
+          runId: run.id,
+          handoff: { path: handoff.path, sha256: handoff.sha256 },
+          next: handoff.next
+        });
+        process.exitCode = 2;
+        return;
+      }
+      if (!options.handoff || !options.durationMs) throw new Error('generated-still resume requires handoff and explicit duration');
+      const handoff = await loadGenerationHandoff({ file: options.handoff, run });
+      const result = await decodeMotionSource({
+        kind: 'generated-still',
+        source: path.resolve(options.generatedImage),
+        run,
+        options: { handoff, durationMs: options.durationMs }
+      });
+      print({ status: 'intake-complete', runId: run.id, sourceSha256: result.sourceSha256, approval: result.approval });
+      return;
+    }
+
+    if (options.kind === 'png-sequence' && options.sourceManifest) {
+      const result = await decodeMotionSource({
+        kind: 'png-sequence',
+        source: path.resolve(options.sourceManifest),
+        run,
+        options: {}
+      });
+      print({ status: 'intake-complete', runId: run.id, sourceSha256: result.sourceSha256, approval: result.approval });
+      return;
+    }
+
+    print({ status: options.resume ? 'resumed' : 'created', runId: run.id, state: run.document.state });
   });
 
 for (const [name, description] of commands) {
