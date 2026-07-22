@@ -111,7 +111,11 @@ export function hashString(value) {
 }
 
 export function sha256Value(value) {
-  return hashString(JSON.stringify(stableValue(value)));
+  return hashString(canonicalJson(value));
+}
+
+export function canonicalJson(value) {
+  return JSON.stringify(stableValue(value));
 }
 
 export async function sha256File(file) {

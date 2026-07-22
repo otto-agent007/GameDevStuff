@@ -271,7 +271,7 @@ git commit -m "feat: define character project contracts"
 - Run layout is exactly `source/`, `work/`, `edits/`, `approved/`, `exports/`, `reports/`, and `run.json`.
 - Produces append-only `run.json` with `{ schemaVersion, id, projectSha256, createdAt, sourceRequest, state, artifacts, decoder }`.
 
-- [ ] **Step 1: Write failing immutability, traversal, collision, and resume tests**
+- [x] **Step 1: Write failing immutability, traversal, collision, and resume tests**
 
 ```js
 test('createRun allocates a complete append-only run', async () => {
@@ -286,21 +286,21 @@ test('immutable copy rejects symlinks, links, traversal, and changed retry bytes
 });
 ```
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
 Run: `node --test tests/artifacts.test.mjs tests/run-contract.test.mjs`
 
 Expected: FAIL because both modules are absent.
 
-- [ ] **Step 3: Implement secure append-only writes**
+- [x] **Step 3: Implement secure append-only writes**
 
 Use `lstat`, `realpath`, link-count checks, `COPYFILE_EXCL`, temporary files opened with `wx`, `fsync`, and same-directory hard-link publication. A retry may return the existing artifact only when both its content hash and canonical JSON bytes match exactly.
 
-- [ ] **Step 4: Implement `init` and run allocation**
+- [x] **Step 4: Implement `init` and run allocation**
 
 `init --contract <file> --project-dir <dir>` copies the validated contract to `project.json` and prints `{ status: "created", projectDir, projectSha256 }`. `intake` allocates a Windows-safe run ID and never accepts a caller-selected path outside `<project>/.game-character-pipeline/runs/`.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run: `node --test tests/artifacts.test.mjs tests/run-contract.test.mjs tests/cli.test.mjs && npm test`
 
