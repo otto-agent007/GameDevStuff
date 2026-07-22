@@ -111,6 +111,7 @@ async function verifiedArtifacts(pixelExport) {
   for (const record of pixelExport.artifacts) {
     exactObject(record, ['path', 'sha256'], 'pixel export artifact');
     portableRelativePath(record.path, 'pixel export artifact path');
+    if (record.path === 'validation-report.json') throw new Error('pixel export artifact uses the reserved validation report path');
     hash(record.sha256, 'pixel export artifact hash');
     if (seen.has(record.path)) throw new Error('pixel export artifact paths must be unique');
     seen.add(record.path);
@@ -131,8 +132,9 @@ async function verifiedArtifacts(pixelExport) {
   return artifacts;
 }
 
-export async function publishExportRevision({ run, bindings, pixelExport }) {
+export async function publishExportRevision({ run, bindings, pixelExport, validationReport }) {
   if (!run?.id || !run?.root || !HASH.test(run.sha256 ?? '')) throw new Error('export publication requires an immutable run');
+  if (!validationReport || typeof validationReport !== 'object' || Array.isArray(validationReport) || typeof validationReport.passed !== 'boolean' || !Array.isArray(validationReport.failures) || !Array.isArray(validationReport.warnings)) throw new Error('export publication requires one complete objective validation report');
   exactObject(bindings, ['projectSha256', 'sourceSha256', 'editSha256', 'selectionApprovalSha256', 'snapReceiptSha256', 'frameApprovalSha256'], 'export bindings');
   for (const [name, value] of Object.entries(bindings)) hash(value, `export ${name}`);
   const artifacts = await verifiedArtifacts(pixelExport);
@@ -154,6 +156,9 @@ export async function publishExportRevision({ run, bindings, pixelExport }) {
       if (copiedHash !== artifact.sha256) throw new Error(`artifact changed during export publication: ${artifact.path}`);
       published.push({ path: artifact.path, sha256: copiedHash });
     }
+    const validationFile = path.join(stage, 'validation-report.json');
+    await fs.writeFile(validationFile, canonicalJson(validationReport), { flag: 'wx' });
+    published.push({ path: 'validation-report.json', sha256: await sha256File(validationFile) });
     const document = {
       schemaVersion: 1,
       kind: 'pixel-production-export',

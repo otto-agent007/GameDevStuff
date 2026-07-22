@@ -25,7 +25,8 @@ async function fixture() {
       projectSha256: HASH('2'), sourceSha256: HASH('3'), editSha256: HASH('4'), selectionApprovalSha256: HASH('5'),
       snapReceiptSha256: HASH('6'), frameApprovalSha256: HASH('7')
     },
-    pixelExport: { root: pixelRoot, artifacts }
+    pixelExport: { root: pixelRoot, artifacts },
+    validationReport: { passed: true, failures: [], warnings: [], measurements: { scale: 2 } }
   };
 }
 
@@ -34,7 +35,7 @@ test('verified pixel outputs publish into a new provenance-bound export revision
   const result = await publishExportRevision(value);
   assert.match(result.path, /exports\/revision-0001\/manifest\.json$/);
   assert.equal(result.document.selectionApprovalSha256, value.bindings.selectionApprovalSha256);
-  assert.deepEqual(result.document.artifacts.map(({ path: artifactPath }) => artifactPath), ['animation-contract-export.json', 'clips/walk/walk-00.png']);
+  assert.deepEqual(result.document.artifacts.map(({ path: artifactPath }) => artifactPath), ['animation-contract-export.json', 'clips/walk/walk-00.png', 'validation-report.json']);
   for (const artifact of result.document.artifacts) assert.equal(await sha256File(path.join(path.dirname(result.path), artifact.path)), artifact.sha256);
 });
 

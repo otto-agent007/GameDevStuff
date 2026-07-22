@@ -411,8 +411,14 @@ function approvalVersion(file) {
   return Number(match[1]);
 }
 
-async function productionArtifacts(root) {
-  return (await flatDirectoryManifest(root, 'pixel production export')).map(({ name, sha256: artifactSha256 }) => ({ path: name, sha256: artifactSha256 }));
+async function productionArtifacts(root, areas) {
+  const artifacts = [];
+  for (const area of areas) {
+    for (const { name, sha256: artifactSha256 } of await flatDirectoryManifest(path.join(root, area), `pixel production ${area}`)) {
+      artifacts.push({ path: `${area}/${name}`, sha256: artifactSha256 });
+    }
+  }
+  return artifacts;
 }
 
 async function publishDirectory(stage, target, label) {
@@ -1331,7 +1337,7 @@ program.command('produce-contract')
       ...productionBinding,
       receipt: receiptSelection,
       frameApproval: { path: frameApprovalFile, sha256: verifiedApproval.sha256 },
-      exports: { root: path.dirname(exported.metadata), metadata: exported.metadata, artifacts: await productionArtifacts(path.dirname(exported.metadata)) },
+      exports: { root: outputRoot, metadata: exported.metadata, artifacts: await productionArtifacts(outputRoot, ['normalized', 'export']) },
       report
     });
   });

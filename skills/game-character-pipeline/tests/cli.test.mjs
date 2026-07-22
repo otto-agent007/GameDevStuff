@@ -28,6 +28,13 @@ test('produce command exposes authenticated delegation and resume inputs', async
   }
 });
 
+test('validate and audit commands expose run and repeatability inputs', async () => {
+  const validate = await execFile(process.execPath, ['scripts/cli.mjs', 'validate', '--help'], { cwd: packageDir });
+  for (const option of ['--project-dir', '--run', '--revision']) assert.match(validate.stdout, new RegExp(option));
+  const audit = await execFile(process.execPath, ['scripts/cli.mjs', 'audit', '--help'], { cwd: packageDir });
+  for (const option of ['--project-dir', '--run', '--repeat']) assert.match(audit.stdout, new RegExp(option));
+});
+
 test('skill validation fails clearly when the official validator is unavailable', async () => {
   const codexRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'game-character-validator-'));
   try {

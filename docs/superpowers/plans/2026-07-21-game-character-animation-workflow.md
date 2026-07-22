@@ -927,7 +927,7 @@ git commit -m "feat: orchestrate authenticated pixel production"
 - Produces `auditRun({ run, project, expected }) -> { passed, deterministicHashes, evidence, failures, reviews }`.
 - Produces `compareRuns(left, right)` that compares only deterministic derivatives while separately reporting timestamps, run IDs, and approval identities.
 
-- [ ] **Step 1: Write failing repeatability and tamper tests**
+- [x] **Step 1: Write failing repeatability and tamper tests**
 
 ```js
 test('two equivalent runs have identical deterministic artifact hashes', async () => {
@@ -941,21 +941,21 @@ test('audit fails on interpolation, timing defaults, drift, clipping, and broken
 });
 ```
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
 Run: `node --test tests/audit.test.mjs`
 
 Expected: FAIL with missing audit module.
 
-- [ ] **Step 3: Implement deterministic audit comparison**
+- [x] **Step 3: Implement deterministic audit comparison**
 
 Normalize reports by excluding explicitly nondeterministic envelope fields, then compare decoded frames, edit renders, normalized tracks, sheets, JSON, previews, contact sheets, and validation report hashes. Report failures for source/approval/output tampering, interpolation, missing timing, per-frame scale, pivot/socket drift, foot/travel disagreement, clipping, membership changes, and invalid loop semantics.
 
-- [ ] **Step 4: Wire `validate` and `audit` commands**
+- [x] **Step 4: Wire `validate` and `audit` commands**
 
 `validate` checks one run and exits `3` for objective failures or `4` for subjective review items. `audit --run <id> --repeat <other-id>` writes a new report and succeeds only when both runs pass and deterministic hashes match.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run: `node --test tests/audit.test.mjs tests/cli.test.mjs && npm test`
 

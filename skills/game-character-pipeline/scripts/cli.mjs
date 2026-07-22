@@ -12,6 +12,7 @@ import {
   verifyApproval,
   writeApproval
 } from './lib/approval.mjs';
+import { auditRun, compareRuns, loadAuditExpected, recordAuditReport, recordProductionValidation } from './lib/audit.mjs';
 import { createGenerationHandoff, importGeneratedCandidate, loadGenerationHandoff } from './lib/generated-still.mjs';
 import { decodeAnimatedImage } from './lib/animated-image.mjs';
 import { createPixelProductionContract, publishExportRevision } from './lib/export-contract.mjs';
@@ -21,17 +22,6 @@ import { createProject, createRun, loadInitializedProject, loadRun } from './lib
 import { decodeMotionSource, registerSourceAdapter } from './lib/source-adapter.mjs';
 import { decodeVideo } from './lib/video.mjs';
 import { startStudioServer } from './studio/server.mjs';
-
-const commands = Object.freeze([
-  ['validate', 'Validate one complete character animation run'],
-  ['audit', 'Compare reproducible run evidence']
-]);
-
-function unavailable(name) {
-  return () => {
-    throw new Error(`${name} command is not available in this package revision`);
-  };
-}
 
 const program = new Command()
   .name('game-character-pipeline')
@@ -315,7 +305,14 @@ program
         snapReceiptSha256: delegated.receipt.sha256,
         frameApprovalSha256: delegated.frameApproval.sha256
       },
-      pixelExport: delegated.exports
+      pixelExport: delegated.exports,
+      validationReport: delegated.report
+    });
+    const validation = await recordProductionValidation({
+      run,
+      exportRevision: published.revision,
+      exportManifestSha256: published.sha256,
+      validationReport: delegated.report
     });
     print({
       status: 'complete',
@@ -324,13 +321,60 @@ program
       receipt: delegated.receipt,
       frameApproval: delegated.frameApproval,
       export: { path: published.path, sha256: published.sha256, revision: published.revision },
+      validation: { path: validation.path, sha256: validation.sha256 },
       report: delegated.report
     });
   });
 
-for (const [name, description] of commands) {
-  program.command(name).description(description).action(unavailable(name));
-}
+program
+  .command('validate')
+  .description('Validate one complete character animation run')
+  .requiredOption('--project-dir <directory>', 'project directory')
+  .requiredOption('--run <id>', 'immutable run ID')
+  .option('--revision <number>', 'published export revision', revisionInteger)
+  .action(async (options) => {
+    const projectDir = path.resolve(options.projectDir);
+    const project = await loadInitializedProject(projectDir);
+    const run = await loadRun({ projectRoot: projectDir, id: options.run });
+    const expected = await loadAuditExpected({ run, revision: options.revision });
+    const report = await auditRun({ run, project, expected });
+    const written = await recordAuditReport({ run, kind: 'validation-audit', value: { report } });
+    const status = report.failures.length > 0 ? 'objective-failure' : report.reviews.length > 0 ? 'review-required' : 'complete';
+    print({ status, runId: run.id, audit: { path: written.path, sha256: written.sha256, revision: written.revision }, report });
+    if (report.failures.length > 0) process.exitCode = 3;
+    else if (report.reviews.length > 0) process.exitCode = 4;
+  });
+
+program
+  .command('audit')
+  .description('Compare reproducible run evidence')
+  .requiredOption('--project-dir <directory>', 'project directory')
+  .requiredOption('--run <id>', 'first immutable run ID')
+  .requiredOption('--repeat <id>', 'equivalent repeat run ID')
+  .action(async (options) => {
+    const projectDir = path.resolve(options.projectDir);
+    const project = await loadInitializedProject(projectDir);
+    const [leftRun, rightRun] = await Promise.all([
+      loadRun({ projectRoot: projectDir, id: options.run }),
+      loadRun({ projectRoot: projectDir, id: options.repeat })
+    ]);
+    const [leftExpected, rightExpected] = await Promise.all([
+      loadAuditExpected({ run: leftRun }),
+      loadAuditExpected({ run: rightRun })
+    ]);
+    const [left, right] = await Promise.all([
+      auditRun({ run: leftRun, project, expected: leftExpected }),
+      auditRun({ run: rightRun, project, expected: rightExpected })
+    ]);
+    const comparison = compareRuns(left, right);
+    const written = await recordAuditReport({ run: leftRun, kind: 'reproducibility-audit', value: { repeatRunId: rightRun.id, left, right, comparison } });
+    const reviews = [...left.reviews, ...right.reviews];
+    const objectiveFailure = left.failures.length > 0 || right.failures.length > 0 || comparison.changedDeterministicArtifacts.length > 0;
+    const status = objectiveFailure ? 'objective-failure' : reviews.length > 0 ? 'review-required' : 'complete';
+    print({ status, runId: leftRun.id, repeatRunId: rightRun.id, audit: { path: written.path, sha256: written.sha256, revision: written.revision }, comparison });
+    if (objectiveFailure) process.exitCode = 3;
+    else if (reviews.length > 0) process.exitCode = 4;
+  });
 
 try {
   await program.parseAsync(process.argv);
