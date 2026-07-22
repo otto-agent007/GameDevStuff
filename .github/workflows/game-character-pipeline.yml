@@ -33,6 +33,9 @@ jobs:
           cache: npm
           cache-dependency-path: skills/game-character-pipeline/npm-shrinkwrap.json
       - run: npm ci
+      - name: Install locked pixel pipeline dependencies
+        run: npm ci --ignore-scripts
+        working-directory: skills/pixel-sprite-animation-pipeline
       - run: npm test
       - name: Check dependency and fixture license ledger
         run: node --test tests/cli.test.mjs
@@ -84,6 +87,9 @@ jobs:
           cache: npm
           cache-dependency-path: skills/game-character-pipeline/npm-shrinkwrap.json
       - run: npm ci
+      - name: Install locked pixel pipeline dependencies
+        run: npm ci --ignore-scripts
+        working-directory: skills/pixel-sprite-animation-pipeline
       - run: npm run acceptance
         env:
           ACCEPTANCE_ARTIFACT_DIR: ${{ github.workspace }}/acceptance-artifacts
