@@ -7,7 +7,9 @@ const timeline = document.querySelector('frame-timeline');
 const canvas = document.querySelector('frame-canvas');
 const status = document.querySelector('#status');
 const playButton = document.querySelector('#play');
+const replayButton = document.querySelector('#replay');
 let session;
+let action;
 let frames = [];
 let selectedIndex = 0;
 let playing = false;
@@ -20,6 +22,31 @@ let renderReceipt = null;
 const titleCase = (value) => value.split(/[-_]/).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
 const frameUrl = (sha256) => `/api/frame/${sha256}`;
 const includedFrames = () => frames.filter((frame) => frame.included !== false);
+const activeFrameIndices = () => frames.flatMap((frame, index) => frame.included !== false ? [index] : []);
+const firstActiveIndex = () => activeFrameIndices()[0] ?? null;
+const lastActiveIndex = () => activeFrameIndices().at(-1) ?? null;
+
+function adjacentActiveIndex(index, direction) {
+  const active = activeFrameIndices();
+  if (!active.length) return null;
+  if (direction > 0) return active.find((candidate) => candidate > index) ?? active[0];
+  return active.findLast((candidate) => candidate < index) ?? active.at(-1);
+}
+
+function setFrameInclusion(index, included) {
+  const frame = frames[index];
+  if (!frame || frame.included === included) return false;
+  if (!included && includedFrames().length === 1) {
+    status.textContent = 'An action must retain at least one active frame.';
+    return false;
+  }
+  frame.included = included;
+  frame.edit.included = included;
+  setDirty(true);
+  render();
+  status.textContent = `${included ? 'Restored' : 'Excluded'} ${frame.id} ${included ? 'to' : 'from'} the action; save to create a revision.`;
+  return true;
+}
 
 function updateApprovalControls() {
   const hasSavedEdit = Boolean(session?.editRevision);
@@ -67,11 +94,17 @@ function stopPlayback() {
 function updateCanvas() {
   const frame = frames[selectedIndex];
   if (!frame) return;
-  const previous = frames[(selectedIndex - 1 + frames.length) % frames.length];
-  const next = frames[(selectedIndex + 1) % frames.length];
+  const previousIndex = adjacentActiveIndex(selectedIndex, -1);
+  const nextIndex = adjacentActiveIndex(selectedIndex, 1);
+  const firstIndex = firstActiveIndex();
+  const lastIndex = lastActiveIndex();
+  const previous = frames[previousIndex] ?? frame;
+  const next = frames[nextIndex] ?? frame;
+  const first = frames[firstIndex] ?? frame;
+  const last = frames[lastIndex] ?? frame;
   canvas.setAttribute('frame', frame.url);
-  canvas.setAttribute('first', frames[0].url);
-  canvas.setAttribute('last', frames.at(-1).url);
+  canvas.setAttribute('first', first.url);
+  canvas.setAttribute('last', last.url);
   canvas.markerState = { markers: frame.edit.markers, canvas: session.project.canvas };
   if (document.querySelector('#overlay-previous').checked) canvas.setAttribute('previous', previous.url);
   else canvas.removeAttribute('previous');
@@ -81,13 +114,18 @@ function updateCanvas() {
 
 function updateReadout() {
   const frame = frames[selectedIndex];
-  const total = includedFrames().reduce((sum, item) => sum + item.edit.durationMs, 0);
-  document.querySelector('#frame-count').textContent = `${frames.length} frames`;
+  const active = includedFrames();
+  const total = active.reduce((sum, item) => sum + item.edit.durationMs, 0);
+  document.querySelector('#frame-count').textContent = `${active.length} active / ${frames.length} source`;
   document.querySelector('#selected-name').textContent = frame?.id ?? '—';
   document.querySelector('#frame-position').textContent = `Frame ${frames.length ? selectedIndex + 1 : 0} of ${frames.length}`;
   document.querySelector('#total-duration').textContent = `${total} ms total`;
   document.querySelector('#selection-frame').textContent = frame?.id ?? '—';
   document.querySelector('#selection-duration').textContent = frame ? `${frame.edit.durationMs} ms` : '—';
+  const inclusionButton = document.querySelector('#toggle-frame-inclusion');
+  const isIncluded = frame?.included !== false;
+  inclusionButton.textContent = isIncluded ? 'Exclude from action' : 'Restore to action';
+  inclusionButton.dataset.included = String(isIncluded);
   document.querySelector('#scrub-progress').value = frames.length ? (selectedIndex + 1) / frames.length : 0;
 }
 
@@ -111,10 +149,24 @@ function scheduleNext() {
   if (!playing) return;
   const current = frames[selectedIndex];
   playbackTimer = setTimeout(() => {
-    const nextIndex = (selectedIndex + 1) % frames.length;
-    selectFrame(nextIndex);
+    const atEnd = selectedIndex === lastActiveIndex();
+    if (atEnd && action?.loopMode !== 'loop') {
+      stopPlayback();
+      return;
+    }
+    selectFrame(atEnd ? firstActiveIndex() : adjacentActiveIndex(selectedIndex, 1));
     scheduleNext();
   }, current.edit.durationMs);
+}
+
+function startPlayback({ fromStart = false } = {}) {
+  if (!includedFrames().length) return;
+  stopPlayback();
+  if (fromStart) selectFrame(firstActiveIndex());
+  else if (frames[selectedIndex]?.included === false) selectFrame(adjacentActiveIndex(selectedIndex, 1));
+  playing = true;
+  playButton.textContent = 'Pause';
+  scheduleNext();
 }
 
 function togglePlayback() {
@@ -122,9 +174,7 @@ function togglePlayback() {
     stopPlayback();
     return;
   }
-  playing = true;
-  playButton.textContent = 'Pause';
-  scheduleNext();
+  startPlayback();
 }
 
 function setBooleanOverlay(input, attribute) {
@@ -136,11 +186,16 @@ function setBooleanOverlay(input, attribute) {
 
 timeline.addEventListener('frame-select', ({ detail }) => selectFrame(detail.index, { manual: true, focus: detail.focus }));
 timeline.addEventListener('frame-include', ({ detail }) => {
-  frames[detail.index].included = detail.included;
-  frames[detail.index].edit.included = detail.included;
-  setDirty(true);
-  render();
-  status.textContent = `${detail.included ? 'Included' : 'Excluded'} ${frames[detail.index].id}; save to create a revision.`;
+  setFrameInclusion(detail.index, detail.included);
+});
+timeline.addEventListener('frame-transport', ({ detail }) => {
+  const targets = {
+    previous: adjacentActiveIndex(selectedIndex, -1),
+    next: adjacentActiveIndex(selectedIndex, 1),
+    first: firstActiveIndex(),
+    last: lastActiveIndex()
+  };
+  selectFrame(targets[detail.command], { manual: true, focus: true });
 });
 timeline.addEventListener('frame-duplicate', ({ detail }) => {
   const original = frames[detail.index];
@@ -160,8 +215,13 @@ timeline.addEventListener('frame-label', ({ detail }) => {
 });
 
 playButton.addEventListener('click', togglePlayback);
-document.querySelector('#previous-frame').addEventListener('click', () => selectFrame((selectedIndex - 1 + frames.length) % frames.length, { manual: true }));
-document.querySelector('#next-frame').addEventListener('click', () => selectFrame((selectedIndex + 1) % frames.length, { manual: true }));
+replayButton.addEventListener('click', () => startPlayback({ fromStart: true }));
+document.querySelector('#toggle-frame-inclusion').addEventListener('click', () => {
+  const frame = frames[selectedIndex];
+  if (frame) setFrameInclusion(selectedIndex, frame.included === false);
+});
+document.querySelector('#previous-frame').addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, -1), { manual: true }));
+document.querySelector('#next-frame').addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, 1), { manual: true }));
 document.querySelector('#zoom').addEventListener('input', (event) => {
   const zoom = Math.max(1, Math.min(12, Math.trunc(Number(event.target.value) || 1)));
   event.target.value = String(zoom);
@@ -278,10 +338,10 @@ document.querySelector('#reject-revision').addEventListener('click', () => submi
 document.addEventListener('keydown', (event) => {
   if (event.target.matches('input, textarea, select')) return;
   const keyActions = {
-    ArrowLeft: () => selectFrame(selectedIndex - 1, { manual: true, focus: true }),
-    ArrowRight: () => selectFrame(selectedIndex + 1, { manual: true, focus: true }),
-    Home: () => selectFrame(0, { manual: true, focus: true }),
-    End: () => selectFrame(frames.length - 1, { manual: true, focus: true })
+    ArrowLeft: () => selectFrame(adjacentActiveIndex(selectedIndex, -1), { manual: true, focus: true }),
+    ArrowRight: () => selectFrame(adjacentActiveIndex(selectedIndex, 1), { manual: true, focus: true }),
+    Home: () => selectFrame(firstActiveIndex(), { manual: true, focus: true }),
+    End: () => selectFrame(lastActiveIndex(), { manual: true, focus: true })
   };
   if (Object.hasOwn(keyActions, event.key)) {
     event.preventDefault();
@@ -291,10 +351,7 @@ document.addEventListener('keydown', (event) => {
     togglePlayback();
   } else if (event.key === 'Delete' && frames[selectedIndex]) {
     event.preventDefault();
-    frames[selectedIndex].included = false;
-    frames[selectedIndex].edit.included = false;
-    setDirty(true);
-    render();
+    setFrameInclusion(selectedIndex, false);
   }
 });
 
@@ -303,7 +360,7 @@ async function initialize() {
     const response = await fetch('/api/session');
     if (!response.ok) throw new Error(`session returned ${response.status}`);
     session = await response.json();
-    const action = session.project.actions.find(({ id }) => id === session.actionId);
+    action = session.project.actions.find(({ id }) => id === session.actionId);
     const actionTracks = action?.tracks ?? ['actor'];
     frames = session.source.frames.map((frame) => ({
       ...frame,

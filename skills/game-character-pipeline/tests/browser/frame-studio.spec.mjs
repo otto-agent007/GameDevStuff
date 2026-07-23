@@ -28,11 +28,11 @@ function spriteFrame(index) {
   return sharp(pixels, { raw: { width, height, channels: 4 } }).png().toBuffer();
 }
 
-async function startFixture() {
+async function startFixture(actionId = 'idle') {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'game-character-frame-studio-browser-'));
   const projectRoot = path.join(root, 'project');
   const project = await createProject({ root: projectRoot, contractFile: projectFixture });
-  const run = await createRun({ projectRoot, project, sourceRequest: { actionId: 'idle', kind: 'png-sequence' } });
+  const run = await createRun({ projectRoot, project, sourceRequest: { actionId, kind: 'png-sequence' } });
   const definitions = [
     { id: 'step-contact', durationMs: 80 },
     { id: 'step-pass', durationMs: 120 },
@@ -115,7 +115,7 @@ test('renders the complete editor shell and source timeline', async ({ page }, t
 
 test('plays authored durations and supports keyboard frame selection', async ({ page }) => {
   await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact');
-  await page.getByRole('button', { name: 'Play' }).click();
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
   await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-pass', { timeout: 180 });
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2');
@@ -123,6 +123,114 @@ test('plays authored durations and supports keyboard frame selection', async ({ 
   await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact');
   await page.keyboard.press('End');
   await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2');
+});
+
+test('replay starts a held final pose from frame one', async ({ page }) => {
+  await page.keyboard.press('End');
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2');
+
+  const replayedFrame = await page.getByRole('button', { name: 'Replay', exact: true }).evaluate((button) => {
+    button.click();
+    return document.querySelector('[aria-current="true"]')?.dataset.frameId;
+  });
+
+  expect(replayedFrame).toBe('step-contact');
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-pass', { timeout: 180 });
+});
+
+test('replay restarts active playback from frame one', async ({ page }) => {
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-pass', { timeout: 180 });
+
+  const replayedFrame = await page.getByRole('button', { name: 'Replay', exact: true }).evaluate((button) => {
+    button.click();
+    return document.querySelector('[aria-current="true"]')?.dataset.frameId;
+  });
+
+  expect(replayedFrame).toBe('step-contact');
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-pass', { timeout: 180 });
+});
+
+test('skips excluded frames in playback and transport', async ({ page }) => {
+  await page.getByRole('button', { name: 'Exclude step-pass', exact: true }).click();
+  await expect(page.getByText('2 active / 3 source', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-frame-id="step-pass"]')).toContainText('Excluded');
+
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', { timeout: 180 });
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+
+  await page.locator('[data-frame-id="step-pass"] .frame-thumb').click();
+  await expect(page.getByRole('button', { name: 'Restore to action', exact: true })).toBeVisible();
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact');
+
+  await page.locator('[data-frame-id="step-pass"] .frame-thumb').click();
+  await page.getByRole('button', { name: 'Next frame', exact: true }).click();
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2');
+  await page.getByRole('button', { name: 'Previous frame', exact: true }).click();
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact');
+
+  const replayedFrame = await page.getByRole('button', { name: 'Replay', exact: true }).evaluate((button) => {
+    button.click();
+    return document.querySelector('[aria-current="true"]')?.dataset.frameId;
+  });
+  expect(replayedFrame).toBe('step-contact');
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', { timeout: 180 });
+});
+
+test('uses active neighbors for onion skin and cycle seams', async ({ page }) => {
+  await page.getByRole('button', { name: 'Exclude step-pass', exact: true }).click();
+  const finalUrl = await page.locator('[data-frame-id="step-contact-2"] img').getAttribute('src');
+  await page.getByLabel('Next', { exact: true }).check();
+  await expect(page.locator('frame-canvas')).toHaveAttribute('next', finalUrl);
+
+  await page.getByRole('button', { name: 'Exclude step-contact', exact: true }).click();
+  await page.locator('[data-frame-id="step-contact-2"] .frame-thumb').click();
+  await page.getByLabel('First / last seam', { exact: true }).check();
+  await expect(page.locator('frame-canvas')).toHaveAttribute('first', finalUrl);
+  await expect(page.locator('frame-canvas')).toHaveAttribute('last', finalUrl);
+});
+
+test('guards the final active frame and restores excluded frames', async ({ page }) => {
+  await page.getByRole('button', { name: 'Exclude step-pass', exact: true }).click();
+  await page.getByRole('button', { name: 'Exclude step-contact-2', exact: true }).click();
+  await page.locator('[data-frame-id="step-contact"] .frame-thumb').click();
+  await page.getByRole('button', { name: 'Exclude from action', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('An action must retain at least one active frame.');
+  await expect(page.locator('[data-frame-id="step-contact"]')).toHaveAttribute('data-included', 'true');
+
+  await page.locator('[data-frame-id="step-pass"] .frame-thumb').click();
+  await page.getByRole('button', { name: 'Restore to action', exact: true }).click();
+  await expect(page.locator('[data-frame-id="step-pass"]')).toHaveAttribute('data-included', 'true');
+  await expect(page.getByText('2 active / 3 source', { exact: true })).toBeVisible();
+});
+
+test('persists saved exclusion across reloads', async ({ page }) => {
+  await page.getByRole('button', { name: 'Exclude step-pass', exact: true }).click();
+  await page.getByRole('button', { name: 'Save revision' }).click();
+  await expect(page.getByRole('status')).toContainText(/Saved edit revision \d+/);
+  await page.reload();
+
+  await expect(page.locator('[data-frame-id="step-pass"]')).toHaveAttribute('data-included', 'false');
+  await expect(page.getByText('2 active / 3 source', { exact: true })).toBeVisible();
+  const session = await page.evaluate(() => fetch('/api/session').then((response) => response.json()));
+  expect(session.source.frames).toHaveLength(3);
+  expect(session.edit.frames.find(({ frameId }) => frameId === 'step-pass').included).toBe(false);
+});
+
+test('hold-last playback stops on the final authored frame', async ({ page }) => {
+  await studio.close();
+  await fs.rm(root, { recursive: true, force: true });
+  await startFixture('unlock');
+  await page.goto(studio.origin);
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', { timeout: 500 });
+  await page.waitForTimeout(250);
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2');
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toHaveText('Play');
 });
 
 test('uses integer zoom, disables interpolation, and toggles overlays', async ({ page }) => {
@@ -207,8 +315,8 @@ test('fits desktop and narrow viewports with visible focus and reduced motion', 
   await page.reload();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBe(0);
-  await page.getByRole('button', { name: 'Play' }).focus();
-  const outline = await page.getByRole('button', { name: 'Play' }).evaluate((element) => getComputedStyle(element).outlineStyle);
+  await page.getByRole('button', { name: 'Play', exact: true }).focus();
+  const outline = await page.getByRole('button', { name: 'Play', exact: true }).evaluate((element) => getComputedStyle(element).outlineStyle);
   expect(outline).not.toBe('none');
   const transitions = await page.locator('.app-shell').evaluate((element) => getComputedStyle(element).transitionDuration);
   expect(transitions).toBe('0s');

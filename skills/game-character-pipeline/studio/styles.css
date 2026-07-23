@@ -103,6 +103,7 @@ frame-timeline { display: grid; gap: 8px; padding-top: 12px; }
 .frame-duration { text-align: right; }
 .frame-copy input { grid-column: 1 / -1; min-width: 0; margin-top: 4px; padding: 4px 6px; border: 1px solid transparent; border-radius: 3px; background: #0d1417; color: var(--text); font-size: 10px; }
 .contact-span { grid-column: 1 / -1; overflow: hidden; color: var(--amber); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.frame-state { grid-column: 1 / -1; color: var(--danger); font-size: 8px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .frame-actions { display: grid; gap: 5px; }
 .frame-actions button { width: 28px; height: 26px; padding: 0; color: var(--muted); font-size: 12px; }
 
@@ -150,6 +151,8 @@ frame-canvas canvas { display: block; max-width: 100%; height: auto; image-rende
 .selection-card dl div { display: flex; justify-content: space-between; gap: 12px; }
 .selection-card dt { color: var(--muted); font-size: 11px; }
 .selection-card dd { max-width: 150px; margin: 0; overflow: hidden; color: var(--text); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.selection-inclusion-button { width: 100%; margin-top: 12px; border-color: var(--danger); color: #ff93a8; }
+.selection-inclusion-button[data-included="false"] { border-color: var(--cyan); color: var(--cyan); }
 
 .authoring-card { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
 .authoring-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -218,4 +221,209 @@ frame-canvas canvas { display: block; max-width: 100%; height: auto; image-rende
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition-duration: 0s !important; }
+}
+
+.recovery-shell {
+  min-height: 100vh;
+  padding: 20px;
+  transition: opacity 180ms ease;
+}
+
+.recovery-shell[data-loading="true"] {
+  opacity: 0.65;
+}
+
+.recovery-topbar,
+.recovery-statusbar {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.recovery-topbar {
+  margin-bottom: 16px;
+}
+
+.recovery-main {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(340px, 1.3fr);
+}
+
+.recovery-overlay-panel,
+.recovery-approval-panel {
+  align-self: start;
+}
+
+.recovery-overlay-stage {
+  align-items: center;
+  background: #0b1115;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  min-height: 260px;
+  overflow: auto;
+  padding: 16px;
+}
+
+.recovery-overlay-stage img,
+.candidate-card img {
+  image-rendering: pixelated;
+  max-width: 100%;
+}
+
+.recovery-overlay-stage img {
+  min-width: min(100%, 360px);
+}
+
+.recovery-guidance,
+.validation-summary,
+.empty-state {
+  color: var(--muted);
+}
+
+.candidate-list {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.candidate-card,
+.sequence-item {
+  background: color-mix(in srgb, var(--panel) 76%, #080d10);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.candidate-card img {
+  background: #091015;
+  border-radius: 8px;
+  display: block;
+  height: 112px;
+  margin: 10px auto;
+  object-fit: contain;
+  width: 100%;
+}
+
+.candidate-select {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.candidate-order-actions,
+.approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.candidate-order-actions button {
+  flex: 1;
+}
+
+.sequence-list {
+  display: grid;
+  gap: 12px;
+}
+
+.sequence-item {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.sequence-item h3,
+.sequence-item fieldset {
+  grid-column: 1 / -1;
+}
+
+.component-role-group {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px;
+}
+
+.field {
+  display: grid;
+  gap: 5px;
+}
+
+.field input,
+.field select,
+.field textarea {
+  min-width: 0;
+  width: 100%;
+}
+
+.recovery-hashes {
+  display: grid;
+  gap: 8px;
+}
+
+.recovery-hashes div {
+  display: grid;
+  gap: 4px;
+}
+
+.recovery-hashes dd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.recovery-approval-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.recovery-statusbar {
+  background: #0a1115;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  bottom: 10px;
+  margin-top: 16px;
+  min-height: 44px;
+  padding: 10px 14px;
+  position: sticky;
+}
+
+.recovery-shell :is(button, input, select, textarea):focus-visible {
+  outline: 3px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  .recovery-shell {
+    padding: 10px;
+  }
+
+  .recovery-topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .recovery-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sequence-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sequence-item > * {
+    grid-column: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recovery-shell {
+    transition-duration: 0s;
+  }
 }

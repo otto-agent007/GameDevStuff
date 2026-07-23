@@ -65,12 +65,21 @@ export class FrameTimeline extends HTMLElement {
     const row = this.#rowFrom(event);
     if (!row || event.target.matches('input')) return;
     const index = Number(row.dataset.index);
-    const targets = { ArrowLeft: index - 1, ArrowUp: index - 1, ArrowRight: index + 1, ArrowDown: index + 1, Home: 0, End: this.#frames.length - 1 };
-    if (Object.hasOwn(targets, event.key)) {
+    const transport = {
+      ArrowLeft: 'previous',
+      ArrowUp: 'previous',
+      ArrowRight: 'next',
+      ArrowDown: 'next',
+      Home: 'first',
+      End: 'last'
+    };
+    if (Object.hasOwn(transport, event.key)) {
       event.preventDefault();
-      this.#emit('frame-select', { index: Math.max(0, Math.min(targets[event.key], this.#frames.length - 1)), focus: true });
+      event.stopPropagation();
+      this.#emit('frame-transport', { command: transport[event.key] });
     } else if (event.key === 'Delete') {
       event.preventDefault();
+      event.stopPropagation();
       this.#emit('frame-include', { index, included: false });
     }
   }
@@ -120,6 +129,12 @@ export class FrameTimeline extends HTMLElement {
         contacts.className = 'contact-span';
         contacts.textContent = frame.edit.contacts.join(' · ');
         copy.append(contacts);
+      }
+      if (frame.included === false) {
+        const state = document.createElement('span');
+        state.className = 'frame-state';
+        state.textContent = 'Excluded';
+        copy.append(state);
       }
 
       const actions = document.createElement('div');
