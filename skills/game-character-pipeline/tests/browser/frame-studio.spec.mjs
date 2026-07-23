@@ -224,15 +224,15 @@ test('persists saved exclusion across reloads', async ({ page }) => {
 test('A/B auditioning keeps saved A immutable and working B editable', async ({ page }) => {
   await page.getByRole('button', { name: 'Save revision' }).click();
   await expect(page.getByRole('status')).toContainText('Saved edit revision 1.');
-  await page.getByLabel('Duration step-contact').fill('96');
-  await page.getByLabel('Duration step-contact').blur();
+  await page.getByLabel('Duration step-contact', { exact: true }).fill('96');
+  await page.getByLabel('Duration step-contact', { exact: true }).blur();
   await expect(page.getByRole('status')).toContainText('Updated authored frame duration.');
 
   await page.getByRole('button', { name: 'Review A', exact: true }).click();
 
   await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact');
-  await expect(page.getByLabel('Duration step-contact')).toHaveValue('80');
-  await expect(page.getByLabel('Duration step-contact')).toBeDisabled();
+  await expect(page.getByLabel('Duration step-contact', { exact: true })).toHaveValue('80');
+  await expect(page.getByLabel('Duration step-contact', { exact: true })).toBeDisabled();
   await expect(page.getByLabel('Label step-contact', { exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Exclude step-contact', exact: true })).toBeDisabled();
   await expect(page.locator('#review-a-state')).toContainText('Revision 1');
@@ -240,8 +240,8 @@ test('A/B auditioning keeps saved A immutable and working B editable', async ({ 
 
   await page.getByRole('button', { name: 'Review B', exact: true }).click();
 
-  await expect(page.getByLabel('Duration step-contact')).toHaveValue('96');
-  await expect(page.getByLabel('Duration step-contact')).toBeEnabled();
+  await expect(page.getByLabel('Duration step-contact', { exact: true })).toHaveValue('96');
+  await expect(page.getByLabel('Duration step-contact', { exact: true })).toBeEnabled();
   await expect(page.getByLabel('Label step-contact', { exact: true })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Exclude step-contact', exact: true })).toBeEnabled();
 });
@@ -384,7 +384,7 @@ test('authors landmarks, contact intervals, travel, timing, and explicit tracks'
   await page.getByLabel('Planted left foot').check();
   await expect(page.getByText('left-foot', { exact: true })).toBeVisible();
   await page.getByLabel('Ground travel X').fill('2');
-  await page.getByLabel('Duration step-contact').fill('96');
+  await page.getByLabel('Duration step-contact', { exact: true }).fill('96');
   await page.getByRole('button', { name: 'Save revision' }).click();
   await expect(page.getByRole('status')).toContainText(/Saved edit revision \d+/);
   const session = await page.evaluate(() => fetch('/api/session').then((response) => response.json()));

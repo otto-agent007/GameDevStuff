@@ -21,6 +21,15 @@ Review the full-board component overlay and every exact candidate crop. Select c
 
 The recovery server accepts only hash-allowlisted artifacts from the immutable report. Saving creates a numbered `pose-selection` revision. Approval binds that selection to the current project, run, action, and recovery report hashes. Any changed source, contract, candidate, selection, or approval ancestry invalidates resume.
 
+## Review controls
+
+- `Review A` shows the last saved immutable edit revision. `Review B` shows the working edit. A remains read-only, and switching sides preserves the selected frame and review speed without dirtying either side.
+- Review speed is temporary and limited to `0.25x`, `0.5x`, `1x`, and `2x`. It divides playback delay only; it never rewrites authored frame durations.
+- `Set in` and `Set out` create an inclusive temporary playback range over active frames. A range loops for focused review even when the authored action is `once` or `hold-last`; clearing it restores authored playback behavior.
+- Timeline timing bars scale each active frame against the longest active duration. Timeline duration fields edit the existing integer `durationMs` value in the range `1..65535` and therefore dirty working revision B.
+- Motion diagnostics derive a world-space point as `marker + translation - groundTravel`. Root paths use the project pivot as a visible fallback and warn when a root marker is absent. Planted-foot paths warn when a continuous authored contact moves or lacks its matching marker.
+- Diagnostic warnings are navigation aids. Selecting one jumps to its implicated frame without modifying markers, contacts, translation, ground travel, timing, or approval state.
+
 ## Review checklist
 
 - Inspect the full composited animation at source timing, plus frame order, dimensions, alpha, disposal/blend diagnostics, decoder identity, and warnings.
