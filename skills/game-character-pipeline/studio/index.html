@@ -62,6 +62,21 @@
             <strong id="frame-position">Frame 0 of 0</strong>
             <span id="total-duration">0 ms total</span>
           </div>
+          <label class="speed-field">
+            <span>Speed</span>
+            <select id="review-speed" aria-label="Review speed">
+              <option value="0.25">0.25×</option>
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="2">2×</option>
+            </select>
+          </label>
+          <div class="range-controls" role="group" aria-label="Loop range controls">
+            <button id="set-range-in" type="button">Set in</button>
+            <button id="set-range-out" type="button">Set out</button>
+            <button id="clear-range" type="button" disabled>Clear range</button>
+            <span id="range-readout" aria-live="polite">Full action</span>
+          </div>
           <progress id="scrub-progress" class="scrub-track" max="1" value="0" aria-label="Playback position"></progress>
         </section>
       </main>

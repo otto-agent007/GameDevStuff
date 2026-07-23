@@ -246,6 +246,47 @@ test('A/B auditioning keeps saved A immutable and working B editable', async ({ 
   await expect(page.getByRole('button', { name: 'Exclude step-contact', exact: true })).toBeEnabled();
 });
 
+test('review speed changes playback timing without changing authored duration', async ({ page }) => {
+  await page.getByLabel('Review speed').selectOption('0.25');
+  await page.getByRole('button', { name: 'Replay', exact: true }).click();
+  await page.waitForTimeout(140);
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact');
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+
+  await page.getByLabel('Review speed').selectOption('2');
+  await page.getByRole('button', { name: 'Replay', exact: true }).click();
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-pass', { timeout: 100 });
+  await expect(page.getByText('400 ms total', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Review A', exact: true }).click();
+  await expect(page.getByLabel('Review speed')).toHaveValue('2');
+});
+
+test('temporary inclusive loop range wraps a hold-last action', async ({ page }) => {
+  await studio.close();
+  await fs.rm(root, { recursive: true, force: true });
+  await startFixture('unlock');
+  await page.goto(studio.origin);
+
+  await page.locator('[data-frame-id="step-pass"] .frame-thumb').click();
+  await page.getByRole('button', { name: 'Set in', exact: true }).click();
+  await expect(page.locator('[data-frame-id="step-pass"]')).toHaveAttribute('data-range-in', 'true');
+
+  await page.locator('[data-frame-id="step-contact-2"] .frame-thumb').click();
+  await page.getByRole('button', { name: 'Set out', exact: true }).click();
+  await expect(page.locator('[data-frame-id="step-contact-2"]')).toHaveAttribute('data-range-out', 'true');
+  await expect(page.locator('#range-readout')).toContainText('step-pass → step-contact-2');
+
+  await page.getByRole('button', { name: 'Replay', exact: true }).click();
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-pass');
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', { timeout: 180 });
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-pass', { timeout: 260 });
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Clear range', exact: true }).click();
+  await expect(page.locator('#range-readout')).toHaveText('Full action');
+});
+
 test('hold-last playback stops on the final authored frame', async ({ page }) => {
   await studio.close();
   await fs.rm(root, { recursive: true, force: true });

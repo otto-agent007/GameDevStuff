@@ -1,7 +1,13 @@
 import './frame-canvas.mjs';
 import './timeline.mjs';
 import { installMarkerAuthoring } from './markers.mjs';
-import { activeIndices, cloneFrameState } from './review-state.mjs';
+import {
+  activeIndices,
+  cloneFrameState,
+  nextPlaybackIndex,
+  playbackIndices,
+  reviewDelay
+} from './review-state.mjs';
 
 const shell = document.querySelector('.app-shell');
 const timeline = document.querySelector('frame-timeline');
@@ -15,6 +21,8 @@ let frames = [];
 let savedFrames = [];
 let selectedIndex = 0;
 let reviewSide = 'B';
+let reviewSpeed = 1;
+let playbackRange = { in: null, out: null };
 let playing = false;
 let playbackTimer;
 let copyNumber = 0;
@@ -27,6 +35,8 @@ const frameUrl = (sha256) => `/api/frame/${sha256}`;
 const displayFrames = () => reviewSide === 'A' && savedFrames.length ? savedFrames : frames;
 const includedFrames = () => displayFrames().filter((frame) => frame.included !== false);
 const activeFrameIndices = () => activeIndices(displayFrames());
+const rangedFrameIndices = () => playbackIndices(displayFrames(), playbackRange);
+const hasPlaybackRange = () => Number.isInteger(playbackRange.in) || Number.isInteger(playbackRange.out);
 const firstActiveIndex = () => activeFrameIndices()[0] ?? null;
 const lastActiveIndex = () => activeFrameIndices().at(-1) ?? null;
 
@@ -73,6 +83,16 @@ function updateReviewState() {
   document.querySelector('#review-b-state').textContent = dirty
     ? 'Unsaved working copy · no immutable hash'
     : `Matches ${saved}`;
+}
+
+function updateRangeState() {
+  const view = displayFrames();
+  const start = Number.isInteger(playbackRange.in) ? view[playbackRange.in]?.id : null;
+  const end = Number.isInteger(playbackRange.out) ? view[playbackRange.out]?.id : null;
+  document.querySelector('#range-readout').textContent = start || end
+    ? `${start ?? 'First active'} → ${end ?? 'Last active'}`
+    : 'Full action';
+  document.querySelector('#clear-range').disabled = !hasPlaybackRange();
 }
 
 function setDirty(value) {
@@ -155,12 +175,15 @@ function updateReadout() {
 function render({ focus = false } = {}) {
   timeline.frames = displayFrames();
   timeline.readOnly = reviewSide === 'A';
+  timeline.rangeIn = playbackRange.in;
+  timeline.rangeOut = playbackRange.out;
   timeline.selectedIndex = selectedIndex;
   updateCanvas();
   updateReadout();
   markerAuthoring?.refresh();
   markerAuthoring?.setDisabled(reviewSide === 'A');
   updateReviewState();
+  updateRangeState();
   updateApprovalControls();
   if (focus) timeline.focusSelected();
 }
@@ -175,23 +198,29 @@ function selectFrame(index, { manual = false, focus = false } = {}) {
 
 function scheduleNext() {
   if (!playing) return;
+  const indices = rangedFrameIndices();
+  if (!indices.length) {
+    stopPlayback();
+    return;
+  }
   const current = displayFrames()[selectedIndex];
   playbackTimer = setTimeout(() => {
-    const atEnd = selectedIndex === lastActiveIndex();
-    if (atEnd && action?.loopMode !== 'loop') {
+    const atEnd = selectedIndex === indices.at(-1);
+    if (atEnd && !hasPlaybackRange() && action?.loopMode !== 'loop') {
       stopPlayback();
       return;
     }
-    selectFrame(atEnd ? firstActiveIndex() : adjacentActiveIndex(selectedIndex, 1));
+    selectFrame(nextPlaybackIndex(indices, selectedIndex));
     scheduleNext();
-  }, current.edit.durationMs);
+  }, reviewDelay(current.edit.durationMs, reviewSpeed));
 }
 
 function startPlayback({ fromStart = false } = {}) {
-  if (!includedFrames().length) return;
+  const indices = rangedFrameIndices();
+  if (!indices.length) return;
   stopPlayback();
-  if (fromStart) selectFrame(firstActiveIndex());
-  else if (displayFrames()[selectedIndex]?.included === false) selectFrame(adjacentActiveIndex(selectedIndex, 1));
+  if (fromStart) selectFrame(indices[0]);
+  else if (!indices.includes(selectedIndex)) selectFrame(nextPlaybackIndex(indices, selectedIndex));
   playing = true;
   playButton.textContent = 'Pause';
   scheduleNext();
@@ -264,6 +293,43 @@ function switchReviewSide(side) {
 
 document.querySelector('#review-a').addEventListener('click', () => switchReviewSide('A'));
 document.querySelector('#review-b').addEventListener('click', () => switchReviewSide('B'));
+
+document.querySelector('#review-speed').addEventListener('change', (event) => {
+  reviewSpeed = Number(event.target.value);
+  if (playing) {
+    clearTimeout(playbackTimer);
+    scheduleNext();
+  }
+  status.textContent = `Review speed set to ${event.target.selectedOptions[0].textContent}; authored durations are unchanged.`;
+});
+
+function setRangeBoundary(boundary) {
+  if (displayFrames()[selectedIndex]?.included === false) {
+    status.textContent = 'Restore the selected frame before using it as a playback boundary.';
+    return;
+  }
+  const resume = playing;
+  stopPlayback();
+  playbackRange = { ...playbackRange, [boundary]: selectedIndex };
+  if (Number.isInteger(playbackRange.in) && Number.isInteger(playbackRange.out) && playbackRange.in > playbackRange.out) {
+    playbackRange = { in: playbackRange.out, out: playbackRange.in };
+  }
+  render();
+  if (resume) startPlayback();
+  status.textContent = `Set temporary range ${boundary} at ${displayFrames()[selectedIndex].id}; authored loop mode is unchanged.`;
+}
+
+document.querySelector('#set-range-in').addEventListener('click', () => setRangeBoundary('in'));
+document.querySelector('#set-range-out').addEventListener('click', () => setRangeBoundary('out'));
+document.querySelector('#clear-range').addEventListener('click', () => {
+  const resume = playing;
+  stopPlayback();
+  playbackRange = { in: null, out: null };
+  render();
+  if (resume) startPlayback();
+  status.textContent = 'Cleared the temporary playback range.';
+});
+
 document.querySelector('#previous-frame').addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, -1), { manual: true }));
 document.querySelector('#next-frame').addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, 1), { manual: true }));
 document.querySelector('#zoom').addEventListener('input', (event) => {

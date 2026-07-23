@@ -4,6 +4,8 @@ export class FrameTimeline extends HTMLElement {
   #frames = [];
   #selected = 0;
   #readOnly = false;
+  #rangeIn = null;
+  #rangeOut = null;
 
   connectedCallback() {
     this.addEventListener('click', (event) => this.#onClick(event));
@@ -38,6 +40,16 @@ export class FrameTimeline extends HTMLElement {
 
   get readOnly() {
     return this.#readOnly;
+  }
+
+  set rangeIn(value) {
+    this.#rangeIn = Number.isInteger(value) ? value : null;
+    this.#render();
+  }
+
+  set rangeOut(value) {
+    this.#rangeOut = Number.isInteger(value) ? value : null;
+    this.#render();
   }
 
   #emit(name, detail) {
@@ -110,6 +122,8 @@ export class FrameTimeline extends HTMLElement {
       row.dataset.index = String(index);
       row.dataset.included = String(frame.included !== false);
       row.dataset.readOnly = String(this.#readOnly);
+      row.dataset.rangeIn = String(index === this.#rangeIn);
+      row.dataset.rangeOut = String(index === this.#rangeOut);
       row.setAttribute('aria-current', String(index === this.#selected));
       row.tabIndex = index === this.#selected ? 0 : -1;
 
@@ -149,6 +163,21 @@ export class FrameTimeline extends HTMLElement {
         state.className = 'frame-state';
         state.textContent = 'Excluded';
         copy.append(state);
+      }
+      if (index === this.#rangeIn || index === this.#rangeOut) {
+        const range = document.createElement('span');
+        range.className = 'range-badges';
+        if (index === this.#rangeIn) {
+          const badge = document.createElement('span');
+          badge.textContent = 'In';
+          range.append(badge);
+        }
+        if (index === this.#rangeOut) {
+          const badge = document.createElement('span');
+          badge.textContent = 'Out';
+          range.append(badge);
+        }
+        copy.append(range);
       }
 
       const actions = document.createElement('div');
