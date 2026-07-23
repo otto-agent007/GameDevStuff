@@ -1,6 +1,7 @@
 import './frame-canvas.mjs';
 import './timeline.mjs';
 import { installMarkerAuthoring } from './markers.mjs';
+import { analyzeMotion, renderMotionDiagnostics } from './motion-diagnostics.mjs';
 import {
   activeIndices,
   cloneFrameState,
@@ -172,6 +173,16 @@ function updateReadout() {
   document.querySelector('#scrub-progress').value = view.length ? (selectedIndex + 1) / view.length : 0;
 }
 
+function updateMotionDiagnostics() {
+  if (!session) return;
+  const analysis = analyzeMotion(displayFrames(), session.project.canvas);
+  renderMotionDiagnostics(
+    document.querySelector('#motion-diagnostics'),
+    analysis,
+    (frameIndex) => selectFrame(frameIndex, { manual: true, focus: true })
+  );
+}
+
 function render({ focus = false } = {}) {
   timeline.frames = displayFrames();
   timeline.readOnly = reviewSide === 'A';
@@ -180,6 +191,7 @@ function render({ focus = false } = {}) {
   timeline.selectedIndex = selectedIndex;
   updateCanvas();
   updateReadout();
+  updateMotionDiagnostics();
   markerAuthoring?.refresh();
   markerAuthoring?.setDisabled(reviewSide === 'A');
   updateReviewState();

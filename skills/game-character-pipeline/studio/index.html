@@ -127,6 +127,19 @@
           <label><input id="overlay-drift" type="checkbox"> Drift</label>
         </fieldset>
 
+        <section id="motion-diagnostics" class="motion-card" aria-labelledby="motion-heading">
+          <span class="eyebrow">Authored paths</span>
+          <h3 id="motion-heading">Motion &amp; grounding</h3>
+          <p id="motion-summary">0 active frames · 0 warnings</p>
+          <svg id="motion-path-plot" viewBox="0 0 100 100" role="img" aria-label="Root and planted-foot motion paths"></svg>
+          <div class="motion-legend" aria-label="Motion path legend">
+            <span data-path="root">Root</span>
+            <span data-path="left-foot">Left foot</span>
+            <span data-path="right-foot">Right foot</span>
+          </div>
+          <div id="motion-issues" class="motion-issues" aria-label="Motion diagnostic warnings"></div>
+        </section>
+
         <section class="selection-card" aria-labelledby="selection-heading">
           <span class="eyebrow">Current</span>
           <h3 id="selection-heading">Frame details</h3>

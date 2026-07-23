@@ -313,6 +313,32 @@ test('timing bars scale proportionally and edit authored duration accessibly', a
   }
 });
 
+test('motion diagnostics surface foot slide and jump to the implicated frame', async ({ page }) => {
+  await expect(page.getByRole('heading', { name: 'Motion & grounding' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Root pivot', exact: true }).click();
+  await page.locator('frame-canvas canvas').click({ position: { x: 20, y: 20 } });
+  await page.getByRole('button', { name: 'Left foot', exact: true }).click();
+  await page.locator('frame-canvas canvas').click({ position: { x: 20, y: 48 } });
+  await page.getByLabel('Planted left foot').check();
+
+  await page.locator('[data-frame-id="step-pass"] .frame-thumb').click();
+  await page.getByRole('button', { name: 'Root pivot', exact: true }).click();
+  await page.locator('frame-canvas canvas').click({ position: { x: 22, y: 20 } });
+  await page.getByRole('button', { name: 'Left foot', exact: true }).click();
+  await page.locator('frame-canvas canvas').click({ position: { x: 34, y: 48 } });
+  await page.getByLabel('Planted left foot').check();
+
+  await expect(page.getByRole('button', { name: 'Go to step-pass: foot-slide', exact: true })).toBeVisible();
+  await expect(page.locator('#motion-path-plot polyline')).not.toHaveCount(0);
+
+  await page.locator('[data-frame-id="step-contact-2"] .frame-thumb').click();
+  await page.getByRole('button', { name: 'Go to step-pass: foot-slide', exact: true }).click();
+
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-pass');
+  await expect(page.locator('#review-b-state')).toContainText('Unsaved working copy');
+});
+
 test('hold-last playback stops on the final authored frame', async ({ page }) => {
   await studio.close();
   await fs.rm(root, { recursive: true, force: true });
