@@ -272,6 +272,19 @@ timeline.addEventListener('frame-label', ({ detail }) => {
   frames[detail.index].edit.label = detail.label;
   setDirty(true);
 });
+timeline.addEventListener('frame-duration', ({ detail }) => {
+  if (reviewSide === 'A') return;
+  const frame = frames[detail.index];
+  frame.durationMs = detail.durationMs;
+  frame.edit.durationMs = detail.durationMs;
+  setDirty(true);
+  render();
+  status.textContent = `Updated ${frame.id} to ${detail.durationMs} authored milliseconds; save to create a revision.`;
+});
+timeline.addEventListener('frame-duration-invalid', () => {
+  render();
+  status.textContent = 'Frame timing must use whole milliseconds from 1 to 65535.';
+});
 
 playButton.addEventListener('click', togglePlayback);
 replayButton.addEventListener('click', () => startPlayback({ fromStart: true }));

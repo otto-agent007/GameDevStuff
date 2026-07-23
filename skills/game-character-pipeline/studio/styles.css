@@ -102,6 +102,11 @@ frame-timeline { display: grid; gap: 8px; padding-top: 12px; }
 .frame-ordinal, .frame-duration { color: var(--muted); font-size: 10px; }
 .frame-duration { text-align: right; }
 .frame-copy input { grid-column: 1 / -1; min-width: 0; margin-top: 4px; padding: 4px 6px; border: 1px solid transparent; border-radius: 3px; background: #0d1417; color: var(--text); font-size: 10px; }
+.timeline-duration-field { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 66px; align-items: center; gap: 6px; color: var(--muted); font-size: 8px; letter-spacing: .06em; text-transform: uppercase; }
+.timeline-duration-field input { width: 66px; margin: 2px 0 0; border-color: var(--line); text-align: right; }
+.timing-bar { grid-column: 1 / -1; display: block; height: 4px; overflow: hidden; border-radius: 99px; background: #0b1114; }
+.timing-bar-fill { display: block; height: 100%; min-width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--amber), #ffc85c); transition: width .12s ease; }
+.frame-row[data-included="false"] .timing-bar-fill { width: 0 !important; }
 .contact-span { grid-column: 1 / -1; overflow: hidden; color: var(--amber); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .frame-state { grid-column: 1 / -1; color: var(--danger); font-size: 8px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .range-badges { grid-column: 1 / -1; display: flex; gap: 4px; }

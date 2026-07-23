@@ -10,6 +10,7 @@ export class FrameTimeline extends HTMLElement {
   connectedCallback() {
     this.addEventListener('click', (event) => this.#onClick(event));
     this.addEventListener('input', (event) => this.#onInput(event));
+    this.addEventListener('change', (event) => this.#onChange(event));
     this.addEventListener('keydown', (event) => this.#onKeydown(event));
     this.#render();
   }
@@ -85,6 +86,18 @@ export class FrameTimeline extends HTMLElement {
     this.#emit('frame-label', { index: Number(row.dataset.index), label: event.target.value });
   }
 
+  #onChange(event) {
+    const row = this.#rowFrom(event);
+    if (this.#readOnly || !row || !event.target.matches('[data-duration]')) return;
+    const index = Number(row.dataset.index);
+    const durationMs = Number(event.target.value);
+    if (!Number.isInteger(durationMs) || durationMs < 1 || durationMs > 65535) {
+      this.#emit('frame-duration-invalid', { index });
+      return;
+    }
+    this.#emit('frame-duration', { index, durationMs });
+  }
+
   #onKeydown(event) {
     const row = this.#rowFrom(event);
     if (!row || event.target.matches('input')) return;
@@ -115,6 +128,10 @@ export class FrameTimeline extends HTMLElement {
   #render() {
     if (!this.isConnected) return;
     this.replaceChildren();
+    const activeDurations = this.#frames
+      .filter((frame) => frame.included !== false)
+      .map((frame) => frame.edit?.durationMs ?? frame.durationMs);
+    const maximumDuration = Math.max(1, ...activeDurations);
     for (const [index, frame] of this.#frames.entries()) {
       const row = document.createElement('article');
       row.className = 'frame-row';
@@ -152,6 +169,29 @@ export class FrameTimeline extends HTMLElement {
       label.setAttribute('aria-label', `Label ${frame.id}`);
       label.disabled = this.#readOnly;
       copy.append(ordinal, name, duration, label);
+      const timingField = document.createElement('label');
+      timingField.className = 'timeline-duration-field';
+      const timingLabel = document.createElement('span');
+      timingLabel.textContent = 'Timing';
+      const timingInput = document.createElement('input');
+      timingInput.type = 'number';
+      timingInput.min = '1';
+      timingInput.max = '65535';
+      timingInput.step = '1';
+      timingInput.dataset.duration = '';
+      timingInput.value = String(frame.edit?.durationMs ?? frame.durationMs);
+      timingInput.setAttribute('aria-label', `Timeline duration ${frame.id}`);
+      timingInput.disabled = this.#readOnly;
+      timingField.append(timingLabel, timingInput);
+      const timingBar = document.createElement('span');
+      timingBar.className = 'timing-bar';
+      timingBar.setAttribute('aria-hidden', 'true');
+      const timingFill = document.createElement('span');
+      timingFill.className = 'timing-bar-fill';
+      const ratio = frame.included === false ? 0 : (frame.edit?.durationMs ?? frame.durationMs) / maximumDuration;
+      timingFill.style.width = `${ratio * 100}%`;
+      timingBar.append(timingFill);
+      copy.append(timingField, timingBar);
       if (frame.edit?.contacts?.length) {
         const contacts = document.createElement('span');
         contacts.className = 'contact-span';

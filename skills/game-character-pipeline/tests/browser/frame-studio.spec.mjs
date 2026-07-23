@@ -287,6 +287,32 @@ test('temporary inclusive loop range wraps a hold-last action', async ({ page })
   await expect(page.locator('#range-readout')).toHaveText('Full action');
 });
 
+test('timing bars scale proportionally and edit authored duration accessibly', async ({ page }) => {
+  const widths = await page.locator('[data-frame-id] .timing-bar-fill').evaluateAll((bars) =>
+    bars.map((bar) => Number.parseFloat(getComputedStyle(bar).width))
+  );
+  expect(widths[0]).toBeLessThan(widths[1]);
+  expect(widths[1]).toBeLessThan(widths[2]);
+
+  const duration = page.getByLabel('Timeline duration step-contact', { exact: true });
+  await duration.fill('240');
+  await duration.blur();
+
+  await expect(page.getByText('560 ms total', { exact: true })).toBeVisible();
+  await expect(page.locator('#review-b-state')).toContainText('Unsaved working copy');
+  const updatedWidths = await page.locator('[data-frame-id] .timing-bar-fill').evaluateAll((bars) =>
+    bars.map((bar) => Number.parseFloat(getComputedStyle(bar).width))
+  );
+  expect(updatedWidths[0]).toBeGreaterThan(updatedWidths[2]);
+
+  for (const invalid of ['0', '65536', '1.5']) {
+    await duration.fill(invalid);
+    await duration.blur();
+    await expect(duration).toHaveValue('240');
+    await expect(page.getByRole('status')).toContainText('whole milliseconds from 1 to 65535');
+  }
+});
+
 test('hold-last playback stops on the final authored frame', async ({ page }) => {
   await studio.close();
   await fs.rm(root, { recursive: true, force: true });
