@@ -15,7 +15,7 @@ import { makeAnchor } from './helpers/fixtures.mjs';
 async function fixture() {
   const project = await fs.mkdtemp(path.join(os.tmpdir(), 'sprite-contract-'));
   const runDir = path.join(project, '.pixel-sprite-pipeline', 'runs', 'run-1');
-  await fs.mkdir(runDir, { recursive: true });
+  await fs.mkdir(runDir, { recursive: true, mode: 0o700 });
   const source = path.join(runDir, 'source.png');
   await makeAnchor(source);
   const normalized = await normalizeFrames({ inputs: [source], outputDir: path.join(runDir, 'normalized'), config: DEFAULT_CONFIG });
@@ -238,7 +238,7 @@ test('signed correction loading rejects a multiply-linked signing key', async ()
 test('contract containment compares canonical physical paths while recording slash-portable paths', async (context) => {
   const project = await fs.mkdtemp(path.join(os.tmpdir(), 'sprite-contract-alias-'));
   const runDir = path.join(project, '.pixel-sprite-pipeline', 'runs', 'alias-run');
-  await fs.mkdir(runDir, { recursive: true });
+  await fs.mkdir(runDir, { recursive: true, mode: 0o700 });
   const source = path.join(runDir, 'source.png');
   await makeAnchor(source);
   const normalized = await normalizeFrames({ inputs: [source], outputDir: path.join(runDir, 'normalized'), config: DEFAULT_CONFIG });
@@ -259,7 +259,7 @@ test('contract containment compares canonical physical paths while recording sla
 test('contract containment rejects an external original anchor instead of confusing it with the staged approved anchor', async () => {
   const project = await fs.mkdtemp(path.join(os.tmpdir(), 'sprite-contract-external-'));
   const runDir = path.join(project, '.pixel-sprite-pipeline', 'runs', 'external-run');
-  await fs.mkdir(runDir, { recursive: true });
+  await fs.mkdir(runDir, { recursive: true, mode: 0o700 });
   const staged = path.join(runDir, 'approved-anchor.png');
   const external = path.join(project, 'original-anchor.png');
   await makeAnchor(staged);

@@ -5,6 +5,7 @@ import { readSignedState, writeSignedState } from './state-auth.mjs';
 
 const SNAP_DOMAIN = 'pixel-sprite-snap-receipt/v1';
 const MANUAL_DOMAIN = 'pixel-sprite-manual-handoff-receipt/v1';
+const ALIGNED_DOMAIN = 'pixel-sprite-aligned-source-receipt/v1';
 const HASH = /^[a-f0-9]{64}$/;
 const ORIGINS = new Set(['environment', 'project-config', 'managed-cache', 'path']);
 
@@ -23,7 +24,7 @@ function runBinding(run) {
   if (id !== null && (typeof id !== 'string' || id === '')) throw new Error('snap receipt run ID is invalid');
   const outputDir = run.outputDir ?? run.runDir;
   if (typeof outputDir !== 'string' || outputDir === '') throw new Error('snap receipt output directory is required');
-  return { id, manifestSha256: run.manifestSha256 === undefined ? null : hash(run.manifestSha256, 'snap receipt manifest hash') };
+  return { id, manifestSha256: run.manifestSha256 == null ? null : hash(run.manifestSha256, 'snap receipt manifest hash') };
 }
 
 function validRun(binding) {
@@ -110,6 +111,16 @@ function validDate(value) {
   if (typeof value !== 'string' || Number.isNaN(Date.parse(value)) || new Date(value).toISOString() !== value) throw new Error('snap receipt date is invalid');
 }
 
+function validAlignedDerivation(value) {
+  exact(value, ['kind', 'scale', 'canvas', 'paletteSha256'], 'aligned derivation');
+  exact(value.canvas, ['width', 'height'], 'aligned canvas');
+  if (value.kind !== 'integer-grid-collapse' || !Number.isInteger(value.scale) || value.scale < 1 ||
+    !Number.isInteger(value.canvas.width) || value.canvas.width < 1 || !Number.isInteger(value.canvas.height) || value.canvas.height < 1) {
+    throw new Error('snap receipt aligned derivation is invalid');
+  }
+  hash(value.paletteSha256, 'snap receipt aligned palette hash');
+}
+
 function same(left, right) { return JSON.stringify(left) === JSON.stringify(right); }
 
 function expectedBinding(payload, expectedRun, expectedContract) {
@@ -131,7 +142,7 @@ async function verifyRecords(recordsValue, receiptDir, label, { contained = fals
   }
 }
 
-async function existingReceipt({ projectDir, file, domain, expectedRun, expectedContract, expectedInputs, expectedArgs, expectedIdentity, expectedHandoff }) {
+async function existingReceipt({ projectDir, file, domain, expectedRun, expectedContract, expectedInputs, expectedArgs, expectedIdentity, expectedHandoff, expectedDerivation }) {
   try {
     await fs.lstat(file);
   } catch (error) {
@@ -144,6 +155,7 @@ async function existingReceipt({ projectDir, file, domain, expectedRun, expected
   if (expectedArgs && !same(payload.arguments, [...expectedArgs])) throw new Error('existing snap receipt argument binding mismatch');
   if (expectedIdentity && !same(payload.binary, binaryRecord(expectedIdentity))) throw new Error('existing snap receipt binary identity mismatch');
   if (expectedHandoff && payload.handoffSha256 !== await sha256(expectedHandoff)) throw new Error('existing manual handoff receipt binding mismatch');
+  if (expectedDerivation && !same(payload.derivation, expectedDerivation)) throw new Error('existing aligned source receipt derivation mismatch');
   return existing;
 }
 
@@ -190,6 +202,35 @@ export async function writeManualHandoffReceipt({ projectDir, run, handoff, inpu
   return { ...signed, path: file };
 }
 
+export async function writeAlignedSourceReceipt({ projectDir, run, contract, inputs, outputs, derivation }) {
+  const binding = runBinding(run);
+  validAlignedDerivation(derivation);
+  const file = path.join(run.outputDir ?? run.runDir, 'snap-receipt.json');
+  const existing = await existingReceipt({ projectDir, file, domain: ALIGNED_DOMAIN, expectedRun: run, expectedContract: contract, expectedInputs: inputs, expectedDerivation: derivation });
+  if (existing) return { ...existing, path: file };
+  const payload = {
+    version: 1,
+    origin: 'verified-aligned-source',
+    toolProvenanceVerified: false,
+    deterministicProvenanceVerified: true,
+    run: binding,
+    animationContractSha256: contractHash(contract),
+    inputs: await records(inputs, path.dirname(file)),
+    outputs: await records(outputs, path.dirname(file), { contained: true }),
+    derivation: structuredClone(derivation),
+    createdAt: new Date().toISOString()
+  };
+  let signed;
+  try { signed = await writeSignedState({ projectDir, file, domain: ALIGNED_DOMAIN, payload, createKey: true }); }
+  catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+    const concurrent = await existingReceipt({ projectDir, file, domain: ALIGNED_DOMAIN, expectedRun: run, expectedContract: contract, expectedInputs: inputs, expectedDerivation: derivation }).catch(() => null);
+    if (!concurrent) throw new Error('concurrent aligned source receipt publication conflict');
+    return { ...concurrent, path: file };
+  }
+  return { ...signed, path: file };
+}
+
 export async function verifySnapReceipt({ projectDir, file, expectedRun, expectedContract }) {
   const selected = path.resolve(file);
   const before = await fs.lstat(selected);
@@ -200,7 +241,7 @@ export async function verifySnapReceipt({ projectDir, file, expectedRun, expecte
   const raw = JSON.parse(await fs.readFile(physical, 'utf8'));
   exact(raw, ['version', 'payload', 'signature'], 'envelope');
   if (raw.version !== 1 || !HASH.test(raw.signature ?? '')) throw new Error('snap receipt envelope schema is invalid');
-  const domain = raw?.payload?.origin === 'manual-handoff' ? MANUAL_DOMAIN : SNAP_DOMAIN;
+  const domain = raw?.payload?.origin === 'manual-handoff' ? MANUAL_DOMAIN : raw?.payload?.origin === 'verified-aligned-source' ? ALIGNED_DOMAIN : SNAP_DOMAIN;
   const document = await readSignedState({ projectDir, file: physical, domain });
   const payload = document.payload;
   if (domain === SNAP_DOMAIN) {
@@ -208,14 +249,19 @@ export async function verifySnapReceipt({ projectDir, file, expectedRun, expecte
     if (payload.version !== 1 || !ORIGINS.has(payload.origin) || payload.toolProvenanceVerified !== true || !Array.isArray(payload.arguments) || payload.arguments.length === 0 || payload.arguments.some((item) => typeof item !== 'string') || !payload.binary || payload.origin !== payload.binary.origin) throw new Error('verified snap receipt provenance is invalid');
     hash(payload.animationContractSha256, 'snap receipt contract hash');
     validBinary(payload.binary);
-  } else {
+  } else if (domain === MANUAL_DOMAIN) {
     exact(payload, ['version', 'origin', 'toolProvenanceVerified', 'run', 'handoffSha256', 'inputs', 'outputs', 'arguments', 'binary', 'createdAt'], 'payload');
     if (payload.version !== 1 || payload.origin !== 'manual-handoff' || payload.toolProvenanceVerified !== false || payload.arguments !== null || payload.binary !== null) throw new Error('manual handoff receipt provenance is invalid');
     hash(payload.handoffSha256, 'snap receipt handoff hash');
+  } else {
+    exact(payload, ['version', 'origin', 'toolProvenanceVerified', 'deterministicProvenanceVerified', 'run', 'animationContractSha256', 'inputs', 'outputs', 'derivation', 'createdAt'], 'payload');
+    if (payload.version !== 1 || payload.origin !== 'verified-aligned-source' || payload.toolProvenanceVerified !== false || payload.deterministicProvenanceVerified !== true) throw new Error('aligned source receipt provenance is invalid');
+    hash(payload.animationContractSha256, 'snap receipt contract hash');
+    validAlignedDerivation(payload.derivation);
   }
   validRun(payload.run);
   validDate(payload.createdAt);
-  expectedBinding(payload, expectedRun, domain === SNAP_DOMAIN ? expectedContract : undefined);
+  expectedBinding(payload, expectedRun, domain === MANUAL_DOMAIN ? undefined : expectedContract);
   const after = await fs.lstat(selected);
   if (after.dev !== before.dev || after.ino !== before.ino || await fs.realpath(selected) !== physical) throw new Error('snap receipt file identity changed during verification');
   await verifyRecords(payload.inputs, path.dirname(physical), 'input');

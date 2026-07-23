@@ -237,7 +237,7 @@ test('recordRunResult is immutable, tied to its manifest, and supports explicit 
 test('profile promotion requires artifact-backed passing evidence and preserves an existing profile on failure', async () => {
   const projectDir = await project();
   const stateDir = path.join(projectDir, '.pixel-sprite-pipeline');
-  await fs.mkdir(stateDir, { recursive: true });
+  await fs.mkdir(stateDir, { recursive: true, mode: 0o700 });
   await fs.writeFile(path.join(stateDir, 'profile.yaml'), 'sentinel: keep\n');
   const run = await createRun({ projectDir, config: stableConfig(), inputs: [], idFactory: () => 'run-promote' });
   const badReport = { runId: run.runId, manifestSha256: run.manifestSha256, validation: { passed: true, artifacts: [] } };
@@ -455,7 +455,7 @@ test('an identical report can be retried to recover missing lesson-index publica
 test('malformed lesson JSONL is surfaced instead of silently skipped', async () => {
   const projectDir = await project();
   const stateDir = path.join(projectDir, '.pixel-sprite-pipeline');
-  await fs.mkdir(stateDir, { recursive: true });
+  await fs.mkdir(stateDir, { recursive: true, mode: 0o700 });
   await fs.writeFile(path.join(stateDir, 'lessons.jsonl'), '{bad json}\n');
   await assert.rejects(proposeSkillRule({ projectDir, lesson: { failureCode: 'X', correction: 'Y', proposedRule: 'Z' }, config: stableConfig() }), /malformed lessons.jsonl row 1/);
 });
@@ -463,7 +463,7 @@ test('malformed lesson JSONL is surfaced instead of silently skipped', async () 
 test('well-formed JSON with a malformed lesson schema is also surfaced', async () => {
   const projectDir = await project();
   const stateDir = path.join(projectDir, '.pixel-sprite-pipeline');
-  await fs.mkdir(stateDir, { recursive: true });
+  await fs.mkdir(stateDir, { recursive: true, mode: 0o700 });
   await fs.writeFile(path.join(stateDir, 'lessons.jsonl'), '{}\n');
   await assert.rejects(proposeSkillRule({ projectDir, lesson: { failureCode: 'X', correction: 'Y', proposedRule: 'Z' }, config: stableConfig() }), /malformed lessons.jsonl row 1/);
 });
