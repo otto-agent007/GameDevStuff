@@ -30,6 +30,7 @@ function titleForTrack(kind) {
 
 export function installMarkerAuthoring({ root, canvas, project, actionId, getFrame, getFrames, onChange }) {
   let activeTool = null;
+  let disabled = false;
   const history = [];
   const controls = {};
 
@@ -111,7 +112,7 @@ export function installMarkerAuthoring({ root, canvas, project, actionId, getFra
 
   function snapshot() {
     history.push(getFrames().map(({ id, edit }) => ({ id, edit: structuredClone(edit) })));
-    document.querySelector('#undo-edit').disabled = false;
+    document.querySelector('#undo-edit').disabled = disabled;
   }
 
   function mutate(message, operation) {
@@ -177,7 +178,7 @@ export function installMarkerAuthoring({ root, canvas, project, actionId, getFra
       const frame = getFrames().find(({ id }) => id === saved.id);
       if (frame) frame.edit = saved.edit;
     }
-    document.querySelector('#undo-edit').disabled = history.length === 0;
+    document.querySelector('#undo-edit').disabled = disabled || history.length === 0;
     onChange('Restored the previous non-destructive edit state.', { render: true });
   });
 
@@ -198,5 +199,18 @@ export function installMarkerAuthoring({ root, canvas, project, actionId, getFra
     controls.rotation.value = String(edit.transform?.rotationQuarterTurns ?? 0);
   }
 
-  return { refresh };
+  function setDisabled(value) {
+    disabled = Boolean(value);
+    if (disabled) {
+      activeTool = null;
+      for (const button of tools.querySelectorAll('[data-marker-tool]')) button.setAttribute('aria-pressed', 'false');
+    }
+    for (const control of root.querySelectorAll('button, input, select')) {
+      if (control.dataset.authorDisabled === undefined) control.dataset.authorDisabled = String(control.disabled);
+      control.disabled = disabled || control.dataset.authorDisabled === 'true';
+    }
+    document.querySelector('#undo-edit').disabled = disabled || history.length === 0;
+  }
+
+  return { refresh, setDisabled };
 }

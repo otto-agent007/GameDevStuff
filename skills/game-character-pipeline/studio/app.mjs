@@ -1,6 +1,7 @@
 import './frame-canvas.mjs';
 import './timeline.mjs';
 import { installMarkerAuthoring } from './markers.mjs';
+import { activeIndices, cloneFrameState } from './review-state.mjs';
 
 const shell = document.querySelector('.app-shell');
 const timeline = document.querySelector('frame-timeline');
@@ -11,7 +12,9 @@ const replayButton = document.querySelector('#replay');
 let session;
 let action;
 let frames = [];
+let savedFrames = [];
 let selectedIndex = 0;
+let reviewSide = 'B';
 let playing = false;
 let playbackTimer;
 let copyNumber = 0;
@@ -21,8 +24,9 @@ let renderReceipt = null;
 
 const titleCase = (value) => value.split(/[-_]/).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
 const frameUrl = (sha256) => `/api/frame/${sha256}`;
-const includedFrames = () => frames.filter((frame) => frame.included !== false);
-const activeFrameIndices = () => frames.flatMap((frame, index) => frame.included !== false ? [index] : []);
+const displayFrames = () => reviewSide === 'A' && savedFrames.length ? savedFrames : frames;
+const includedFrames = () => displayFrames().filter((frame) => frame.included !== false);
+const activeFrameIndices = () => activeIndices(displayFrames());
 const firstActiveIndex = () => activeFrameIndices()[0] ?? null;
 const lastActiveIndex = () => activeFrameIndices().at(-1) ?? null;
 
@@ -34,6 +38,7 @@ function adjacentActiveIndex(index, direction) {
 }
 
 function setFrameInclusion(index, included) {
+  if (reviewSide === 'A') return false;
   const frame = frames[index];
   if (!frame || frame.included === included) return false;
   if (!included && includedFrames().length === 1) {
@@ -50,10 +55,24 @@ function setFrameInclusion(index, included) {
 
 function updateApprovalControls() {
   const hasSavedEdit = Boolean(session?.editRevision);
+  document.querySelector('#save-revision').disabled = reviewSide === 'A';
   document.querySelector('#render-review').disabled = dirty || !hasSavedEdit;
   const canDecide = !dirty && Boolean(renderReceipt) && hasSavedEdit;
   document.querySelector('#approve-revision').disabled = !canDecide;
   document.querySelector('#reject-revision').disabled = !canDecide;
+}
+
+function updateReviewState() {
+  if (!session) return;
+  document.querySelector('#review-a').setAttribute('aria-pressed', String(reviewSide === 'A'));
+  document.querySelector('#review-b').setAttribute('aria-pressed', String(reviewSide === 'B'));
+  const saved = session.editRevision
+    ? `Revision ${session.editRevision} · ${session.editSha256.slice(0, 12)}`
+    : 'Source defaults · no saved hash';
+  document.querySelector('#review-a-state').textContent = saved;
+  document.querySelector('#review-b-state').textContent = dirty
+    ? 'Unsaved working copy · no immutable hash'
+    : `Matches ${saved}`;
 }
 
 function setDirty(value) {
@@ -62,6 +81,7 @@ function setDirty(value) {
     renderReceipt = null;
     document.querySelector('#approval-render-hash').textContent = 'Not rendered';
   }
+  updateReviewState();
   updateApprovalControls();
 }
 
@@ -92,16 +112,17 @@ function stopPlayback() {
 }
 
 function updateCanvas() {
-  const frame = frames[selectedIndex];
+  const view = displayFrames();
+  const frame = view[selectedIndex];
   if (!frame) return;
   const previousIndex = adjacentActiveIndex(selectedIndex, -1);
   const nextIndex = adjacentActiveIndex(selectedIndex, 1);
   const firstIndex = firstActiveIndex();
   const lastIndex = lastActiveIndex();
-  const previous = frames[previousIndex] ?? frame;
-  const next = frames[nextIndex] ?? frame;
-  const first = frames[firstIndex] ?? frame;
-  const last = frames[lastIndex] ?? frame;
+  const previous = view[previousIndex] ?? frame;
+  const next = view[nextIndex] ?? frame;
+  const first = view[firstIndex] ?? frame;
+  const last = view[lastIndex] ?? frame;
   canvas.setAttribute('frame', frame.url);
   canvas.setAttribute('first', first.url);
   canvas.setAttribute('last', last.url);
@@ -113,12 +134,13 @@ function updateCanvas() {
 }
 
 function updateReadout() {
-  const frame = frames[selectedIndex];
+  const view = displayFrames();
+  const frame = view[selectedIndex];
   const active = includedFrames();
   const total = active.reduce((sum, item) => sum + item.edit.durationMs, 0);
-  document.querySelector('#frame-count').textContent = `${active.length} active / ${frames.length} source`;
+  document.querySelector('#frame-count').textContent = `${active.length} active / ${view.length} source`;
   document.querySelector('#selected-name').textContent = frame?.id ?? '—';
-  document.querySelector('#frame-position').textContent = `Frame ${frames.length ? selectedIndex + 1 : 0} of ${frames.length}`;
+  document.querySelector('#frame-position').textContent = `Frame ${view.length ? selectedIndex + 1 : 0} of ${view.length}`;
   document.querySelector('#total-duration').textContent = `${total} ms total`;
   document.querySelector('#selection-frame').textContent = frame?.id ?? '—';
   document.querySelector('#selection-duration').textContent = frame ? `${frame.edit.durationMs} ms` : '—';
@@ -126,28 +148,34 @@ function updateReadout() {
   const isIncluded = frame?.included !== false;
   inclusionButton.textContent = isIncluded ? 'Exclude from action' : 'Restore to action';
   inclusionButton.dataset.included = String(isIncluded);
-  document.querySelector('#scrub-progress').value = frames.length ? (selectedIndex + 1) / frames.length : 0;
+  inclusionButton.disabled = reviewSide === 'A';
+  document.querySelector('#scrub-progress').value = view.length ? (selectedIndex + 1) / view.length : 0;
 }
 
 function render({ focus = false } = {}) {
-  timeline.frames = frames;
+  timeline.frames = displayFrames();
+  timeline.readOnly = reviewSide === 'A';
   timeline.selectedIndex = selectedIndex;
   updateCanvas();
   updateReadout();
   markerAuthoring?.refresh();
+  markerAuthoring?.setDisabled(reviewSide === 'A');
+  updateReviewState();
+  updateApprovalControls();
   if (focus) timeline.focusSelected();
 }
 
 function selectFrame(index, { manual = false, focus = false } = {}) {
-  if (!frames.length) return;
+  const view = displayFrames();
+  if (!view.length) return;
   if (manual) stopPlayback();
-  selectedIndex = Math.max(0, Math.min(index, frames.length - 1));
+  selectedIndex = Math.max(0, Math.min(index, view.length - 1));
   render({ focus });
 }
 
 function scheduleNext() {
   if (!playing) return;
-  const current = frames[selectedIndex];
+  const current = displayFrames()[selectedIndex];
   playbackTimer = setTimeout(() => {
     const atEnd = selectedIndex === lastActiveIndex();
     if (atEnd && action?.loopMode !== 'loop') {
@@ -163,7 +191,7 @@ function startPlayback({ fromStart = false } = {}) {
   if (!includedFrames().length) return;
   stopPlayback();
   if (fromStart) selectFrame(firstActiveIndex());
-  else if (frames[selectedIndex]?.included === false) selectFrame(adjacentActiveIndex(selectedIndex, 1));
+  else if (displayFrames()[selectedIndex]?.included === false) selectFrame(adjacentActiveIndex(selectedIndex, 1));
   playing = true;
   playButton.textContent = 'Pause';
   scheduleNext();
@@ -198,6 +226,7 @@ timeline.addEventListener('frame-transport', ({ detail }) => {
   selectFrame(targets[detail.command], { manual: true, focus: true });
 });
 timeline.addEventListener('frame-duplicate', ({ detail }) => {
+  if (reviewSide === 'A') return;
   const original = frames[detail.index];
   copyNumber += 1;
   const duplicate = { ...original, id: `${original.id}-copy-${copyNumber}`, edit: structuredClone(original.edit) };
@@ -209,6 +238,7 @@ timeline.addEventListener('frame-duplicate', ({ detail }) => {
   status.textContent = `Duplicated ${original.id}; save to create a revision.`;
 });
 timeline.addEventListener('frame-label', ({ detail }) => {
+  if (reviewSide === 'A') return;
   frames[detail.index].label = detail.label;
   frames[detail.index].edit.label = detail.label;
   setDirty(true);
@@ -217,9 +247,23 @@ timeline.addEventListener('frame-label', ({ detail }) => {
 playButton.addEventListener('click', togglePlayback);
 replayButton.addEventListener('click', () => startPlayback({ fromStart: true }));
 document.querySelector('#toggle-frame-inclusion').addEventListener('click', () => {
-  const frame = frames[selectedIndex];
+  const frame = displayFrames()[selectedIndex];
   if (frame) setFrameInclusion(selectedIndex, frame.included === false);
 });
+
+function switchReviewSide(side) {
+  if (!['A', 'B'].includes(side) || side === reviewSide) return;
+  const resume = playing;
+  stopPlayback();
+  reviewSide = side;
+  selectedIndex = Math.min(selectedIndex, Math.max(0, displayFrames().length - 1));
+  render();
+  if (resume) startPlayback();
+  status.textContent = `Reviewing ${side === 'A' ? 'saved revision A' : 'working copy B'}; audition controls do not change edit state.`;
+}
+
+document.querySelector('#review-a').addEventListener('click', () => switchReviewSide('A'));
+document.querySelector('#review-b').addEventListener('click', () => switchReviewSide('B'));
 document.querySelector('#previous-frame').addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, -1), { manual: true }));
 document.querySelector('#next-frame').addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, 1), { manual: true }));
 document.querySelector('#zoom').addEventListener('input', (event) => {
@@ -257,6 +301,8 @@ document.querySelector('#save-revision').addEventListener('click', async () => {
     if (!response.ok) throw new Error(result.error ?? 'revision save failed');
     session.editSha256 = result.sha256;
     session.editRevision = result.revision;
+    savedFrames = cloneFrameState(frames);
+    reviewSide = 'B';
     document.querySelector('#restore-revision').disabled = result.revision < 2;
     renderReceipt = null;
     document.querySelector('#approval-edit-hash').textContent = result.editSha256;
@@ -270,6 +316,7 @@ document.querySelector('#save-revision').addEventListener('click', async () => {
 
 document.querySelector('#restore-revision').addEventListener('click', async () => {
   stopPlayback();
+  reviewSide = 'B';
   const target = session.editRevision - 1;
   if (target < 1) return;
   status.textContent = `Loading immutable edit revision ${target}…`;
@@ -349,7 +396,7 @@ document.addEventListener('keydown', (event) => {
   } else if (event.code === 'Space') {
     event.preventDefault();
     togglePlayback();
-  } else if (event.key === 'Delete' && frames[selectedIndex]) {
+  } else if (event.key === 'Delete' && displayFrames()[selectedIndex]) {
     event.preventDefault();
     setFrameInclusion(selectedIndex, false);
   }
@@ -390,6 +437,7 @@ async function initialize() {
     } else if (session.edit) {
       dirty = true;
     }
+    savedFrames = cloneFrameState(frames);
     document.querySelector('#project-title').textContent = `${session.project.character.name} / ${titleCase(action?.id ?? session.actionId)}`;
     document.querySelector('#source-hash').textContent = session.sourceSha256.slice(0, 12);
     document.querySelector('#approval-source-hash').textContent = session.sourceSha256;
@@ -408,8 +456,8 @@ async function initialize() {
       canvas,
       project: session.project,
       actionId: session.actionId,
-      getFrame: () => frames[selectedIndex],
-      getFrames: () => frames,
+      getFrame: () => displayFrames()[selectedIndex],
+      getFrames: () => displayFrames(),
       onChange: (message, { render: shouldRender }) => {
         const frame = frames[selectedIndex];
         frame.durationMs = frame.edit.durationMs;

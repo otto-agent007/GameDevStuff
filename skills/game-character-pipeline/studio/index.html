@@ -74,6 +74,21 @@
           </div>
         </div>
 
+        <section class="review-card" aria-labelledby="review-heading">
+          <div>
+            <span class="eyebrow">Audition</span>
+            <h3 id="review-heading">Saved A / Working B</h3>
+          </div>
+          <div class="review-switch" role="group" aria-label="A/B review side">
+            <button id="review-a" type="button" aria-pressed="false">Review A</button>
+            <button id="review-b" type="button" aria-pressed="true">Review B</button>
+          </div>
+          <dl class="review-state-list">
+            <div><dt>A</dt><dd id="review-a-state">Source defaults</dd></div>
+            <div><dt>B</dt><dd id="review-b-state">Working copy</dd></div>
+          </dl>
+        </section>
+
         <fieldset class="control-group">
           <legend>Onion skin</legend>
           <label><input id="overlay-previous" type="checkbox"> Previous</label>

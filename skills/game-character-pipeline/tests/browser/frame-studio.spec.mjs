@@ -221,6 +221,31 @@ test('persists saved exclusion across reloads', async ({ page }) => {
   expect(session.edit.frames.find(({ frameId }) => frameId === 'step-pass').included).toBe(false);
 });
 
+test('A/B auditioning keeps saved A immutable and working B editable', async ({ page }) => {
+  await page.getByRole('button', { name: 'Save revision' }).click();
+  await expect(page.getByRole('status')).toContainText('Saved edit revision 1.');
+  await page.getByLabel('Duration step-contact').fill('96');
+  await page.getByLabel('Duration step-contact').blur();
+  await expect(page.getByRole('status')).toContainText('Updated authored frame duration.');
+
+  await page.getByRole('button', { name: 'Review A', exact: true }).click();
+
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact');
+  await expect(page.getByLabel('Duration step-contact')).toHaveValue('80');
+  await expect(page.getByLabel('Duration step-contact')).toBeDisabled();
+  await expect(page.getByLabel('Label step-contact', { exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Exclude step-contact', exact: true })).toBeDisabled();
+  await expect(page.locator('#review-a-state')).toContainText('Revision 1');
+  await expect(page.locator('#review-b-state')).toContainText('Unsaved working copy');
+
+  await page.getByRole('button', { name: 'Review B', exact: true }).click();
+
+  await expect(page.getByLabel('Duration step-contact')).toHaveValue('96');
+  await expect(page.getByLabel('Duration step-contact')).toBeEnabled();
+  await expect(page.getByLabel('Label step-contact', { exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Exclude step-contact', exact: true })).toBeEnabled();
+});
+
 test('hold-last playback stops on the final authored frame', async ({ page }) => {
   await studio.close();
   await fs.rm(root, { recursive: true, force: true });

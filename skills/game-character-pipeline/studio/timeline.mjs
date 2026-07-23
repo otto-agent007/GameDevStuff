@@ -3,6 +3,7 @@ const cloneFrames = (frames) => frames.map((frame) => ({ ...frame }));
 export class FrameTimeline extends HTMLElement {
   #frames = [];
   #selected = 0;
+  #readOnly = false;
 
   connectedCallback() {
     this.addEventListener('click', (event) => this.#onClick(event));
@@ -30,6 +31,15 @@ export class FrameTimeline extends HTMLElement {
     return this.#selected;
   }
 
+  set readOnly(value) {
+    this.#readOnly = Boolean(value);
+    this.#render();
+  }
+
+  get readOnly() {
+    return this.#readOnly;
+  }
+
   #emit(name, detail) {
     this.dispatchEvent(new CustomEvent(name, { bubbles: true, detail }));
   }
@@ -44,10 +54,12 @@ export class FrameTimeline extends HTMLElement {
     const index = Number(row.dataset.index);
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'include') {
+      if (this.#readOnly) return;
       this.#emit('frame-include', { index, included: row.dataset.included !== 'true' });
       return;
     }
     if (action === 'duplicate') {
+      if (this.#readOnly) return;
       this.#emit('frame-duplicate', { index });
       return;
     }
@@ -57,7 +69,7 @@ export class FrameTimeline extends HTMLElement {
 
   #onInput(event) {
     const row = this.#rowFrom(event);
-    if (!row || !event.target.matches('[data-label]')) return;
+    if (this.#readOnly || !row || !event.target.matches('[data-label]')) return;
     this.#emit('frame-label', { index: Number(row.dataset.index), label: event.target.value });
   }
 
@@ -97,6 +109,7 @@ export class FrameTimeline extends HTMLElement {
       row.dataset.frameId = frame.id;
       row.dataset.index = String(index);
       row.dataset.included = String(frame.included !== false);
+      row.dataset.readOnly = String(this.#readOnly);
       row.setAttribute('aria-current', String(index === this.#selected));
       row.tabIndex = index === this.#selected ? 0 : -1;
 
@@ -123,6 +136,7 @@ export class FrameTimeline extends HTMLElement {
       label.value = frame.label ?? '';
       label.placeholder = 'Add label';
       label.setAttribute('aria-label', `Label ${frame.id}`);
+      label.disabled = this.#readOnly;
       copy.append(ordinal, name, duration, label);
       if (frame.edit?.contacts?.length) {
         const contacts = document.createElement('span');
@@ -144,11 +158,13 @@ export class FrameTimeline extends HTMLElement {
       include.dataset.action = 'include';
       include.setAttribute('aria-label', `${frame.included === false ? 'Include' : 'Exclude'} ${frame.id}`);
       include.textContent = frame.included === false ? '＋' : '✓';
+      include.disabled = this.#readOnly;
       const duplicate = document.createElement('button');
       duplicate.type = 'button';
       duplicate.dataset.action = 'duplicate';
       duplicate.setAttribute('aria-label', `Duplicate ${frame.id}`);
       duplicate.textContent = '⧉';
+      duplicate.disabled = this.#readOnly;
       actions.append(include, duplicate);
       row.append(thumb, copy, actions);
       this.append(row);
