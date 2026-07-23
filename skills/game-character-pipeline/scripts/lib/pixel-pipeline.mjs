@@ -70,12 +70,12 @@ export async function runPixelProduction({
   spawn = spawnCaptured,
   verifySelectionApproval = verifySelection
 }) {
-  if (!run?.id || !run?.root || !project?.sha256 || !selectionApproval?.path || !HASH.test(selectionApproval.sha256 ?? '')) throw new Error('pixel production requires an immutable run, project, and selection approval');
+  if (!run?.id || !run?.root || !project?.root || !project?.sha256 || !selectionApproval?.path || !HASH.test(selectionApproval.sha256 ?? '')) throw new Error('pixel production requires an immutable run, project, and selection approval');
   if (!contract?.path || !HASH.test(contract.sha256 ?? '') || !HASH.test(contract.inputs?.sha256 ?? '') || contract.document?.version !== 2 || contract.document.selectionApprovalSha256 !== selectionApproval.sha256) throw new Error('approval binding mismatch between the v2 contract and selected owner approval');
   if (typeof pipelineCli !== 'string' || pipelineCli === '' || typeof node !== 'string' || node === '' || typeof output !== 'string' || output === '') throw new Error('pixel production executable and output paths are required');
   const verified = await verifySelectionApproval({ run, project, selectionApproval });
   if (verified.sha256 !== selectionApproval.sha256 || verified.document?.runId !== run.id || verified.document?.projectSha256 !== project.sha256 || verified.document?.decision !== 'approved') throw new Error('approval binding mismatch after selection approval verification');
-  const argv = [pipelineCli, 'produce-contract', '--contract', contract.path, '--project-dir', run.root, '--output', output];
+  const argv = [pipelineCli, 'produce-contract', '--contract', contract.path, '--project-dir', run.root, '--snapper-project-dir', project.root, '--output', output];
   if (snapReceipt?.path) argv.push('--snap-receipt', snapReceipt.path);
   if (frameApproval?.path) argv.push('--frame-approval', frameApproval.path);
   const result = await spawn(node, argv, { cwd: path.resolve(run.root), shell: false });

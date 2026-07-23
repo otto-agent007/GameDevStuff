@@ -28,6 +28,14 @@ test('produce command exposes authenticated delegation and resume inputs', async
   }
 });
 
+test('intake command exposes pose-board recovery and approval inputs', async () => {
+  const result = await execFile(process.execPath, ['scripts/cli.mjs', 'intake', '--help'], {
+    cwd: packageDir
+  });
+  assert.equal(result.stdout.includes('--recovery-contract <file>'), true);
+  assert.equal(result.stdout.includes('--selection-approval <file>'), true);
+});
+
 test('validate and audit commands expose run and repeatability inputs', async () => {
   const validate = await execFile(process.execPath, ['scripts/cli.mjs', 'validate', '--help'], { cwd: packageDir });
   for (const option of ['--project-dir', '--run', '--revision']) assert.match(validate.stdout, new RegExp(option));

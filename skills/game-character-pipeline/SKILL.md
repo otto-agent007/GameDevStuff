@@ -1,6 +1,6 @@
 ---
 name: game-character-pipeline
-description: Use when a user needs to create, import, review, produce, validate, or audit game-character sprite animation from an approved anchor, character brief, PNG sequence, animated GIF, APNG, WebP, video, or generated still, including Frame Studio, pivots, sockets, contacts, Pixel Snapper, engine export, reproducibility, or private production audits.
+description: Use when a user needs to create, import, recover, review, produce, validate, or audit game-character sprite animation from an approved anchor, character brief, chroma-key pose board, PNG sequence, animated GIF, APNG, WebP, video, or generated still, including Frame Studio, pivots, sockets, contacts, Pixel Snapper, engine export, reproducibility, or private production audits.
 ---
 
 # Game Character Pipeline
@@ -12,6 +12,7 @@ Run the auditable character-animation workflow from this package. Keep source by
 - Treat the project contract and immutable run artifacts as authoritative. Never guess timing, pivots, sockets, contacts, track membership, loop behavior, or approvals.
 - Never reuse an approval after any bound source, edit, contract, receipt, or frame-approval hash changes. Treat attempted stale-approval reuse as an objective binding failure with exit class `3`; a later request for a fresh owner decision is exit class `4`.
 - Never scale poses independently. Per-frame translation is allowed only by the contract; scale and rotation remain shared across the clip unless the owner explicitly revises the contract.
+- Never treat pose-board grid geometry as authoritative. When foreground crosses nominal cells, recover complete four-neighbor foreground components from the full board, present numbered candidates, and require owner selection before Pixel Snapper.
 - Treat any export-time override of approved timing or playback semantics, including `once` or `hold-last` to `loop`, as an objective contract failure with exit class `3`. A later request to approve a revised contract is exit class `4`.
 - Never enter, edit, copy files into, build, test, or otherwise integrate with `/mnt/2TBHDD/CockpitEscapeRoom` while using this skill. That downstream repository requires a separate explicitly approved integration task, even when private output appears to exist there already.
 - Never publish private assets, paths, manifests, media, thumbnails, reports, or descriptive private evidence. Keep private work outside Git and npm package contents.
@@ -20,16 +21,17 @@ Run the auditable character-animation workflow from this package. Keep source by
 
 1. Validate or initialize the versioned character project before intake.
 2. Create or resume an immutable run and decode the motion source without inventing data.
-3. Open Frame Studio, review complete decode diagnostics, and author non-destructive edits plus required landmarks.
-4. Render the review revision and obtain explicit hash-bound owner approval.
-5. Delegate approved frames through the authenticated Pixel Snapper contract. Require the signed snap receipt and signed post-snap frame approval.
-6. Publish only after objective validation passes. Run a single-run validation and, when reproducibility is required, compare an equivalent repeat run.
+3. For a pose board, open the recovery stage, curate whole-component candidates, and obtain a hash-bound owner selection before normal source publication.
+4. Open Frame Studio, review complete decode diagnostics, and author non-destructive edits plus required landmarks.
+5. Render the review revision and obtain explicit hash-bound owner approval.
+6. Delegate approved frames separately through the authenticated Pixel Snapper contract. Require the signed snap receipt and signed post-snap frame approval.
+7. Publish only after objective validation passes. Run a single-run validation and, when reproducibility is required, compare an equivalent repeat run.
 
 Use [references/workflow.md](references/workflow.md) for commands, state transitions, and exit classes.
 
 ## Source and review routing
 
-- For PNG sequences, GIF, APNG, WebP, MP4, WebM, or generated stills, read [references/motion-sources.md](references/motion-sources.md).
+- For pose boards, PNG sequences, GIF, APNG, WebP, MP4, WebM, or generated stills, read [references/motion-sources.md](references/motion-sources.md).
 - For stable framing, edit revisions, pivots, sockets, contacts, root travel, timing, playback, and approvals, read [references/frame-studio.md](references/frame-studio.md).
 - For private Pop T or another private production audit, read [references/private-audit.md](references/private-audit.md) before touching any input. Stop at the audit handoff; do not integrate downstream.
 

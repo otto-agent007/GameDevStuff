@@ -1,4 +1,4 @@
 interface:
   display_name: "Game Character Pipeline"
-  short_description: "Build and audit pixel-character animation workflows"
-  default_prompt: "Use $game-character-pipeline to create or audit this character animation workflow."
+  short_description: "Recover, build, and audit pixel-character animation"
+  default_prompt: "Use $game-character-pipeline to recover or create this character animation and carry it through review, Pixel Snapper, validation, and audit."

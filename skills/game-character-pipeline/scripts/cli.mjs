@@ -17,10 +17,12 @@ import { createGenerationHandoff, importGeneratedCandidate, loadGenerationHandof
 import { decodeAnimatedImage } from './lib/animated-image.mjs';
 import { createPixelProductionContract, publishExportRevision } from './lib/export-contract.mjs';
 import { runPixelProduction } from './lib/pixel-pipeline.mjs';
+import { decodePoseBoard } from './lib/pose-board.mjs';
 import { decodePngSequence } from './lib/png-sequence.mjs';
 import { createProject, createRun, loadInitializedProject, loadRun } from './lib/run-contract.mjs';
 import { decodeMotionSource, registerSourceAdapter } from './lib/source-adapter.mjs';
 import { decodeVideo } from './lib/video.mjs';
+import { startRecoveryStudioServer } from './studio/recovery-server.mjs';
 import { startStudioServer } from './studio/server.mjs';
 
 const program = new Command()
@@ -46,6 +48,13 @@ function revisionInteger(value) {
 }
 
 registerSourceAdapter('png-sequence', ({ source, run }) => decodePngSequence({ manifest: source, run }));
+registerSourceAdapter('pose-board', ({ source, run, project, options }) => decodePoseBoard({
+  source,
+  recoveryContract: options.recoveryContract,
+  selectionApproval: options.selectionApproval,
+  run,
+  project
+}));
 registerSourceAdapter('generated-still', ({ source, run, options }) => importGeneratedCandidate({
   handoff: options.handoff,
   source,
@@ -64,17 +73,31 @@ program
   .description('Open the local Frame Studio authoring surface')
   .requiredOption('--project-dir <directory>', 'project directory')
   .requiredOption('--run <id>', 'immutable run ID')
+  .option('--stage <stage>', 'selection or recovery', 'selection')
   .action(async (options) => {
-    const studio = await startStudioServer({
-      projectDir: path.resolve(options.projectDir),
-      runId: options.run,
-      stage: 'selection'
-    });
+    if (!['selection', 'recovery'].includes(options.stage)) {
+      throw new Error('studio stage must be selection or recovery');
+    }
+    const studio = options.stage === 'recovery'
+      ? await startRecoveryStudioServer({
+        projectDir: path.resolve(options.projectDir),
+        runId: options.run
+      })
+      : await startStudioServer({
+        projectDir: path.resolve(options.projectDir),
+        runId: options.run,
+        stage: 'selection'
+      });
     const shutdown = new Promise((resolve) => {
       process.once('SIGINT', resolve);
       process.once('SIGTERM', resolve);
     });
-    print({ status: 'ready', origin: studio.origin, runId: options.run });
+    print({
+      status: 'ready',
+      origin: studio.origin,
+      runId: options.run,
+      stage: options.stage
+    });
     await shutdown;
     await studio.close();
   });
@@ -109,6 +132,8 @@ program
   .option('--duration-ms <milliseconds>', 'explicit candidate duration', positiveInteger)
   .option('--source-manifest <file>', 'explicit PNG sequence manifest')
   .option('--source <file>', 'animated image or video source file')
+  .option('--recovery-contract <file>', 'closed pose-board recovery contract')
+  .option('--selection-approval <file>', 'approved numbered pose selection')
   .option('--ffmpeg <file>', 'explicit FFmpeg executable')
   .action(async (options) => {
     const projectDir = path.resolve(options.projectDir);
@@ -164,6 +189,31 @@ program
         options: {}
       });
       print({ status: 'intake-complete', runId: run.id, sourceSha256: result.sourceSha256, approval: result.approval });
+      return;
+    }
+
+    if (options.kind === 'pose-board') {
+      if (!options.source || !options.recoveryContract) {
+        throw new Error('pose-board intake requires --source and --recovery-contract');
+      }
+      const result = await decodeMotionSource({
+        kind: 'pose-board',
+        source: path.resolve(options.source),
+        run,
+        project,
+        options: {
+          recoveryContract: path.resolve(options.recoveryContract),
+          selectionApproval: options.selectionApproval
+            ? path.resolve(options.selectionApproval)
+            : undefined
+        }
+      });
+      print({
+        status: 'intake-complete',
+        runId: run.id,
+        sourceSha256: result.sourceSha256,
+        approval: result.approval
+      });
       return;
     }
 
@@ -380,9 +430,9 @@ program
 try {
   await program.parseAsync(process.argv);
 } catch (error) {
-  if (error.exitCode === 2 && error.handoff) {
+  if ([2, 4].includes(error.exitCode) && error.handoff) {
     print(error.handoff);
-    process.exitCode = 2;
+    process.exitCode = error.exitCode;
   } else {
     process.stderr.write(`${JSON.stringify({ error: error.message, exitCode: 1 })}\n`);
     process.exitCode = 1;

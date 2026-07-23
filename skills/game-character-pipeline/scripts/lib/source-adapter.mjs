@@ -131,11 +131,11 @@ export async function validateMotionSourceResult(value, { run, expectedKind } = 
   return deepFreeze(result);
 }
 
-export async function decodeMotionSource({ kind, source, run, options = {} }) {
+export async function decodeMotionSource({ kind, source, run, project, options = {} }) {
   const decode = adapters.get(kind);
   if (!decode) throw new Error(`unregistered motion source kind: ${kind}`);
   if (run?.document?.sourceRequest?.kind !== kind) throw new Error('motion source kind does not match the immutable run request');
-  const candidate = await decode({ kind, source, run, options });
+  const candidate = await decode({ kind, source, run, project, options });
   const result = await validateMotionSourceResult(candidate, { run, expectedKind: kind });
   await writeImmutableJson({ root: run.root, relative: 'reports/source.json', value: result, reuse: true });
   return result;

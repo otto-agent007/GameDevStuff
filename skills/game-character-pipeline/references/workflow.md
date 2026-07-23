@@ -24,6 +24,8 @@ node scripts/cli.mjs intake \
 
 Use `--resume <run-id>` only with the same immutable action and source kind. Select source-specific options from [motion-sources.md](motion-sources.md). Intake must retain source hashes and complete decoder diagnostics.
 
+For a chroma-key pose board, the first intake exits `4` after publishing a full-board recovery report. Run `studio --stage recovery`, save a numbered selection revision, obtain owner approval, and resume intake with `--selection-approval`. Grid geometry is only a generation hint: complete connected foreground components remain authoritative when artwork crosses nominal cells.
+
 ## 3. Review and approve
 
 ```bash
@@ -58,6 +60,8 @@ node scripts/cli.mjs produce \
 ```
 
 Do not substitute unsigned files. The delegated response must bind the same contract and input-manifest hashes. Missing receipts or review artifacts are handoffs, not permission to bypass the gate.
+
+Pixel Snapper must receive one ordered input per approved recovered frame, not the source pose board. After Snapper, reopen the normal Studio post-snap review path to align frames and approve final pivots, contacts, sockets, and travel before normalization or export.
 
 ## 5. Validate and audit
 
