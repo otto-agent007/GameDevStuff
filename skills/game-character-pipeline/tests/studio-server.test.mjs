@@ -190,6 +190,30 @@ test('studio accepts duplicate source frames that share immutable bytes', async 
   assert.equal((await fetch(`${studio.origin}/api/frame/${fixture.frame.sha256}`)).status, 200);
 });
 
+test('studio exposes a validated comparison working edit without changing saved review state', async (t) => {
+  const fixture = await studioFixture(t);
+  const comparisonWorkingEdit = validStudioEdit(fixture);
+  comparisonWorkingEdit.frames[0].label = 'candidate-working-copy';
+  delete comparisonWorkingEdit.projectSha256;
+  delete comparisonWorkingEdit.sourceSha256;
+  const studio = await startStudioServer({
+    projectDir: fixture.projectRoot,
+    runId: fixture.run.id,
+    stage: 'selection',
+    comparisonWorkingEdit
+  });
+  t.after(() => studio.close());
+
+  const session = (await responseJson(`${studio.origin}/api/session`)).body;
+  assert.equal(session.edit, null);
+  assert.equal(session.editRevision, 0);
+  assert.deepEqual(session.comparisonWorkingEdit, {
+    ...comparisonWorkingEdit,
+    projectSha256: fixture.project.sha256,
+    sourceSha256: sha256Value(fixture.manifest)
+  });
+});
+
 test('studio rejects unsafe methods, content types, origins, bodies, and stale edits', async (t) => {
   const fixture = await studioFixture(t);
   const studio = await startStudioServer({ projectDir: fixture.projectRoot, runId: fixture.run.id, stage: 'selection' });
@@ -280,6 +304,59 @@ test('studio render and approval endpoints bind immutable derivatives to the cur
   assert.match(approval.body.sha256, /^[a-f0-9]{64}$/);
   assert.equal(approval.body.renderSha256, rendered.body.renderSha256);
   assert.equal((await fs.lstat(path.join(fixture.run.root, 'approved', 'selection-approval-0001.json'))).isFile(), true);
+});
+
+test('post-snap studio keeps a separate immutable edit chain from selection review', async (t) => {
+  const fixture = await studioFixture(t);
+  const selection = await startStudioServer({
+    projectDir: fixture.projectRoot,
+    runId: fixture.run.id,
+    stage: 'selection'
+  });
+  const selectionSession = (await responseJson(`${selection.origin}/api/session`)).body;
+  const selectionSaved = await responseJson(`${selection.origin}/api/edits`, {
+    method: 'PUT',
+    headers: mutationHeaders(selection.origin, selectionSession.editSha256),
+    body: JSON.stringify(validStudioEdit(fixture))
+  });
+  assert.equal(selectionSaved.response.status, 200);
+  await selection.close();
+
+  const snappedManifest = structuredClone(fixture.manifest);
+  snappedManifest.kind = 'post-snap-review';
+  const studio = await startStudioServer({
+    projectDir: fixture.projectRoot,
+    runId: fixture.run.id,
+    stage: 'post-snap',
+    reviewManifest: snappedManifest,
+    initialEdit: validStudioEdit(fixture)
+  });
+  t.after(() => studio.close());
+  const session = (await responseJson(`${studio.origin}/api/session`)).body;
+  assert.equal(session.stage, 'post-snap');
+  assert.equal(session.editRevision, 0);
+  assert.equal(session.edit.sourceSha256, session.sourceSha256);
+  assert.deepEqual(session.capabilities, { render: false, approve: false });
+
+  const saved = await responseJson(`${studio.origin}/api/edits`, {
+    method: 'PUT',
+    headers: mutationHeaders(studio.origin, session.editSha256),
+    body: JSON.stringify(session.edit)
+  });
+  assert.equal(saved.response.status, 200);
+  assert.equal(saved.body.revision, 1);
+  assert.equal((await fs.lstat(path.join(fixture.run.root, 'edits', 'studio-edit-0001.json'))).isFile(), true);
+  assert.equal((await fs.lstat(path.join(fixture.run.root, 'edits', 'post-snap-edit-0001.json'))).isFile(), true);
+
+  for (const route of ['render', 'approval']) {
+    const result = await responseJson(`${studio.origin}/api/${route}`, {
+      method: 'POST',
+      headers: mutationHeaders(studio.origin, saved.body.sha256),
+      body: route === 'render' ? '{}' : JSON.stringify({ approver: 'owner', decision: 'approved', notes: '' })
+    });
+    assert.equal(result.response.status, 409);
+    assert.match(result.body.error, /post-snap/i);
+  }
 });
 
 test('studio CLI prints readiness once and closes on SIGTERM without edits', async (t) => {

@@ -7,6 +7,7 @@ import sharp from 'sharp';
 
 import { writeImmutableBytes, writeImmutableJson } from '../../scripts/lib/artifacts.mjs';
 import { createProject, createRun } from '../../scripts/lib/run-contract.mjs';
+import { sha256Value } from '../../scripts/lib/schema.mjs';
 import { startStudioServer } from '../../scripts/studio/server.mjs';
 
 const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -30,7 +31,7 @@ function spriteFrame(index) {
   return sharp(pixels, { raw: { width, height, channels: 4 } }).png().toBuffer();
 }
 
-async function startFixture(actionId = 'idle') {
+async function startFixture(actionId = 'idle', { comparison = false } = {}) {
   root = await fs.mkdtemp(path.join(os.tmpdir(), 'game-character-frame-studio-browser-'));
   const projectRoot = path.join(root, 'project');
   const project = await createProject({ root: projectRoot, contractFile: projectFixture });
@@ -74,7 +75,28 @@ async function startFixture(actionId = 'idle') {
     approval: null
   };
   await writeImmutableJson({ root: run.root, relative: 'reports/source.json', value: source });
-  studio = await startStudioServer({ projectDir: projectRoot, runId: run.id, stage: 'selection' });
+  const comparisonWorkingEdit = comparison
+    ? {
+        schemaVersion: 1,
+        kind: 'frame-studio-edit',
+        projectSha256: project.sha256,
+        sourceSha256: sha256Value(source),
+        actionId,
+        frames: frames.map((frame, index) => ({
+          frameId: frame.id,
+          included: index !== 0,
+          label: index === 1 ? 'candidate' : '',
+          durationMs: frame.durationMs,
+          translation: { x: 0, y: 0 },
+          transform: null,
+          markers: [],
+          contacts: [],
+          groundTravel: { x: 0, y: 0 },
+          tracks: actionId === 'idle' ? ['actor', 'satchel'] : ['actor']
+        }))
+      }
+    : undefined;
+  studio = await startStudioServer({ projectDir: projectRoot, runId: run.id, stage: 'selection', comparisonWorkingEdit });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -246,6 +268,21 @@ test('A/B auditioning keeps saved A immutable and working B editable', async ({ 
   await expect(page.getByLabel('Duration step-contact', { exact: true })).toBeEnabled();
   await expect(page.getByLabel('Label step-contact', { exact: true })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Exclude step-contact', exact: true })).toBeEnabled();
+});
+
+test('configured candidates load into Review B on every comparison launch', async ({ page }) => {
+  await studio.close();
+  await fs.rm(root, { recursive: true, force: true });
+  await startFixture('idle', { comparison: true });
+  await page.goto(studio.origin);
+
+  await page.getByRole('button', { name: 'Side by side', exact: true }).click();
+  await page.getByRole('button', { name: 'Replay', exact: true }).click();
+
+  await expect(page.locator('#review-a-frame')).toHaveText('step-contact');
+  await expect(page.locator('#review-b-frame')).toHaveText('step-pass');
+  await expect(page.locator('[data-frame-id="step-contact"]')).toHaveAttribute('data-included', 'false');
+  await expect(page.locator('#review-b-state')).toContainText('Unsaved working copy');
 });
 
 test('side-by-side preview is accessible and responsive', async ({ page }, testInfo) => {

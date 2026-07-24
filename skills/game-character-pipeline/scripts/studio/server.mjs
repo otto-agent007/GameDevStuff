@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import { renderReviewRevision, verifyApproval, writeApproval } from '../lib/approval.mjs';
 import { writeRevision } from '../lib/artifacts.mjs';
+import { validateEditManifest } from '../lib/edits.mjs';
 import { loadInitializedProject, loadRun } from '../lib/run-contract.mjs';
 import {
   exactObject,
@@ -156,7 +157,12 @@ async function verifyFrame(runRoot, frame) {
   return physical;
 }
 
+function editStem(stage) {
+  return stage === 'post-snap' ? 'post-snap-edit' : 'studio-edit';
+}
+
 async function loadEditState(run, stage, sourceSha256) {
+  const stem = editStem(stage);
   const root = {
     schemaVersion: 1,
     kind: 'studio-edit-root',
@@ -166,10 +172,10 @@ async function loadEditState(run, stage, sourceSha256) {
   };
   let state = { editRevision: 0, editSha256: sha256Value(root), edit: null };
   const names = (await fs.readdir(path.join(run.root, 'edits')))
-    .filter((name) => /^studio-edit-\d{4}\.json$/.test(name))
+    .filter((name) => new RegExp(`^${stem}-\\d{4}\\.json$`).test(name))
     .sort();
   for (const [index, name] of names.entries()) {
-    if (name !== `studio-edit-${String(index + 1).padStart(4, '0')}.json`) throw new Error('studio edit revisions are not contiguous');
+    if (name !== `${stem}-${String(index + 1).padStart(4, '0')}.json`) throw new Error('studio edit revisions are not contiguous');
     const file = path.join(run.root, 'edits', name);
     const document = await readCanonicalJson(file, run.root, 'studio edit revision');
     exactObject(document, ['schemaVersion', 'kind', 'runId', 'stage', 'sourceSha256', 'previousSha256', 'edit'], 'studio edit revision');
@@ -213,6 +219,8 @@ export async function startStudioServer({
   runId,
   stage,
   reviewManifest,
+  initialEdit,
+  comparisonWorkingEdit,
   host = '127.0.0.1',
   port = 0
 }) {
@@ -226,6 +234,24 @@ export async function startStudioServer({
   const sourceSha256 = sha256Value(source);
   const frameByHash = new Map(source.frames.map((frame) => [frame.sha256, frame]));
   let editState = await loadEditState(run, stage, sourceSha256);
+  if (stage === 'post-snap' && editState.editRevision === 0 && initialEdit) {
+    const seeded = {
+      ...structuredClone(initialEdit),
+      projectSha256: project.sha256,
+      sourceSha256
+    };
+    editState = {
+      ...editState,
+      edit: validateEditManifest(seeded, { project, source })
+    };
+  }
+  const validatedComparisonWorkingEdit = comparisonWorkingEdit
+    ? validateEditManifest({
+        ...structuredClone(comparisonWorkingEdit),
+        projectSha256: project.sha256,
+        sourceSha256
+      }, { project, source })
+    : null;
   const serialize = serialQueue();
   let origin;
 
@@ -258,6 +284,8 @@ export async function startStudioServer({
           project: project.document,
           actionId: run.document.sourceRequest.actionId,
           source,
+          comparisonWorkingEdit: validatedComparisonWorkingEdit,
+          capabilities: { render: stage === 'selection', approve: stage === 'selection' },
           ...editState
         });
         return;
@@ -283,6 +311,9 @@ export async function startStudioServer({
         const edit = await readJson(request);
         const result = await serialize(async () => {
           requireMutationHeaders(request, origin, editState.editSha256);
+          const validated = stage === 'post-snap'
+            ? validateEditManifest(edit, { project, source })
+            : edit;
           const document = {
             schemaVersion: 1,
             kind: 'studio-edit',
@@ -290,10 +321,10 @@ export async function startStudioServer({
             stage,
             sourceSha256,
             previousSha256: editState.editSha256,
-            edit
+            edit: validated
           };
-          const written = await writeRevision({ root: run.root, area: 'edits', stem: 'studio-edit', value: document });
-          editState = { editRevision: written.revision, editSha256: written.sha256, edit };
+          const written = await writeRevision({ root: run.root, area: 'edits', stem: editStem(stage), value: document });
+          editState = { editRevision: written.revision, editSha256: written.sha256, edit: validated };
           return written;
         });
         sendJson(response, 200, { revision: result.revision, sha256: result.sha256, editSha256: sha256Value(edit) });
@@ -305,7 +336,7 @@ export async function startStudioServer({
         if (request.method !== 'GET') throw methodError('GET');
         const revision = Number(editRevisionMatch[1]);
         if (revision < 1 || revision > editState.editRevision) throw new HttpError(404, 'studio edit revision does not exist');
-        const file = path.join(run.root, 'edits', `studio-edit-${String(revision).padStart(4, '0')}.json`);
+        const file = path.join(run.root, 'edits', `${editStem(stage)}-${String(revision).padStart(4, '0')}.json`);
         const document = await readCanonicalJson(file, run.root, 'studio edit revision');
         sendJson(response, 200, { revision, sha256: await sha256File(file), edit: document.edit });
         return;
@@ -313,6 +344,7 @@ export async function startStudioServer({
 
       if (pathname === '/api/approval') {
         if (request.method !== 'POST') throw methodError('POST');
+        if (stage === 'post-snap') throw new HttpError(409, 'post-snap decisions require the signed frame approval workflow');
         const approval = await readJson(request);
         exactObject(approval, ['approver', 'decision', 'notes'], 'studio approval request');
         const result = await serialize(async () => {
@@ -338,6 +370,7 @@ export async function startStudioServer({
 
       if (pathname === '/api/render') {
         if (request.method !== 'POST') throw methodError('POST');
+        if (stage === 'post-snap') throw new HttpError(409, 'post-snap review must stop before normalization or export');
         const body = await readJson(request);
         exactObject(body, [], 'studio render request');
         const result = await serialize(async () => {

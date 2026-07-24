@@ -69,7 +69,7 @@ async function approvalCliFixture() {
   return { projectDir, contractFile, receipt, requestFile };
 }
 
-async function productionCliFixture() {
+async function productionCliFixture({ canvasWidth = 13 } = {}) {
   const projectDir = await tempProject('sprite production cli ');
   const inputsDir = path.join(projectDir, 'inputs');
   await fs.mkdir(inputsDir);
@@ -84,8 +84,8 @@ async function productionCliFixture() {
   const document = {
     version: 2, selectionApprovalSha256: '1'.repeat(64),
     character: { id: 'clockwork-courier', anchorSha256: inputSha256 },
-    canvas: { width: 13, height: 14, pivot: { x: 6, y: 11 }, baseline: 11 },
-    scale: { integer: 2, runtime: { width: 26, height: 28 } },
+    canvas: { width: canvasWidth, height: 14, pivot: { x: 6, y: 11 }, baseline: 11 },
+    scale: { integer: 2, runtime: { width: canvasWidth * 2, height: 28 } },
     palette: { rgba, sha256: stableHash(rgba), snapperPaletteHex: opaque },
     tracks: [{ id: 'actor', kind: 'actor', required: true, attachTo: null }],
     sockets: [], contacts: [],
@@ -187,7 +187,7 @@ test('contract export CLI uses only contract timing and rejects a conflicting du
 });
 
 test('produce-contract emits structured manual and post-snap owner handoffs', async () => {
-  const manual = await productionCliFixture();
+  const manual = await productionCliFixture({ canvasWidth: 12 });
   const manualOutput = path.join(manual.projectDir, 'production');
   const first = invoke(['produce-contract', '--contract', manual.contractFile, '--project-dir', manual.projectDir, '--output', manualOutput], { env: { PATH: '' } });
   assert.equal(first.status, 2, first.stderr);

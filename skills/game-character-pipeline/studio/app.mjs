@@ -77,9 +77,11 @@ function setFrameInclusion(index, included) {
 
 function updateApprovalControls() {
   const hasSavedEdit = Boolean(session?.editRevision);
+  const canRender = session?.capabilities?.render !== false;
+  const canApprove = session?.capabilities?.approve !== false;
   document.querySelector('#save-revision').disabled = reviewSide === 'A';
-  document.querySelector('#render-review').disabled = dirty || !hasSavedEdit;
-  const canDecide = !dirty && Boolean(renderReceipt) && hasSavedEdit;
+  document.querySelector('#render-review').disabled = !canRender || dirty || !hasSavedEdit;
+  const canDecide = canApprove && !dirty && Boolean(renderReceipt) && hasSavedEdit;
   document.querySelector('#approve-revision').disabled = !canDecide;
   document.querySelector('#reject-revision').disabled = !canDecide;
 }
@@ -674,7 +676,17 @@ async function initialize() {
       dirty = true;
     }
     savedFrames = cloneFrameState(frames);
+    if (compatibleEdit(session.comparisonWorkingEdit)) {
+      for (const [index, frameEdit] of session.comparisonWorkingEdit.frames.entries()) {
+        frames[index].edit = structuredClone(frameEdit);
+        frames[index].included = frameEdit.included;
+        frames[index].label = frameEdit.label;
+        frames[index].durationMs = frameEdit.durationMs;
+      }
+      dirty = true;
+    }
     document.querySelector('#project-title').textContent = `${session.project.character.name} / ${titleCase(action?.id ?? session.actionId)}`;
+    document.querySelector('#stage-chip').textContent = titleCase(session.stage);
     document.querySelector('#source-hash').textContent = session.sourceSha256.slice(0, 12);
     document.querySelector('#approval-source-hash').textContent = session.sourceSha256;
     document.querySelector('#approval-edit-hash').textContent = session.editSha256;

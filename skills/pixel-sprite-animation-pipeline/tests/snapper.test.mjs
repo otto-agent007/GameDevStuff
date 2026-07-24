@@ -150,7 +150,7 @@ test('v2 production binds the contracted pixel size and canonicalizes transparen
   assert.deepEqual(receipt.payload.arguments, ['16', '--pixel-size', '2']);
 });
 
-test('v2 production preserves an exactly aligned integer-scale source without invoking Pixel Snapper', { skip: process.platform === 'win32' && 'POSIX executable fixture' }, async () => {
+test('v2 production preserves an aligned source with the full 16-color Snapper palette', { skip: process.platform === 'win32' && 'POSIX executable fixture' }, async () => {
   const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapper-aligned-source-'));
   const outputDir = path.join(projectDir, 'output');
   const input = path.join(projectDir, 'frame.png');
@@ -159,7 +159,12 @@ test('v2 production preserves an exactly aligned integer-scale source without in
   await fs.mkdir(path.join(projectDir, '.pixel-sprite-pipeline'), { mode: 0o700 });
   const transparent = [0, 0, 0, 0];
   const ink = [4, 6, 20, 255];
-  const paletteSha256 = crypto.createHash('sha256').update(JSON.stringify([transparent, ink])).digest('hex');
+  const paletteRgba = [
+    transparent,
+    ink,
+    ...Array.from({ length: 15 }, (_, index) => [index + 16, index + 32, index + 48, 255])
+  ];
+  const paletteSha256 = crypto.createHash('sha256').update(JSON.stringify(paletteRgba)).digest('hex');
   const logical = [transparent, ink, ink, transparent];
   const scaled = Buffer.alloc(4 * 4 * 4);
   for (let y = 0; y < 4; y += 1) for (let x = 0; x < 4; x += 1) scaled.set(logical[Math.floor(y / 2) * 2 + Math.floor(x / 2)], (y * 4 + x) * 4);
@@ -172,7 +177,7 @@ test('v2 production preserves an exactly aligned integer-scale source without in
   const result = await runPixelSnapper({
     inputs: [input], outputDir, config: { snapper: { args: ['16'] } }, identity,
     pixelSize: 2, outputCanvas: { width: 2, height: 2 },
-    alignedSource: { scale: 2, canvas: { width: 2, height: 2 }, paletteRgba: [transparent, ink], paletteSha256 },
+    alignedSource: { scale: 2, canvas: { width: 2, height: 2 }, paletteRgba, paletteSha256 },
     receipt: { projectDir, run, contract }
   });
 
@@ -186,6 +191,87 @@ test('v2 production preserves an exactly aligned integer-scale source without in
   assert.equal(receipt.payload.toolProvenanceVerified, false);
   assert.equal(receipt.payload.deterministicProvenanceVerified, true);
   assert.deepEqual(receipt.payload.derivation, { kind: 'integer-grid-collapse', scale: 2, canvas: { width: 2, height: 2 }, paletteSha256 });
+  await verifySnapReceipt({ projectDir, file: path.join(outputDir, 'snap-receipt.json'), expectedRun: run, expectedContract: contract });
+});
+
+test('v2 production preserves canonical palette input without resnapping or scaling it', { skip: process.platform === 'win32' && 'POSIX executable fixture' }, async () => {
+  const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapper-canonical-source-'));
+  const outputDir = path.join(projectDir, 'output');
+  const input = path.join(projectDir, 'frame.png');
+  const marker = path.join(projectDir, 'invoked');
+  const executable = path.join(projectDir, 'snapper.mjs');
+  await fs.mkdir(path.join(projectDir, '.pixel-sprite-pipeline'), { mode: 0o700 });
+  const transparent = [0, 0, 0, 0];
+  const hiddenTransparent = [91, 42, 17, 0];
+  const ink = [4, 6, 20, 255];
+  const paletteRgba = [transparent, ink];
+  const paletteSha256 = crypto.createHash('sha256').update(JSON.stringify(paletteRgba)).digest('hex');
+  const inputPixels = [hiddenTransparent, ink, ink, hiddenTransparent];
+  await sharp(Buffer.from(inputPixels.flat()), { raw: { width: 2, height: 2, channels: 4 } }).png().toFile(input);
+  await fs.writeFile(executable, `#!/usr/bin/env node\nimport fs from 'node:fs/promises';\nconst [input, output] = process.argv.slice(2); await fs.copyFile(input, output); await fs.writeFile(${JSON.stringify(marker)}, 'invoked');\n`, { mode: 0o700 });
+  const identity = { origin: 'environment', path: executable, physicalPath: executable, sha256: 'a'.repeat(64), version: 'test', helpSha256: 'b'.repeat(64), fixtureRgbaSha256: 'c'.repeat(64), size: 1 };
+  const run = { id: 'run-canonical-source', outputDir, manifestSha256: 'd'.repeat(64) };
+  const contract = { sha256: 'e'.repeat(64) };
+
+  const result = await runPixelSnapper({
+    inputs: [input], outputDir, config: { snapper: { args: ['16'] } }, identity,
+    pixelSize: 2, outputCanvas: { width: 2, height: 2 },
+    alignedSource: { scale: 2, canvas: { width: 2, height: 2 }, paletteRgba, paletteSha256 },
+    receipt: { projectDir, run, contract }
+  });
+
+  await assert.rejects(fs.access(marker), /ENOENT/);
+  assert.equal(result.origin, 'verified-aligned-source');
+  const { data, info } = await sharp(result.outputs[0]).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  assert.deepEqual({ width: info.width, height: info.height }, { width: 2, height: 2 });
+  assert.deepEqual([...data], [transparent, ink, ink, transparent].flat());
+  const receipt = JSON.parse(await fs.readFile(path.join(outputDir, 'snap-receipt.json'), 'utf8'));
+  assert.deepEqual(receipt.payload.derivation, {
+    kind: 'canonical-palette-normalization',
+    canvas: { width: 2, height: 2 },
+    paletteSha256
+  });
+  await verifySnapReceipt({ projectDir, file: path.join(outputDir, 'snap-receipt.json'), expectedRun: run, expectedContract: contract });
+});
+
+test('v2 production remaps canonical limited-palette variants without changing occupied pixels', { skip: process.platform === 'win32' && 'POSIX executable fixture' }, async () => {
+  const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapper-canonical-remap-'));
+  const outputDir = path.join(projectDir, 'output');
+  const input = path.join(projectDir, 'frame.png');
+  const marker = path.join(projectDir, 'invoked');
+  const executable = path.join(projectDir, 'snapper.mjs');
+  await fs.mkdir(path.join(projectDir, '.pixel-sprite-pipeline'), { mode: 0o700 });
+  const transparent = [0, 0, 0, 0];
+  const dark = [4, 6, 20, 255];
+  const light = [240, 180, 10, 255];
+  const variant = [6, 5, 18, 255];
+  const paletteRgba = [transparent, dark, light];
+  const paletteSha256 = crypto.createHash('sha256').update(JSON.stringify(paletteRgba)).digest('hex');
+  await sharp(Buffer.from([transparent, variant, light, transparent].flat()), { raw: { width: 2, height: 2, channels: 4 } }).png().toFile(input);
+  await fs.writeFile(executable, `#!/usr/bin/env node\nimport fs from 'node:fs/promises';\nconst [input, output] = process.argv.slice(2); await fs.copyFile(input, output); await fs.writeFile(${JSON.stringify(marker)}, 'invoked');\n`, { mode: 0o700 });
+  const identity = { origin: 'environment', path: executable, physicalPath: executable, sha256: 'a'.repeat(64), version: 'test', helpSha256: 'b'.repeat(64), fixtureRgbaSha256: 'c'.repeat(64), size: 1 };
+  const run = { id: 'run-canonical-remap', outputDir, manifestSha256: 'd'.repeat(64) };
+  const contract = { sha256: 'e'.repeat(64) };
+
+  const result = await runPixelSnapper({
+    inputs: [input], outputDir, config: { snapper: { args: ['16'] } }, identity,
+    pixelSize: 2, outputCanvas: { width: 2, height: 2 },
+    alignedSource: { scale: 2, canvas: { width: 2, height: 2 }, paletteRgba, paletteSha256 },
+    receipt: { projectDir, run, contract }
+  });
+
+  await assert.rejects(fs.access(marker), /ENOENT/);
+  assert.equal(result.origin, 'verified-aligned-source');
+  const { data, info } = await sharp(result.outputs[0]).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  assert.deepEqual({ width: info.width, height: info.height }, { width: 2, height: 2 });
+  assert.deepEqual([...data], [transparent, dark, light, transparent].flat());
+  const receipt = JSON.parse(await fs.readFile(path.join(outputDir, 'snap-receipt.json'), 'utf8'));
+  assert.deepEqual(receipt.payload.derivation, {
+    kind: 'canonical-palette-remap',
+    algorithm: 'nearest-rgb-squared-contract-order-v1',
+    canvas: { width: 2, height: 2 },
+    paletteSha256
+  });
   await verifySnapReceipt({ projectDir, file: path.join(outputDir, 'snap-receipt.json'), expectedRun: run, expectedContract: contract });
 });
 
