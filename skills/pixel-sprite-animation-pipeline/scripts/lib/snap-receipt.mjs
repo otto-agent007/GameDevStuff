@@ -112,10 +112,18 @@ function validDate(value) {
 }
 
 function validAlignedDerivation(value) {
-  exact(value, ['kind', 'scale', 'canvas', 'paletteSha256'], 'aligned derivation');
+  const keys = value?.kind === 'canonical-palette-normalization'
+    ? ['kind', 'canvas', 'paletteSha256']
+    : value?.kind === 'canonical-palette-remap'
+      ? ['kind', 'algorithm', 'canvas', 'paletteSha256']
+      : ['kind', 'scale', 'canvas', 'paletteSha256'];
+  exact(value, keys, 'aligned derivation');
   exact(value.canvas, ['width', 'height'], 'aligned canvas');
-  if (value.kind !== 'integer-grid-collapse' || !Number.isInteger(value.scale) || value.scale < 1 ||
-    !Number.isInteger(value.canvas.width) || value.canvas.width < 1 || !Number.isInteger(value.canvas.height) || value.canvas.height < 1) {
+  const validKind = value.kind === 'canonical-palette-normalization' ||
+    (value.kind === 'canonical-palette-remap' && value.algorithm === 'nearest-rgb-squared-contract-order-v1') ||
+    (value.kind === 'integer-grid-collapse' && Number.isInteger(value.scale) && value.scale >= 1);
+  if (!validKind || !Number.isInteger(value.canvas.width) || value.canvas.width < 1 ||
+    !Number.isInteger(value.canvas.height) || value.canvas.height < 1) {
     throw new Error('snap receipt aligned derivation is invalid');
   }
   hash(value.paletteSha256, 'snap receipt aligned palette hash');

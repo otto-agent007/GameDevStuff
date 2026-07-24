@@ -78,7 +78,7 @@ function alignedSourceContract(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).sort().join(',') !== 'canvas,paletteRgba,paletteSha256,scale') throw new Error('aligned source contract schema is invalid');
   const canvas = validateOutputCanvas(value.canvas);
   if (!Number.isInteger(value.scale) || value.scale < 1) throw new Error('aligned source scale must be a positive integer');
-  if (!Array.isArray(value.paletteRgba) || value.paletteRgba.length === 0 || value.paletteRgba.length > 16) throw new Error('aligned source palette is invalid');
+  if (!Array.isArray(value.paletteRgba) || value.paletteRgba.length === 0 || value.paletteRgba.length > 17) throw new Error('aligned source palette is invalid');
   const paletteRgba = value.paletteRgba.map((color) => {
     if (!Array.isArray(color) || color.length !== 4 || color.some((component) => !Number.isInteger(component) || component < 0 || component > 255)) throw new Error('aligned source palette is invalid');
     return [...color];
@@ -91,10 +91,72 @@ function alignedSourceContract(value) {
 
 async function alignedSourcePlans(inputs, outputDir, contract) {
   const allowed = new Set(contract.paletteRgba.map((color) => color.join(',')));
-  const plans = [];
+  const sources = [];
   for (const input of inputs) {
-    const { data, info } = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-    if (info.width !== contract.canvas.width * contract.scale || info.height !== contract.canvas.height * contract.scale || info.channels !== 4) return null;
+    const source = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    if (source.info.channels !== 4) return null;
+    sources.push({ input, ...source });
+  }
+  const canonical = sources.every(({ info }) =>
+    info.width === contract.canvas.width && info.height === contract.canvas.height);
+  const scaled = sources.every(({ info }) =>
+    info.width === contract.canvas.width * contract.scale &&
+    info.height === contract.canvas.height * contract.scale);
+  if (!canonical && !scaled) return null;
+
+  const plans = [];
+  if (canonical) {
+    const opaquePalette = contract.paletteRgba.filter((color) => color[3] === 255);
+    if (opaquePalette.length === 0 || contract.paletteRgba.some((color) => color[3] !== 0 && color[3] !== 255)) return null;
+    let requiresRemap = false;
+    for (const { input, data } of sources) {
+      const normalized = Buffer.alloc(data.length);
+      const sourcePalette = new Set();
+      for (let offset = 0; offset < data.length; offset += 4) {
+        const alpha = data[offset + 3];
+        if (alpha !== 0 && alpha !== 255) return null;
+        if (alpha === 0) continue;
+        const color = [...data.subarray(offset, offset + 4)];
+        sourcePalette.add(color.join(','));
+        if (sourcePalette.size > 16) return null;
+        if (allowed.has(color.join(','))) {
+          normalized.set(color, offset);
+          continue;
+        }
+        requiresRemap = true;
+        let nearest = opaquePalette[0];
+        let nearestDistance = Number.POSITIVE_INFINITY;
+        for (const candidate of opaquePalette) {
+          const distance = (color[0] - candidate[0]) ** 2 +
+            (color[1] - candidate[1]) ** 2 +
+            (color[2] - candidate[2]) ** 2;
+          if (distance < nearestDistance) {
+            nearest = candidate;
+            nearestDistance = distance;
+          }
+        }
+        normalized.set(nearest, offset);
+      }
+      plans.push({ input, output: outputFor(input, outputDir), data: normalized });
+    }
+    return {
+      derivation: requiresRemap
+        ? {
+            kind: 'canonical-palette-remap',
+            algorithm: 'nearest-rgb-squared-contract-order-v1',
+            canvas: contract.canvas,
+            paletteSha256: contract.paletteSha256
+          }
+        : {
+            kind: 'canonical-palette-normalization',
+            canvas: contract.canvas,
+            paletteSha256: contract.paletteSha256
+          },
+      plans
+    };
+  }
+
+  for (const { input, data, info } of sources) {
     const collapsed = Buffer.alloc(contract.canvas.width * contract.canvas.height * 4);
     for (let y = 0; y < contract.canvas.height; y += 1) {
       for (let x = 0; x < contract.canvas.width; x += 1) {
@@ -114,13 +176,23 @@ async function alignedSourcePlans(inputs, outputDir, contract) {
     }
     plans.push({ input, output: outputFor(input, outputDir), data: collapsed });
   }
-  return plans;
+  return {
+    derivation: {
+      kind: 'integer-grid-collapse',
+      scale: contract.scale,
+      canvas: contract.canvas,
+      paletteSha256: contract.paletteSha256
+    },
+    plans
+  };
 }
 
 async function runAlignedSource({ inputs, outputDir, contract, receipt }) {
   if (!contract) return null;
   if (!receipt) throw new Error('aligned source production requires a signed receipt target');
-  const derivation = { kind: 'integer-grid-collapse', scale: contract.scale, canvas: contract.canvas, paletteSha256: contract.paletteSha256 };
+  const aligned = await alignedSourcePlans(inputs, outputDir, contract);
+  if (!aligned) return null;
+  const { derivation, plans } = aligned;
   const receiptFile = receipt.durableReceiptFile ?? path.join(outputDir, 'snap-receipt.json');
   const existing = await verifyExistingSnapReceipt({
     projectDir: receipt.projectDir,
@@ -140,8 +212,6 @@ async function runAlignedSource({ inputs, outputDir, contract, receipt }) {
     receipt: { path: receiptFile, sha256: existing.sha256, signature: existing.document.signature },
     recoveredExistingReceipt: true
   };
-  const plans = await alignedSourcePlans(inputs, outputDir, contract);
-  if (!plans) return null;
   try {
     await fs.mkdir(outputDir, { recursive: false, mode: 0o700 });
   } catch (error) {
