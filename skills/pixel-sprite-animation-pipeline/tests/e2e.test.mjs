@@ -238,6 +238,28 @@ test('approval transition has one atomic winner and deterministic loser', async 
   assert.doesNotMatch(loser.stderr, /EEXIST|ENOENT|EPERM/);
 });
 
+test('approval transition waits for concurrent claim initialization', async () => {
+  const value = await prepareContractedApproval(await makeProject());
+  const claimPath = path.join(value.runDir, 'transition-frame-approval.claim');
+  const claim = {
+    version: 1,
+    handoffSha256: await sha256(path.join(value.runDir, 'frame-approval-handoff.json')),
+    frameApprovalSha256: value.approval.sha256,
+    approvalVersion: 1
+  };
+  await fs.writeFile(claimPath, '', { flag: 'wx', mode: 0o600 });
+  const args = ['run', '--resume', value.approvalHandoff.runId, '--resume-token', value.approvalHandoff.resumeToken, '--frame-approval', value.approval.path, '--approval-version', '1', '--project-dir', value.projectDir];
+  const writer = (async () => {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    await fs.writeFile(claimPath, `${JSON.stringify(claim, null, 2)}\n`);
+  })();
+  const [loser] = await Promise.all([invokeAsync(args), writer]);
+
+  assert.equal(loser.status, 1);
+  assert.match(loser.stderr, /already in progress/i);
+  await fs.unlink(claimPath);
+});
+
 test('approval transition releases its claim after an ordinary normalization failure', async () => {
   const value = await prepareContractedApproval(await makeProject());
   const request = path.join(value.projectDir, 'invalid-landmark-approval.json');
