@@ -20,7 +20,7 @@ test('real correction revalidates, records authenticated learning, and proposes 
   for (let number = 1; number <= 3; number += 1) {
     const runId = `repair-run-${number}`;
     const runDir = path.join(project, '.pixel-sprite-pipeline', 'runs', runId);
-    await fs.mkdir(runDir, { recursive: true });
+    await fs.mkdir(runDir, { recursive: true, mode: 0o700 });
     const source = path.join(runDir, 'source.png');
     await makeAnchor(source);
     const anchorReport = await inspectImage(source);
@@ -56,7 +56,7 @@ test('real correction revalidates, records authenticated learning, and proposes 
 test('canvas correction persists while identity drift remains review-only with no delivery report', async () => {
   const project = await fs.mkdtemp(path.join(os.tmpdir(), 'sprite-repair-mixed-'));
   const runDir = path.join(project, '.pixel-sprite-pipeline', 'runs', 'mixed-run');
-  await fs.mkdir(runDir, { recursive: true });
+  await fs.mkdir(runDir, { recursive: true, mode: 0o700 });
   const source = path.join(runDir, 'source.png'); await makeAnchor(source);
   const anchorReport = await inspectImage(source);
   const good = await normalizeFrames({ inputs: [source], outputDir: path.join(runDir, 'good'), config: DEFAULT_CONFIG });
@@ -84,7 +84,7 @@ test('simultaneous normalized metadata and runtime pivot failures receive unique
 
 test('simultaneous image and canonical/runtime metadata pivot drift repairs every owning artifact', async () => {
   const project = await fs.mkdtemp(path.join(os.tmpdir(), 'sprite-pivot-e2e-'));
-  const runDir = path.join(project, '.pixel-sprite-pipeline', 'runs', 'pivot-run'); await fs.mkdir(runDir, { recursive: true });
+  const runDir = path.join(project, '.pixel-sprite-pipeline', 'runs', 'pivot-run'); await fs.mkdir(runDir, { recursive: true, mode: 0o700 });
   const source = path.join(runDir, 'source.png'); await makeAnchor(source);
   const anchorReport = await inspectImage(source);
   const good = await normalizeFrames({ inputs: [source], outputDir: path.join(runDir, 'good'), config: DEFAULT_CONFIG });

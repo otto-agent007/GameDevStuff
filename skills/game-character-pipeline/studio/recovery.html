@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Pose Recovery Studio</title>
+    <link rel="stylesheet" href="/studio/styles.css">
+    <script type="module" src="/studio/recovery-app.mjs"></script>
+  </head>
+  <body>
+    <div class="recovery-shell" data-loading="true">
+      <header class="recovery-topbar">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <h1>Pose Recovery Studio</h1>
+            <p id="project-title">Loading immutable recovery…</p>
+          </div>
+        </div>
+        <div class="revision-actions">
+          <span class="stage-chip">Recovery</span>
+          <button class="primary" id="save-recovery" type="button">
+            Save recovery revision
+          </button>
+        </div>
+      </header>
+
+      <main class="recovery-main">
+        <section class="panel recovery-overlay-panel" aria-labelledby="overlay-heading">
+          <div class="panel-heading">
+            <div>
+              <span class="eyebrow">Whole-board evidence</span>
+              <h2 id="overlay-heading">Detected components</h2>
+            </div>
+            <span id="component-count">0 components</span>
+          </div>
+          <div class="recovery-overlay-stage">
+            <img id="recovery-overlay" alt="Pose-board component overlay">
+          </div>
+        </section>
+
+        <section class="panel recovery-candidates-panel" aria-labelledby="candidates-heading">
+          <div class="panel-heading">
+            <div>
+              <span class="eyebrow">Owner curation</span>
+              <h2 id="candidates-heading">Recovered candidates</h2>
+            </div>
+            <span id="selected-count">0 selected</span>
+          </div>
+          <p class="recovery-guidance">
+            Select complete poses, set their order, then assign every whole component to a track.
+          </p>
+          <div id="candidate-list" class="candidate-list"></div>
+        </section>
+
+        <section class="panel recovery-sequence-panel" aria-labelledby="sequence-heading">
+          <div class="panel-heading">
+            <div>
+              <span class="eyebrow">Timing-aware source</span>
+              <h2 id="sequence-heading">Recovered sequence</h2>
+            </div>
+          </div>
+          <div id="sequence-list" class="sequence-list"></div>
+          <p id="validation-summary" class="validation-summary" aria-live="polite"></p>
+        </section>
+
+        <section class="panel recovery-approval-panel" aria-labelledby="approval-heading">
+          <div class="panel-heading">
+            <div>
+              <span class="eyebrow">Owner decision</span>
+              <h2 id="approval-heading">Selection approval</h2>
+            </div>
+          </div>
+          <dl class="recovery-hashes">
+            <div><dt>Recovery hash</dt><dd id="recovery-hash">—</dd></div>
+            <div><dt>Selection hash</dt><dd id="selection-hash">Not saved</dd></div>
+          </dl>
+          <label class="field">
+            <span>Approver identity</span>
+            <select id="approval-identity" aria-label="Approver identity"></select>
+          </label>
+          <label class="field">
+            <span>Approval notes</span>
+            <textarea id="approval-notes" aria-label="Approval notes" rows="3"></textarea>
+          </label>
+          <div class="approval-actions">
+            <button class="primary" id="approve-recovery" type="button" disabled>
+              Approve recovered sequence
+            </button>
+            <button id="reject-recovery" type="button" disabled>
+              Reject recovered sequence
+            </button>
+          </div>
+        </section>
+      </main>
+
+      <footer class="recovery-statusbar">
+        <span id="status" role="status" aria-live="polite">Loading immutable recovery…</span>
+      </footer>
+    </div>
+  </body>
+</html>

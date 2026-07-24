@@ -358,8 +358,8 @@ test('pending install-stage debris is never published and never blocks setup', a
   if (process.platform === 'win32') { t.skip('POSIX executable fixture'); return; }
   const fixture = await setupFixture();
   const staging = path.join(fixture.projectDir, '.pixel-sprite-pipeline', 'tools', '.staging');
-  await fs.mkdir(staging, { recursive: true });
-  await fs.mkdir(path.join(staging, `.pending-install-${crypto.randomUUID()}`));
+  await fs.mkdir(staging, { recursive: true, mode: 0o700 });
+  await fs.mkdir(path.join(staging, `.pending-install-${crypto.randomUUID()}`), { mode: 0o700 });
   assert.equal((await setupPixelSnapper(fixture.options)).status, 'installed');
 });
 

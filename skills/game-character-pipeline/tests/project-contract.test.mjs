@@ -35,6 +35,27 @@ test('project contract binds one global scale and explicit action behavior', asy
   assert.equal(Object.isFrozen(project), true);
   assert.equal(Object.isFrozen(project.actions[0].sources), true);
   assert.notEqual(project, input);
+  assert.equal(project.sources.allowedKinds.includes('pose-board'), true);
+  assert.equal(project.actions[0].sources.fallbacks.includes('pose-board'), true);
+});
+
+test('project contract accepts an actor-only project without sockets or contacts', async () => {
+  const input = await validProject();
+  input.tracks = [input.tracks.find(({ id }) => id === 'actor')];
+  input.sockets = [];
+  input.contacts = [];
+  input.actions = input.actions.map((action) => ({
+    ...action,
+    tracks: ['actor'],
+    sockets: [],
+    contacts: []
+  }));
+
+  const project = validateProjectContract(input);
+
+  assert.deepEqual(project.tracks.map(({ id }) => id), ['actor']);
+  assert.deepEqual(project.sockets, []);
+  assert.deepEqual(project.contacts, []);
 });
 
 test('project contract rejects unknown fields and per-action scale', async () => {

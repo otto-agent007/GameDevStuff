@@ -1,17 +1,42 @@
 import './frame-canvas.mjs';
 import './timeline.mjs';
 import { installMarkerAuthoring } from './markers.mjs';
+import { analyzeMotion, renderMotionDiagnostics } from './motion-diagnostics.mjs';
+import {
+  activeIndices,
+  cloneFrameState,
+  frameStartElapsedMs,
+  nextPlaybackIndex,
+  playbackIndices,
+  resolveElapsedFrame,
+  reviewDelay
+} from './review-state.mjs';
 
 const shell = document.querySelector('.app-shell');
 const timeline = document.querySelector('frame-timeline');
-const canvas = document.querySelector('frame-canvas');
+const canvas = document.querySelector('#review-b-canvas');
+const reviewACanvas = document.querySelector('#review-a-canvas');
+const comparisonPreview = document.querySelector('#comparison-preview');
+const reviewAPane = document.querySelector('#review-a-pane');
+const reviewBPane = document.querySelector('#review-b-pane');
 const status = document.querySelector('#status');
 const playButton = document.querySelector('#play');
+const replayButton = document.querySelector('#replay');
 let session;
+let action;
 let frames = [];
+let savedFrames = [];
 let selectedIndex = 0;
+let reviewSide = 'B';
+let reviewSpeed = 1;
+let playbackRange = { in: null, out: null };
 let playing = false;
 let playbackTimer;
+let playbackFrameRequest;
+let comparisonElapsedMs = 0;
+let comparisonStartedAt = 0;
+let comparisonAIndex = 0;
+let requestedZoom = 4;
 let copyNumber = 0;
 let markerAuthoring;
 let dirty = false;
@@ -19,14 +44,71 @@ let renderReceipt = null;
 
 const titleCase = (value) => value.split(/[-_]/).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
 const frameUrl = (sha256) => `/api/frame/${sha256}`;
-const includedFrames = () => frames.filter((frame) => frame.included !== false);
+const displayFrames = () => reviewSide === 'A' && savedFrames.length ? savedFrames : frames;
+const includedFrames = () => displayFrames().filter((frame) => frame.included !== false);
+const activeFrameIndices = () => activeIndices(displayFrames());
+const rangedFrameIndices = () => playbackIndices(displayFrames(), playbackRange);
+const hasPlaybackRange = () => Number.isInteger(playbackRange.in) || Number.isInteger(playbackRange.out);
+const firstActiveIndex = () => activeFrameIndices()[0] ?? null;
+const lastActiveIndex = () => activeFrameIndices().at(-1) ?? null;
+
+function adjacentActiveIndex(index, direction) {
+  const active = activeFrameIndices();
+  if (!active.length) return null;
+  if (direction > 0) return active.find((candidate) => candidate > index) ?? active[0];
+  return active.findLast((candidate) => candidate < index) ?? active.at(-1);
+}
+
+function setFrameInclusion(index, included) {
+  if (reviewSide === 'A') return false;
+  const frame = frames[index];
+  if (!frame || frame.included === included) return false;
+  if (!included && includedFrames().length === 1) {
+    status.textContent = 'An action must retain at least one active frame.';
+    return false;
+  }
+  frame.included = included;
+  frame.edit.included = included;
+  setDirty(true);
+  render();
+  status.textContent = `${included ? 'Restored' : 'Excluded'} ${frame.id} ${included ? 'to' : 'from'} the action; save to create a revision.`;
+  return true;
+}
 
 function updateApprovalControls() {
   const hasSavedEdit = Boolean(session?.editRevision);
+  document.querySelector('#save-revision').disabled = reviewSide === 'A';
   document.querySelector('#render-review').disabled = dirty || !hasSavedEdit;
   const canDecide = !dirty && Boolean(renderReceipt) && hasSavedEdit;
   document.querySelector('#approve-revision').disabled = !canDecide;
   document.querySelector('#reject-revision').disabled = !canDecide;
+}
+
+function updateReviewState() {
+  if (!session) return;
+  document.querySelector('#review-a').setAttribute('aria-pressed', String(reviewSide === 'A'));
+  document.querySelector('#review-b').setAttribute('aria-pressed', String(reviewSide === 'B'));
+  document.querySelector('#review-side-by-side').setAttribute('aria-pressed', String(reviewSide === 'AB'));
+  comparisonPreview.dataset.reviewMode = reviewSide;
+  reviewAPane.hidden = reviewSide === 'B';
+  reviewBPane.hidden = reviewSide === 'A';
+  const saved = session.editRevision
+    ? `Revision ${session.editRevision} · ${session.editSha256.slice(0, 12)}`
+    : 'Source defaults · no saved hash';
+  document.querySelector('#review-a-state').textContent = saved;
+  document.querySelector('#review-b-state').textContent = dirty
+    ? 'Unsaved working copy · no immutable hash'
+    : `Matches ${saved}`;
+}
+
+function updateRangeState() {
+  const view = displayFrames();
+  const start = Number.isInteger(playbackRange.in) ? view[playbackRange.in]?.id : null;
+  const end = Number.isInteger(playbackRange.out) ? view[playbackRange.out]?.id : null;
+  document.querySelector('#range-readout').textContent = start || end
+    ? `${start ?? 'First active'} → ${end ?? 'Last active'}`
+    : 'Full action';
+  document.querySelector('#clear-range').disabled = !hasPlaybackRange();
 }
 
 function setDirty(value) {
@@ -35,6 +117,7 @@ function setDirty(value) {
     renderReceipt = null;
     document.querySelector('#approval-render-hash').textContent = 'Not rendered';
   }
+  updateReviewState();
   updateApprovalControls();
 }
 
@@ -58,63 +141,198 @@ function applyEdit(edit) {
   return true;
 }
 
+function currentComparisonElapsed(now = performance.now()) {
+  if (!playing || reviewSide !== 'AB') return comparisonElapsedMs;
+  return comparisonElapsedMs + ((now - comparisonStartedAt) * reviewSpeed);
+}
+
 function stopPlayback() {
+  if (playing && reviewSide === 'AB') comparisonElapsedMs = currentComparisonElapsed();
   playing = false;
   clearTimeout(playbackTimer);
+  cancelAnimationFrame(playbackFrameRequest);
   playButton.textContent = 'Play';
 }
 
-function updateCanvas() {
-  const frame = frames[selectedIndex];
+function updateFrameCanvas(target, view, index) {
+  if (!target) return;
+  const frame = view[index];
   if (!frame) return;
-  const previous = frames[(selectedIndex - 1 + frames.length) % frames.length];
-  const next = frames[(selectedIndex + 1) % frames.length];
-  canvas.setAttribute('frame', frame.url);
-  canvas.setAttribute('first', frames[0].url);
-  canvas.setAttribute('last', frames.at(-1).url);
-  canvas.markerState = { markers: frame.edit.markers, canvas: session.project.canvas };
-  if (document.querySelector('#overlay-previous').checked) canvas.setAttribute('previous', previous.url);
-  else canvas.removeAttribute('previous');
-  if (document.querySelector('#overlay-next').checked) canvas.setAttribute('next', next.url);
-  else canvas.removeAttribute('next');
+  const active = activeIndices(view);
+  const adjacentIndex = (direction) => {
+    if (!active.length) return null;
+    if (direction > 0) return active.find((candidate) => candidate > index) ?? active[0];
+    return active.findLast((candidate) => candidate < index) ?? active.at(-1);
+  };
+  const firstIndex = active[0] ?? null;
+  const lastIndex = active.at(-1) ?? null;
+  const previous = view[adjacentIndex(-1)] ?? frame;
+  const next = view[adjacentIndex(1)] ?? frame;
+  const first = view[firstIndex] ?? frame;
+  const last = view[lastIndex] ?? frame;
+  target.setAttribute('frame', frame.url);
+  target.setAttribute('first', first.url);
+  target.setAttribute('last', last.url);
+  target.markerState = { markers: frame.edit.markers, canvas: session.project.canvas };
+  if (document.querySelector('#overlay-previous').checked) target.setAttribute('previous', previous.url);
+  else target.removeAttribute('previous');
+  if (document.querySelector('#overlay-next').checked) target.setAttribute('next', next.url);
+  else target.removeAttribute('next');
+  return frame;
+}
+
+function updateCanvas() {
+  if (reviewSide === 'AB') {
+    const reviewAFrame = updateFrameCanvas(reviewACanvas, savedFrames, comparisonAIndex);
+    const reviewBFrame = updateFrameCanvas(canvas, frames, selectedIndex);
+    document.querySelector('#review-a-frame').textContent = reviewAFrame?.id ?? '—';
+    document.querySelector('#review-b-frame').textContent = reviewBFrame?.id ?? '—';
+    return;
+  }
+  const view = displayFrames();
+  const frame = view[selectedIndex];
+  if (!frame) return;
+  const target = reviewSide === 'A' ? reviewACanvas : canvas;
+  updateFrameCanvas(target, view, selectedIndex);
+  document.querySelector(reviewSide === 'A' ? '#review-a-frame' : '#review-b-frame').textContent = frame.id;
 }
 
 function updateReadout() {
-  const frame = frames[selectedIndex];
-  const total = includedFrames().reduce((sum, item) => sum + item.edit.durationMs, 0);
-  document.querySelector('#frame-count').textContent = `${frames.length} frames`;
+  const view = displayFrames();
+  const frame = view[selectedIndex];
+  const active = includedFrames();
+  const total = active.reduce((sum, item) => sum + item.edit.durationMs, 0);
+  document.querySelector('#frame-count').textContent = `${active.length} active / ${view.length} source`;
   document.querySelector('#selected-name').textContent = frame?.id ?? '—';
-  document.querySelector('#frame-position').textContent = `Frame ${frames.length ? selectedIndex + 1 : 0} of ${frames.length}`;
+  document.querySelector('#frame-position').textContent = `Frame ${view.length ? selectedIndex + 1 : 0} of ${view.length}`;
   document.querySelector('#total-duration').textContent = `${total} ms total`;
   document.querySelector('#selection-frame').textContent = frame?.id ?? '—';
   document.querySelector('#selection-duration').textContent = frame ? `${frame.edit.durationMs} ms` : '—';
-  document.querySelector('#scrub-progress').value = frames.length ? (selectedIndex + 1) / frames.length : 0;
+  const inclusionButton = document.querySelector('#toggle-frame-inclusion');
+  const isIncluded = frame?.included !== false;
+  inclusionButton.textContent = isIncluded ? 'Exclude from action' : 'Restore to action';
+  inclusionButton.dataset.included = String(isIncluded);
+  inclusionButton.disabled = reviewSide === 'A';
+  document.querySelector('#scrub-progress').value = view.length ? (selectedIndex + 1) / view.length : 0;
+}
+
+function updateMotionDiagnostics() {
+  if (!session) return;
+  const analysis = analyzeMotion(displayFrames(), session.project.canvas);
+  renderMotionDiagnostics(
+    document.querySelector('#motion-diagnostics'),
+    analysis,
+    (frameIndex) => selectFrame(frameIndex, { manual: true, focus: true })
+  );
 }
 
 function render({ focus = false } = {}) {
-  timeline.frames = frames;
+  timeline.frames = displayFrames();
+  timeline.readOnly = reviewSide === 'A';
+  timeline.rangeIn = playbackRange.in;
+  timeline.rangeOut = playbackRange.out;
   timeline.selectedIndex = selectedIndex;
   updateCanvas();
   updateReadout();
+  updateMotionDiagnostics();
   markerAuthoring?.refresh();
+  markerAuthoring?.setDisabled(reviewSide === 'A');
+  updateReviewState();
+  updateRangeState();
+  updateApprovalControls();
+  updatePreviewZoom();
   if (focus) timeline.focusSelected();
 }
 
 function selectFrame(index, { manual = false, focus = false } = {}) {
-  if (!frames.length) return;
+  const view = displayFrames();
+  if (!view.length) return;
   if (manual) stopPlayback();
-  selectedIndex = Math.max(0, Math.min(index, frames.length - 1));
+  selectedIndex = Math.max(0, Math.min(index, view.length - 1));
+  if (reviewSide === 'AB') {
+    comparisonElapsedMs = frameStartElapsedMs(frames, selectedIndex, playbackRange);
+    updateComparisonIndices(comparisonElapsedMs);
+  }
   render({ focus });
 }
 
 function scheduleNext() {
   if (!playing) return;
-  const current = frames[selectedIndex];
+  const indices = rangedFrameIndices();
+  if (!indices.length) {
+    stopPlayback();
+    return;
+  }
+  const current = displayFrames()[selectedIndex];
   playbackTimer = setTimeout(() => {
-    const nextIndex = (selectedIndex + 1) % frames.length;
-    selectFrame(nextIndex);
+    const atEnd = selectedIndex === indices.at(-1);
+    if (atEnd && !hasPlaybackRange() && action?.loopMode !== 'loop') {
+      stopPlayback();
+      return;
+    }
+    selectFrame(nextPlaybackIndex(indices, selectedIndex));
     scheduleNext();
-  }, current.edit.durationMs);
+  }, reviewDelay(current.edit.durationMs, reviewSpeed));
+}
+
+function comparisonLoops() {
+  return hasPlaybackRange() || action?.loopMode === 'loop';
+}
+
+function updateComparisonIndices(elapsedMs) {
+  const loop = comparisonLoops();
+  const reviewA = resolveElapsedFrame(savedFrames, elapsedMs, { range: playbackRange, loop });
+  const reviewB = resolveElapsedFrame(frames, elapsedMs, { range: playbackRange, loop });
+  if (reviewA.index !== null) comparisonAIndex = reviewA.index;
+  if (reviewB.index !== null) selectedIndex = reviewB.index;
+  return { reviewA, reviewB };
+}
+
+function renderComparisonElapsed(elapsedMs) {
+  const resolved = updateComparisonIndices(elapsedMs);
+  timeline.selectedIndex = selectedIndex;
+  updateCanvas();
+  updateReadout();
+  return resolved;
+}
+
+function scheduleComparisonFrame(now) {
+  if (!playing || reviewSide !== 'AB') return;
+  const elapsedMs = currentComparisonElapsed(now);
+  const resolved = renderComparisonElapsed(elapsedMs);
+  if (!comparisonLoops() && resolved.reviewA.complete && resolved.reviewB.complete) {
+    comparisonElapsedMs = Math.max(resolved.reviewA.totalDurationMs, resolved.reviewB.totalDurationMs);
+    comparisonStartedAt = now;
+    stopPlayback();
+    return;
+  }
+  playbackFrameRequest = requestAnimationFrame(scheduleComparisonFrame);
+}
+
+function startComparisonPlayback({ fromStart = false } = {}) {
+  stopPlayback();
+  if (fromStart) comparisonElapsedMs = 0;
+  updateComparisonIndices(comparisonElapsedMs);
+  playing = true;
+  comparisonStartedAt = performance.now();
+  playButton.textContent = 'Pause';
+  renderComparisonElapsed(comparisonElapsedMs);
+  playbackFrameRequest = requestAnimationFrame(scheduleComparisonFrame);
+}
+
+function startPlayback({ fromStart = false } = {}) {
+  if (reviewSide === 'AB') {
+    startComparisonPlayback({ fromStart });
+    return;
+  }
+  const indices = rangedFrameIndices();
+  if (!indices.length) return;
+  stopPlayback();
+  if (fromStart) selectFrame(indices[0]);
+  else if (!indices.includes(selectedIndex)) selectFrame(nextPlaybackIndex(indices, selectedIndex));
+  playing = true;
+  playButton.textContent = 'Pause';
+  scheduleNext();
 }
 
 function togglePlayback() {
@@ -122,27 +340,31 @@ function togglePlayback() {
     stopPlayback();
     return;
   }
-  playing = true;
-  playButton.textContent = 'Pause';
-  scheduleNext();
+  startPlayback();
 }
 
 function setBooleanOverlay(input, attribute) {
   input.addEventListener('change', () => {
     if (attribute === 'previous' || attribute === 'next') updateCanvas();
-    else canvas.setAttribute(attribute, String(input.checked));
+    else for (const target of [reviewACanvas, canvas]) target.setAttribute(attribute, String(input.checked));
   });
 }
 
 timeline.addEventListener('frame-select', ({ detail }) => selectFrame(detail.index, { manual: true, focus: detail.focus }));
 timeline.addEventListener('frame-include', ({ detail }) => {
-  frames[detail.index].included = detail.included;
-  frames[detail.index].edit.included = detail.included;
-  setDirty(true);
-  render();
-  status.textContent = `${detail.included ? 'Included' : 'Excluded'} ${frames[detail.index].id}; save to create a revision.`;
+  setFrameInclusion(detail.index, detail.included);
+});
+timeline.addEventListener('frame-transport', ({ detail }) => {
+  const targets = {
+    previous: adjacentActiveIndex(selectedIndex, -1),
+    next: adjacentActiveIndex(selectedIndex, 1),
+    first: firstActiveIndex(),
+    last: lastActiveIndex()
+  };
+  selectFrame(targets[detail.command], { manual: true, focus: true });
 });
 timeline.addEventListener('frame-duplicate', ({ detail }) => {
+  if (reviewSide === 'A') return;
   const original = frames[detail.index];
   copyNumber += 1;
   const duplicate = { ...original, id: `${original.id}-copy-${copyNumber}`, edit: structuredClone(original.edit) };
@@ -154,20 +376,138 @@ timeline.addEventListener('frame-duplicate', ({ detail }) => {
   status.textContent = `Duplicated ${original.id}; save to create a revision.`;
 });
 timeline.addEventListener('frame-label', ({ detail }) => {
+  if (reviewSide === 'A') return;
   frames[detail.index].label = detail.label;
   frames[detail.index].edit.label = detail.label;
   setDirty(true);
 });
+timeline.addEventListener('frame-duration', ({ detail }) => {
+  if (reviewSide === 'A') return;
+  const frame = frames[detail.index];
+  frame.durationMs = detail.durationMs;
+  frame.edit.durationMs = detail.durationMs;
+  setDirty(true);
+  render();
+  status.textContent = `Updated ${frame.id} to ${detail.durationMs} authored milliseconds; save to create a revision.`;
+});
+timeline.addEventListener('frame-duration-invalid', () => {
+  render();
+  status.textContent = 'Frame timing must use whole milliseconds from 1 to 65535.';
+});
 
 playButton.addEventListener('click', togglePlayback);
-document.querySelector('#previous-frame').addEventListener('click', () => selectFrame((selectedIndex - 1 + frames.length) % frames.length, { manual: true }));
-document.querySelector('#next-frame').addEventListener('click', () => selectFrame((selectedIndex + 1) % frames.length, { manual: true }));
-document.querySelector('#zoom').addEventListener('input', (event) => {
-  const zoom = Math.max(1, Math.min(12, Math.trunc(Number(event.target.value) || 1)));
-  event.target.value = String(zoom);
-  canvas.setAttribute('zoom', String(zoom));
+replayButton.addEventListener('click', () => startPlayback({ fromStart: true }));
+document.querySelector('#toggle-frame-inclusion').addEventListener('click', () => {
+  const frame = displayFrames()[selectedIndex];
+  if (frame) setFrameInclusion(selectedIndex, frame.included === false);
 });
-document.querySelector('#onion-opacity').addEventListener('input', (event) => canvas.setAttribute('onion-opacity', event.target.value));
+
+function switchReviewSide(side) {
+  if (!['A', 'B', 'AB'].includes(side) || side === reviewSide) return;
+  const resume = playing;
+  const previousSide = reviewSide;
+  stopPlayback();
+  reviewSide = side;
+  if (side === 'AB') {
+    comparisonElapsedMs = previousSide === 'AB'
+      ? comparisonElapsedMs
+      : frameStartElapsedMs(frames, selectedIndex, playbackRange);
+    updateComparisonIndices(comparisonElapsedMs);
+  } else if (previousSide === 'AB') {
+    const resolved = resolveElapsedFrame(
+      side === 'A' ? savedFrames : frames,
+      comparisonElapsedMs,
+      { range: playbackRange, loop: comparisonLoops() }
+    );
+    if (resolved.index !== null) selectedIndex = resolved.index;
+  }
+  selectedIndex = Math.min(selectedIndex, Math.max(0, displayFrames().length - 1));
+  render();
+  if (resume) startPlayback();
+  const label = side === 'A' ? 'saved revision A' : side === 'B' ? 'working copy B' : 'saved A beside working B';
+  status.textContent = `Reviewing ${label}; audition controls do not change edit state.`;
+}
+
+document.querySelector('#review-a').addEventListener('click', () => switchReviewSide('A'));
+document.querySelector('#review-b').addEventListener('click', () => switchReviewSide('B'));
+document.querySelector('#review-side-by-side').addEventListener('click', () => switchReviewSide('AB'));
+
+document.querySelector('#review-speed').addEventListener('change', (event) => {
+  if (playing && reviewSide === 'AB') {
+    comparisonElapsedMs = currentComparisonElapsed();
+    comparisonStartedAt = performance.now();
+  }
+  reviewSpeed = Number(event.target.value);
+  if (playing) {
+    if (reviewSide === 'AB') {
+      cancelAnimationFrame(playbackFrameRequest);
+      playbackFrameRequest = requestAnimationFrame(scheduleComparisonFrame);
+    } else {
+      clearTimeout(playbackTimer);
+      scheduleNext();
+    }
+  }
+  status.textContent = `Review speed set to ${event.target.selectedOptions[0].textContent}; authored durations are unchanged.`;
+});
+
+function setRangeBoundary(boundary) {
+  if (displayFrames()[selectedIndex]?.included === false) {
+    status.textContent = 'Restore the selected frame before using it as a playback boundary.';
+    return;
+  }
+  const resume = playing;
+  stopPlayback();
+  playbackRange = { ...playbackRange, [boundary]: selectedIndex };
+  if (Number.isInteger(playbackRange.in) && Number.isInteger(playbackRange.out) && playbackRange.in > playbackRange.out) {
+    playbackRange = { in: playbackRange.out, out: playbackRange.in };
+  }
+  if (reviewSide === 'AB') {
+    comparisonElapsedMs = frameStartElapsedMs(frames, selectedIndex, playbackRange);
+    updateComparisonIndices(comparisonElapsedMs);
+  }
+  render();
+  if (resume) startPlayback();
+  status.textContent = `Set temporary range ${boundary} at ${displayFrames()[selectedIndex].id}; authored loop mode is unchanged.`;
+}
+
+document.querySelector('#set-range-in').addEventListener('click', () => setRangeBoundary('in'));
+document.querySelector('#set-range-out').addEventListener('click', () => setRangeBoundary('out'));
+document.querySelector('#clear-range').addEventListener('click', () => {
+  const resume = playing;
+  stopPlayback();
+  playbackRange = { in: null, out: null };
+  if (reviewSide === 'AB') {
+    comparisonElapsedMs = frameStartElapsedMs(frames, selectedIndex, playbackRange);
+    updateComparisonIndices(comparisonElapsedMs);
+  }
+  render();
+  if (resume) startPlayback();
+  status.textContent = 'Cleared the temporary playback range.';
+});
+
+document.querySelector('#previous-frame').addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, -1), { manual: true }));
+document.querySelector('#next-frame').addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, 1), { manual: true }));
+function updatePreviewZoom() {
+  if (!session) return;
+  let zoom = requestedZoom;
+  if (reviewSide === 'AB') {
+    const paneWidth = Math.min(reviewAPane.clientWidth, reviewBPane.clientWidth);
+    const paneHeight = Math.min(reviewAPane.clientHeight, reviewBPane.clientHeight) - 30;
+    const widthFit = Math.floor(Math.max(1, paneWidth - 16) / session.project.canvas.width);
+    const heightFit = Math.floor(Math.max(1, paneHeight - 16) / session.project.canvas.height);
+    zoom = Math.max(1, Math.min(requestedZoom, widthFit, heightFit));
+  }
+  for (const target of [reviewACanvas, canvas]) target.setAttribute('zoom', String(zoom));
+}
+
+document.querySelector('#zoom').addEventListener('input', (event) => {
+  requestedZoom = Math.max(1, Math.min(12, Math.trunc(Number(event.target.value) || 1)));
+  event.target.value = String(requestedZoom);
+  updatePreviewZoom();
+});
+document.querySelector('#onion-opacity').addEventListener('input', (event) => {
+  for (const target of [reviewACanvas, canvas]) target.setAttribute('onion-opacity', event.target.value);
+});
 setBooleanOverlay(document.querySelector('#overlay-previous'), 'previous');
 setBooleanOverlay(document.querySelector('#overlay-next'), 'next');
 setBooleanOverlay(document.querySelector('#overlay-seam'), 'seam');
@@ -197,6 +537,8 @@ document.querySelector('#save-revision').addEventListener('click', async () => {
     if (!response.ok) throw new Error(result.error ?? 'revision save failed');
     session.editSha256 = result.sha256;
     session.editRevision = result.revision;
+    savedFrames = cloneFrameState(frames);
+    reviewSide = 'B';
     document.querySelector('#restore-revision').disabled = result.revision < 2;
     renderReceipt = null;
     document.querySelector('#approval-edit-hash').textContent = result.editSha256;
@@ -210,6 +552,7 @@ document.querySelector('#save-revision').addEventListener('click', async () => {
 
 document.querySelector('#restore-revision').addEventListener('click', async () => {
   stopPlayback();
+  reviewSide = 'B';
   const target = session.editRevision - 1;
   if (target < 1) return;
   status.textContent = `Loading immutable edit revision ${target}…`;
@@ -278,10 +621,10 @@ document.querySelector('#reject-revision').addEventListener('click', () => submi
 document.addEventListener('keydown', (event) => {
   if (event.target.matches('input, textarea, select')) return;
   const keyActions = {
-    ArrowLeft: () => selectFrame(selectedIndex - 1, { manual: true, focus: true }),
-    ArrowRight: () => selectFrame(selectedIndex + 1, { manual: true, focus: true }),
-    Home: () => selectFrame(0, { manual: true, focus: true }),
-    End: () => selectFrame(frames.length - 1, { manual: true, focus: true })
+    ArrowLeft: () => selectFrame(adjacentActiveIndex(selectedIndex, -1), { manual: true, focus: true }),
+    ArrowRight: () => selectFrame(adjacentActiveIndex(selectedIndex, 1), { manual: true, focus: true }),
+    Home: () => selectFrame(firstActiveIndex(), { manual: true, focus: true }),
+    End: () => selectFrame(lastActiveIndex(), { manual: true, focus: true })
   };
   if (Object.hasOwn(keyActions, event.key)) {
     event.preventDefault();
@@ -289,12 +632,9 @@ document.addEventListener('keydown', (event) => {
   } else if (event.code === 'Space') {
     event.preventDefault();
     togglePlayback();
-  } else if (event.key === 'Delete' && frames[selectedIndex]) {
+  } else if (event.key === 'Delete' && displayFrames()[selectedIndex]) {
     event.preventDefault();
-    frames[selectedIndex].included = false;
-    frames[selectedIndex].edit.included = false;
-    setDirty(true);
-    render();
+    setFrameInclusion(selectedIndex, false);
   }
 });
 
@@ -303,7 +643,7 @@ async function initialize() {
     const response = await fetch('/api/session');
     if (!response.ok) throw new Error(`session returned ${response.status}`);
     session = await response.json();
-    const action = session.project.actions.find(({ id }) => id === session.actionId);
+    action = session.project.actions.find(({ id }) => id === session.actionId);
     const actionTracks = action?.tracks ?? ['actor'];
     frames = session.source.frames.map((frame) => ({
       ...frame,
@@ -333,6 +673,7 @@ async function initialize() {
     } else if (session.edit) {
       dirty = true;
     }
+    savedFrames = cloneFrameState(frames);
     document.querySelector('#project-title').textContent = `${session.project.character.name} / ${titleCase(action?.id ?? session.actionId)}`;
     document.querySelector('#source-hash').textContent = session.sourceSha256.slice(0, 12);
     document.querySelector('#approval-source-hash').textContent = session.sourceSha256;
@@ -351,8 +692,8 @@ async function initialize() {
       canvas,
       project: session.project,
       actionId: session.actionId,
-      getFrame: () => frames[selectedIndex],
-      getFrames: () => frames,
+      getFrame: () => displayFrames()[selectedIndex],
+      getFrames: () => displayFrames(),
       onChange: (message, { render: shouldRender }) => {
         const frame = frames[selectedIndex];
         frame.durationMs = frame.edit.durationMs;
@@ -363,6 +704,7 @@ async function initialize() {
         if (shouldRender) render();
       }
     });
+    new ResizeObserver(updatePreviewZoom).observe(comparisonPreview);
     render();
     updateApprovalControls();
     shell.dataset.loading = 'false';

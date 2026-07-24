@@ -3,10 +3,14 @@ const cloneFrames = (frames) => frames.map((frame) => ({ ...frame }));
 export class FrameTimeline extends HTMLElement {
   #frames = [];
   #selected = 0;
+  #readOnly = false;
+  #rangeIn = null;
+  #rangeOut = null;
 
   connectedCallback() {
     this.addEventListener('click', (event) => this.#onClick(event));
     this.addEventListener('input', (event) => this.#onInput(event));
+    this.addEventListener('change', (event) => this.#onChange(event));
     this.addEventListener('keydown', (event) => this.#onKeydown(event));
     this.#render();
   }
@@ -30,6 +34,25 @@ export class FrameTimeline extends HTMLElement {
     return this.#selected;
   }
 
+  set readOnly(value) {
+    this.#readOnly = Boolean(value);
+    this.#render();
+  }
+
+  get readOnly() {
+    return this.#readOnly;
+  }
+
+  set rangeIn(value) {
+    this.#rangeIn = Number.isInteger(value) ? value : null;
+    this.#render();
+  }
+
+  set rangeOut(value) {
+    this.#rangeOut = Number.isInteger(value) ? value : null;
+    this.#render();
+  }
+
   #emit(name, detail) {
     this.dispatchEvent(new CustomEvent(name, { bubbles: true, detail }));
   }
@@ -44,10 +67,12 @@ export class FrameTimeline extends HTMLElement {
     const index = Number(row.dataset.index);
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'include') {
+      if (this.#readOnly) return;
       this.#emit('frame-include', { index, included: row.dataset.included !== 'true' });
       return;
     }
     if (action === 'duplicate') {
+      if (this.#readOnly) return;
       this.#emit('frame-duplicate', { index });
       return;
     }
@@ -57,20 +82,41 @@ export class FrameTimeline extends HTMLElement {
 
   #onInput(event) {
     const row = this.#rowFrom(event);
-    if (!row || !event.target.matches('[data-label]')) return;
+    if (this.#readOnly || !row || !event.target.matches('[data-label]')) return;
     this.#emit('frame-label', { index: Number(row.dataset.index), label: event.target.value });
+  }
+
+  #onChange(event) {
+    const row = this.#rowFrom(event);
+    if (this.#readOnly || !row || !event.target.matches('[data-duration]')) return;
+    const index = Number(row.dataset.index);
+    const durationMs = Number(event.target.value);
+    if (!Number.isInteger(durationMs) || durationMs < 1 || durationMs > 65535) {
+      this.#emit('frame-duration-invalid', { index });
+      return;
+    }
+    this.#emit('frame-duration', { index, durationMs });
   }
 
   #onKeydown(event) {
     const row = this.#rowFrom(event);
     if (!row || event.target.matches('input')) return;
     const index = Number(row.dataset.index);
-    const targets = { ArrowLeft: index - 1, ArrowUp: index - 1, ArrowRight: index + 1, ArrowDown: index + 1, Home: 0, End: this.#frames.length - 1 };
-    if (Object.hasOwn(targets, event.key)) {
+    const transport = {
+      ArrowLeft: 'previous',
+      ArrowUp: 'previous',
+      ArrowRight: 'next',
+      ArrowDown: 'next',
+      Home: 'first',
+      End: 'last'
+    };
+    if (Object.hasOwn(transport, event.key)) {
       event.preventDefault();
-      this.#emit('frame-select', { index: Math.max(0, Math.min(targets[event.key], this.#frames.length - 1)), focus: true });
+      event.stopPropagation();
+      this.#emit('frame-transport', { command: transport[event.key] });
     } else if (event.key === 'Delete') {
       event.preventDefault();
+      event.stopPropagation();
       this.#emit('frame-include', { index, included: false });
     }
   }
@@ -82,12 +128,19 @@ export class FrameTimeline extends HTMLElement {
   #render() {
     if (!this.isConnected) return;
     this.replaceChildren();
+    const activeDurations = this.#frames
+      .filter((frame) => frame.included !== false)
+      .map((frame) => frame.edit?.durationMs ?? frame.durationMs);
+    const maximumDuration = Math.max(1, ...activeDurations);
     for (const [index, frame] of this.#frames.entries()) {
       const row = document.createElement('article');
       row.className = 'frame-row';
       row.dataset.frameId = frame.id;
       row.dataset.index = String(index);
       row.dataset.included = String(frame.included !== false);
+      row.dataset.readOnly = String(this.#readOnly);
+      row.dataset.rangeIn = String(index === this.#rangeIn);
+      row.dataset.rangeOut = String(index === this.#rangeOut);
       row.setAttribute('aria-current', String(index === this.#selected));
       row.tabIndex = index === this.#selected ? 0 : -1;
 
@@ -114,12 +167,57 @@ export class FrameTimeline extends HTMLElement {
       label.value = frame.label ?? '';
       label.placeholder = 'Add label';
       label.setAttribute('aria-label', `Label ${frame.id}`);
+      label.disabled = this.#readOnly;
       copy.append(ordinal, name, duration, label);
+      const timingField = document.createElement('label');
+      timingField.className = 'timeline-duration-field';
+      const timingLabel = document.createElement('span');
+      timingLabel.textContent = 'Timing';
+      const timingInput = document.createElement('input');
+      timingInput.type = 'number';
+      timingInput.min = '1';
+      timingInput.max = '65535';
+      timingInput.step = '1';
+      timingInput.dataset.duration = '';
+      timingInput.value = String(frame.edit?.durationMs ?? frame.durationMs);
+      timingInput.setAttribute('aria-label', `Timeline duration ${frame.id}`);
+      timingInput.disabled = this.#readOnly;
+      timingField.append(timingLabel, timingInput);
+      const timingBar = document.createElement('span');
+      timingBar.className = 'timing-bar';
+      timingBar.setAttribute('aria-hidden', 'true');
+      const timingFill = document.createElement('span');
+      timingFill.className = 'timing-bar-fill';
+      const ratio = frame.included === false ? 0 : (frame.edit?.durationMs ?? frame.durationMs) / maximumDuration;
+      timingFill.style.width = `${ratio * 100}%`;
+      timingBar.append(timingFill);
+      copy.append(timingField, timingBar);
       if (frame.edit?.contacts?.length) {
         const contacts = document.createElement('span');
         contacts.className = 'contact-span';
         contacts.textContent = frame.edit.contacts.join(' · ');
         copy.append(contacts);
+      }
+      if (frame.included === false) {
+        const state = document.createElement('span');
+        state.className = 'frame-state';
+        state.textContent = 'Excluded';
+        copy.append(state);
+      }
+      if (index === this.#rangeIn || index === this.#rangeOut) {
+        const range = document.createElement('span');
+        range.className = 'range-badges';
+        if (index === this.#rangeIn) {
+          const badge = document.createElement('span');
+          badge.textContent = 'In';
+          range.append(badge);
+        }
+        if (index === this.#rangeOut) {
+          const badge = document.createElement('span');
+          badge.textContent = 'Out';
+          range.append(badge);
+        }
+        copy.append(range);
       }
 
       const actions = document.createElement('div');
@@ -129,11 +227,13 @@ export class FrameTimeline extends HTMLElement {
       include.dataset.action = 'include';
       include.setAttribute('aria-label', `${frame.included === false ? 'Include' : 'Exclude'} ${frame.id}`);
       include.textContent = frame.included === false ? '＋' : '✓';
+      include.disabled = this.#readOnly;
       const duplicate = document.createElement('button');
       duplicate.type = 'button';
       duplicate.dataset.action = 'duplicate';
       duplicate.setAttribute('aria-label', `Duplicate ${frame.id}`);
       duplicate.textContent = '⧉';
+      duplicate.disabled = this.#readOnly;
       actions.append(include, duplicate);
       row.append(thumb, copy, actions);
       this.append(row);

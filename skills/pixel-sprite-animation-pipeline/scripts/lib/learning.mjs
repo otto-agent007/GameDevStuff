@@ -63,6 +63,26 @@ function statePaths(projectDir) {
   return { root, runs: path.join(root, 'runs'), lessons: path.join(root, 'lessons.jsonl'), profile: path.join(root, 'profile.yaml') };
 }
 
+async function ensurePrivateDirectory(directory, label) {
+  let created = false;
+  try {
+    await fs.mkdir(directory, { mode: 0o700 });
+    created = true;
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+  }
+  if (created && process.platform !== 'win32') await fs.chmod(directory, 0o700);
+  const stat = await fs.lstat(directory);
+  if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`${label} must be a real directory`);
+  if (process.platform !== 'win32' && typeof process.geteuid === 'function' && stat.uid !== process.geteuid()) throw new Error(`${label} must be owned by the current effective uid`);
+  if (process.platform !== 'win32' && (stat.mode & 0o022) !== 0) throw new Error(`${label} permissions are unsafe`);
+}
+
+async function ensureLearningState(state) {
+  await ensurePrivateDirectory(state.root, 'learning state directory');
+  await ensurePrivateDirectory(state.runs, 'learning runs directory');
+}
+
 function safeRunId(value) {
   const device = typeof value === 'string' ? value.split('.')[0] : '';
   if (
@@ -201,6 +221,7 @@ export async function createRun({ projectDir, config, inputs = [], inspectionSna
   if (!(now instanceof Date) || Number.isNaN(now.valueOf())) throw new Error('clock must return a valid Date');
   const runId = safeRunId(idFactory ? idFactory() : defaultRunId(() => now));
   const state = statePaths(projectDir);
+  await ensureLearningState(state);
   const runDir = path.join(state.runs, runId);
   const lock = `${runDir}.lock`;
   const handle = await reserve(lock);

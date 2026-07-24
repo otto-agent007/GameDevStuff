@@ -49,17 +49,42 @@
             </label>
           </div>
           <div class="canvas-stage">
-            <frame-canvas zoom="4" onion-opacity="0.28" seam="false"></frame-canvas>
+            <div class="comparison-preview" id="comparison-preview" data-review-mode="B">
+              <section class="preview-pane" id="review-a-pane" aria-label="Review A preview" hidden>
+                <header><strong>Review A</strong><span id="review-a-frame">—</span></header>
+                <frame-canvas id="review-a-canvas" zoom="4" onion-opacity="0.28" seam="false"></frame-canvas>
+              </section>
+              <section class="preview-pane" id="review-b-pane" aria-label="Review B preview">
+                <header><strong>Review B</strong><span id="review-b-frame">—</span></header>
+                <frame-canvas id="review-b-canvas" zoom="4" onion-opacity="0.28" seam="false"></frame-canvas>
+              </section>
+            </div>
           </div>
         </section>
 
         <section class="playback-panel panel" aria-label="Playback controls">
           <button id="previous-frame" class="icon-button" type="button" aria-label="Previous frame">◀</button>
           <button id="play" class="play-button" type="button">Play</button>
+          <button id="replay" class="play-button" type="button">Replay</button>
           <button id="next-frame" class="icon-button" type="button" aria-label="Next frame">▶</button>
           <div class="playback-readout" aria-live="polite">
             <strong id="frame-position">Frame 0 of 0</strong>
             <span id="total-duration">0 ms total</span>
+          </div>
+          <label class="speed-field">
+            <span>Speed</span>
+            <select id="review-speed" aria-label="Review speed">
+              <option value="0.25">0.25×</option>
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="2">2×</option>
+            </select>
+          </label>
+          <div class="range-controls" role="group" aria-label="Loop range controls">
+            <button id="set-range-in" type="button">Set in</button>
+            <button id="set-range-out" type="button">Set out</button>
+            <button id="clear-range" type="button" disabled>Clear range</button>
+            <span id="range-readout" aria-live="polite">Full action</span>
           </div>
           <progress id="scrub-progress" class="scrub-track" max="1" value="0" aria-label="Playback position"></progress>
         </section>
@@ -72,6 +97,22 @@
             <h2 id="overlays-heading">Overlays</h2>
           </div>
         </div>
+
+        <section class="review-card" aria-labelledby="review-heading">
+          <div>
+            <span class="eyebrow">Audition</span>
+            <h3 id="review-heading">Saved A / Working B</h3>
+          </div>
+          <div class="review-switch" role="group" aria-label="A/B review side">
+            <button id="review-a" type="button" aria-pressed="false">Review A</button>
+            <button id="review-b" type="button" aria-pressed="true">Review B</button>
+            <button id="review-side-by-side" type="button" aria-pressed="false">Side by side</button>
+          </div>
+          <dl class="review-state-list">
+            <div><dt>A</dt><dd id="review-a-state">Source defaults</dd></div>
+            <div><dt>B</dt><dd id="review-b-state">Working copy</dd></div>
+          </dl>
+        </section>
 
         <fieldset class="control-group">
           <legend>Onion skin</legend>
@@ -96,6 +137,19 @@
           <label><input id="overlay-drift" type="checkbox"> Drift</label>
         </fieldset>
 
+        <section id="motion-diagnostics" class="motion-card" aria-labelledby="motion-heading">
+          <span class="eyebrow">Authored paths</span>
+          <h3 id="motion-heading">Motion &amp; grounding</h3>
+          <p id="motion-summary">0 active frames · 0 warnings</p>
+          <svg id="motion-path-plot" viewBox="0 0 100 100" role="img" aria-label="Root and planted-foot motion paths"></svg>
+          <div class="motion-legend" aria-label="Motion path legend">
+            <span data-path="root">Root</span>
+            <span data-path="left-foot">Left foot</span>
+            <span data-path="right-foot">Right foot</span>
+          </div>
+          <div id="motion-issues" class="motion-issues" aria-label="Motion diagnostic warnings"></div>
+        </section>
+
         <section class="selection-card" aria-labelledby="selection-heading">
           <span class="eyebrow">Current</span>
           <h3 id="selection-heading">Frame details</h3>
@@ -104,6 +158,7 @@
             <div><dt>Duration</dt><dd id="selection-duration">—</dd></div>
             <div><dt>Source</dt><dd>Lossless PNG</dd></div>
           </dl>
+          <button id="toggle-frame-inclusion" class="selection-inclusion-button" type="button">Exclude from action</button>
         </section>
 
         <section class="authoring-card" aria-labelledby="authoring-heading">

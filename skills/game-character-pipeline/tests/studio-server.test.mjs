@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import fs from 'node:fs/promises';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -121,6 +123,30 @@ test('studio binds only to loopback and exposes a hash-bound session', async (t)
   assert.equal(body.sourceSha256, sha256Value(fixture.manifest));
   assert.equal(body.editRevision, 0);
   assert.match(body.editSha256, /^[a-f0-9]{64}$/);
+});
+
+test('studio close terminates active client connections', async (t) => {
+  const fixture = await studioFixture(t);
+  const studio = await startStudioServer({
+    projectDir: fixture.projectRoot,
+    runId: fixture.run.id,
+    stage: 'selection'
+  });
+  const url = new URL(studio.origin);
+  const socket = net.createConnection({ host: url.hostname, port: Number(url.port) });
+  socket.on('error', () => {});
+  await once(socket, 'connect');
+  socket.write(`GET /api/session HTTP/1.1\r\nHost: ${url.host}\r\n`);
+
+  const closePromise = studio.close();
+  const outcome = await Promise.race([
+    closePromise.then(() => 'closed'),
+    new Promise((resolve) => setTimeout(() => resolve('timeout'), 100))
+  ]);
+  socket.destroy();
+  await closePromise;
+
+  assert.equal(outcome, 'closed');
 });
 
 test('studio serves only immutable frames allowlisted by the review manifest', async (t) => {

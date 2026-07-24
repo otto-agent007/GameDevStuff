@@ -14,7 +14,7 @@ const HASH = /^[a-f0-9]{64}$/;
 const LOOP_MODES = new Set(['loop', 'once', 'hold-last']);
 const TRACK_KINDS = new Set(['actor', 'prop', 'effect']);
 const CONTACT_KINDS = new Set(['planted-foot', 'custom']);
-const SOURCE_KINDS = new Set(['generated-still', 'png-sequence', 'gif', 'apng', 'webp', 'mp4', 'webm']);
+const SOURCE_KINDS = new Set(['generated-still', 'png-sequence', 'pose-board', 'gif', 'apng', 'webp', 'mp4', 'webm']);
 const ENGINE_KINDS = new Set(['generic', 'godot']);
 const APPROVAL_STATUSES = new Set(['draft', 'anchor-approved']);
 const REQUIRED_GATES = Object.freeze(['canonical-anchor', 'annotated-animation', 'final-preview']);
@@ -113,7 +113,7 @@ function validateTracks(tracks) {
 
 function validateSockets(sockets, tracks) {
   const trackById = new Map(tracks.map((track) => [track.id, track]));
-  uniqueList(sockets, 'sockets', { key: ({ id }) => id });
+  uniqueList(sockets, 'sockets', { min: 0, key: ({ id }) => id });
   for (const socket of sockets) {
     exactObject(socket, ['id', 'trackId', 'required'], 'socket');
     portableId(socket.id, 'socket ID');
@@ -133,7 +133,7 @@ function validateSockets(sockets, tracks) {
 
 function validateContacts(contacts, tracks) {
   const trackById = new Map(tracks.map((track) => [track.id, track]));
-  uniqueList(contacts, 'contacts', { key: ({ id }) => id });
+  uniqueList(contacts, 'contacts', { min: 0, key: ({ id }) => id });
   for (const contact of contacts) {
     exactObject(contact, ['id', 'trackId', 'kind', 'required'], 'contact');
     portableId(contact.id, 'contact ID');

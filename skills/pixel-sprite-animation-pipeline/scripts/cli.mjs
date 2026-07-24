@@ -1256,6 +1256,7 @@ program.command('produce-contract')
   .description('Produce one authenticated version-2 multi-track animation package')
   .requiredOption('--contract <file>')
   .requiredOption('--project-dir <dir>')
+  .option('--snapper-project-dir <dir>', 'project containing the verified managed Pixel Snapper cache')
   .requiredOption('--output <dir>')
   .option('--snap-receipt <file>')
   .option('--frame-approval <file>')
@@ -1286,7 +1287,15 @@ program.command('produce-contract')
         outputDir: snapDir,
         config,
         paletteHex: contract.document.palette.snapperPaletteHex,
-        resolverOptions: await snapperResolverOptions(projectDir, manifestPath),
+        pixelSize: contract.document.scale.integer,
+        outputCanvas: { width: contract.document.canvas.width, height: contract.document.canvas.height },
+        alignedSource: {
+          scale: contract.document.scale.integer,
+          canvas: { width: contract.document.canvas.width, height: contract.document.canvas.height },
+          paletteRgba: contract.document.palette.rgba,
+          paletteSha256: contract.document.palette.sha256
+        },
+        resolverOptions: await snapperResolverOptions(path.resolve(options.snapperProjectDir ?? projectDir), manifestPath),
         receipt: { projectDir, run: { id: null, outputDir: snapDir, manifestSha256: stableHash(selectedInputs.document) }, contract }
       });
       if (snapped.status === 'manual-handoff') {

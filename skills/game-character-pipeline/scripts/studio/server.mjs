@@ -24,6 +24,8 @@ const STATIC_FILES = new Map([
   ['/studio/app.mjs', ['app.mjs', 'text/javascript; charset=utf-8']],
   ['/studio/frame-canvas.mjs', ['frame-canvas.mjs', 'text/javascript; charset=utf-8']],
   ['/studio/markers.mjs', ['markers.mjs', 'text/javascript; charset=utf-8']],
+  ['/studio/motion-diagnostics.mjs', ['motion-diagnostics.mjs', 'text/javascript; charset=utf-8']],
+  ['/studio/review-state.mjs', ['review-state.mjs', 'text/javascript; charset=utf-8']],
   ['/studio/timeline.mjs', ['timeline.mjs', 'text/javascript; charset=utf-8']],
   ['/studio/styles.css', ['styles.css', 'text/css; charset=utf-8']]
 ]);
@@ -388,6 +390,7 @@ export async function startStudioServer({
       await new Promise((resolve, reject) => {
         server.close((error) => error ? reject(error) : resolve());
         server.closeIdleConnections?.();
+        server.closeAllConnections?.();
       });
     }
   };

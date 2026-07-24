@@ -48,7 +48,7 @@
     { "id": "right-foot", "trackId": "actor", "kind": "planted-foot", "required": true }
   ],
   "sources": {
-    "allowedKinds": ["generated-still", "png-sequence", "gif", "apng", "webp", "mp4", "webm"],
+    "allowedKinds": ["generated-still", "png-sequence", "pose-board", "gif", "apng", "webp", "mp4", "webm"],
     "defaultStillKind": "generated-still"
   },
   "actions": [
@@ -60,7 +60,7 @@
       "tracks": ["actor", "satchel"],
       "sockets": ["hand"],
       "contacts": ["left-foot", "right-foot"],
-      "sources": { "preferred": "gif", "fallbacks": ["png-sequence", "apng", "webp", "mp4", "webm"] }
+      "sources": { "preferred": "gif", "fallbacks": ["pose-board", "png-sequence", "apng", "webp", "mp4", "webm"] }
     },
     {
       "id": "unlock",

@@ -13,7 +13,7 @@ async function loadScenarios() {
 
 test('skill scenarios have complete, unique evaluation contracts', async () => {
   const scenarios = await loadScenarios();
-  assert.equal(scenarios.length, 8);
+  assert.equal(scenarios.length, 13);
   assert.equal(new Set(scenarios.map(({ id }) => id)).size, scenarios.length);
 
   for (const scenario of scenarios) {
@@ -29,6 +29,29 @@ test('skill scenarios have complete, unique evaluation contracts', async () => {
     assert.ok(scenario.forbiddenBehaviors.length > 0);
     assert.equal(new Set(scenario.forbiddenBehaviors).size, scenario.forbiddenBehaviors.length);
   }
+});
+
+test('pose-board scenarios preserve recovery, approval, and privacy boundaries', async () => {
+  const scenarios = (await loadScenarios()).filter(({ id }) => id.startsWith('pose-board-'));
+  assert.equal(scenarios.length, 5);
+  const forbidden = new Set(scenarios.flatMap(({ forbiddenBehaviors }) => forbiddenBehaviors));
+  for (const behavior of [
+    'naive-grid-crop',
+    'snap-whole-board',
+    'bypass-recovery-approval',
+    'skip-post-snap-studio',
+    'publish-source-board'
+  ]) {
+    assert.equal(forbidden.has(behavior), true);
+  }
+  assert.equal(
+    scenarios.some(({ expectedExitClass }) => expectedExitClass === 0),
+    true
+  );
+  assert.equal(
+    scenarios.filter(({ expectedExitClass }) => expectedExitClass === 4).length,
+    4
+  );
 });
 
 test('the skill directly links every operational reference and packages them', async () => {

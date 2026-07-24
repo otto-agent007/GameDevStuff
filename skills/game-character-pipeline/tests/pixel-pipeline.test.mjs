@@ -40,6 +40,9 @@ test('production uses argv without a shell and returns authenticated outputs', a
   assert.equal(value.calls.length, 1);
   assert.equal(value.calls[0].options.shell, false);
   assert.deepEqual(value.calls[0].argv.slice(0, 2), [value.pipelineCli, 'produce-contract']);
+  const snapperProjectDir = value.calls[0].argv.indexOf('--snapper-project-dir');
+  assert.notEqual(snapperProjectDir, -1);
+  assert.equal(value.calls[0].argv[snapperProjectDir + 1], value.project.root);
   assert.equal(value.calls[0].executable, value.node);
   assert.match(result.receipt.sha256, /^[a-f0-9]{64}$/);
   assert.equal(result.exitCode, 0);
