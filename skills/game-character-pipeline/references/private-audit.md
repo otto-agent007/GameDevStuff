@@ -7,7 +7,7 @@ A private audit proves the reusable workflow without publishing or integrating t
 - Create an operator-selected audit root outside every Git worktree, preferably with `mktemp -d`, and restrict it to the owner on POSIX systems.
 - Copy only inputs the owner explicitly approved for this audit.
 - Keep source media, manifests, paths, reports, contact sheets, previews, thumbnails, exports, and descriptive evidence inside that root.
-- Never enter, edit, copy into, build, test, or otherwise operate on `/mnt/2TBHDD/CockpitEscapeRoom`. Moving approved output there is a separate explicitly approved integration task.
+- Never enter, edit, copy into, build, test, or otherwise operate on a configured forbidden integration root. Moving approved output there is a separately approved integration task.
 - Do not add the private audit root to npm contents or Git. The repository ignores defensive local names, but an external absolute root remains mandatory.
 
 Example setup:
@@ -19,7 +19,7 @@ chmod 700 "$private_audit_root"
 
 Run `init`, immutable `intake`, Frame Studio review, `render`, `approve`, authenticated `produce`, `validate`, and repeat-run `audit` with `--project-dir` and output paths under that root. See [workflow.md](workflow.md).
 
-## Pop T audit checks
+## Private-project audit checks
 
 At the private production gate, inspect only inside the audit root and require:
 

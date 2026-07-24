@@ -67,14 +67,14 @@ test('the skill directly links every operational reference and packages them', a
   }
 });
 
-test('the private boundary and exit-class rules are explicit', async () => {
+test('the private boundary and exit-class rules use configured generic integration roots', async () => {
   const skill = await fs.readFile(path.join(packageRoot, 'SKILL.md'), 'utf8');
   const privateAudit = await fs.readFile(path.join(packageRoot, 'references', 'private-audit.md'), 'utf8');
   const combined = `${skill}\n${privateAudit}`;
 
-  assert.match(combined, /CockpitEscapeRoom/);
+  assert.match(combined, /configured forbidden integration root/i);
   assert.match(combined, /separate(?:ly)?[^.\n]*approved integration task/i);
   assert.match(combined, /exit(?: code| class)? `?4`?/i);
   assert.match(combined, /\{ passed, runSha256, reportSha256, approvedBy, approvedAt \}/);
-  assert.doesNotMatch(combined, /copy private (?:media|assets).*CockpitEscapeRoom/i);
+  assert.doesNotMatch(combined, /\/mnt\//i);
 });

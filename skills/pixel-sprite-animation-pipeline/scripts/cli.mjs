@@ -19,7 +19,7 @@ import { readRgba, sha256 } from './lib/image.mjs';
 import { validateRun } from './lib/validate.mjs';
 import { repairValidationRun } from './lib/repair.mjs';
 import { createCorrectionContract, loadCorrectionContext, sealCorrectionContract } from './lib/contract.mjs';
-import { canonicalRelativePath, isPathContained, sameCanonicalPath } from './lib/path-security.mjs';
+import { assertPathsOutsideForbiddenRoots, canonicalRelativePath, isPathContained, sameCanonicalPath } from './lib/path-security.mjs';
 
 const EXIT = Object.freeze({ success: 0, error: 1, handoff: 2, objectiveFailure: 3, review: 4 });
 const REVIEW_CORRECTIONS = new Set(['palette-remap-review', 'stop-for-regeneration', 'stop-for-review', 'timing-or-transition-review']);
@@ -91,6 +91,27 @@ async function ensureReceiptState(projectDir) {
 async function configFor(options) {
   const cwd = resolveCwd(options);
   return loadConfig({ cwd, profilePath: options.profile ? path.resolve(options.profile) : undefined });
+}
+
+const PATH_OPTIONS = new Set([
+  'approvalRequest', 'contract', 'cwd', 'file', 'frame', 'frameApproval', 'frames', 'input', 'normalization',
+  'output', 'profile', 'projectDir', 'replacementSnappedFrame', 'request', 'resume', 'snapperProjectDir', 'snapReceipt', 'snappedFrame'
+]);
+
+function suppliedPathOptions(options) {
+  return Object.entries(options).flatMap(([key, value]) => {
+    if (!PATH_OPTIONS.has(key) || value === undefined || value === null) return [];
+    return (Array.isArray(value) ? value : [value]).filter((candidate) => typeof candidate === 'string' && candidate !== '').map((candidate) => path.resolve(candidate));
+  });
+}
+
+async function enforceIntegrationPolicy(options) {
+  const config = await configFor(options);
+  await assertPathsOutsideForbiddenRoots({
+    candidates: suppliedPathOptions(options),
+    forbiddenRoots: config.integration.forbiddenIntegrationPaths
+  });
+  return config;
 }
 
 async function refuseExisting(target, label = 'output') {
@@ -488,7 +509,7 @@ async function initialRun(options) {
     tolerance: config.background.tolerance,
     backgroundColor: config.background.mode === 'configured' ? config.background.color : undefined
   });
-  const animationContract = options.contract ? await loadAnimationContract(path.resolve(options.contract)) : null;
+  const animationContract = options.contract ? await loadAnimationContract(path.resolve(options.contract), { projectId: config.integration.projectId }) : null;
   if (animationContract && animationContract.document.anchor.sha256 !== sourceInspection.sha256) throw new Error('animation contract anchor hash does not match the approved guided-run input');
   const extension = path.extname(input) || '.png';
   const anchorId = `source/approved-anchor${extension}`;
@@ -880,11 +901,12 @@ async function finishRun(context, snappedFrames, snapProvenance = { toolProvenan
       reviewRequired: humanReviewOutstanding,
       nextAction: 'Review the animation, then explicitly approve project-local profile promotion.'
     },
-    ...(contracted ? { popTAcceptance: {
+    ...(contracted ? { projectAcceptance: {
+      projectId: context.config.integration.projectId,
       eligible: validation.passed && snapProvenance.toolProvenanceVerified === true && !humanReviewOutstanding,
       applied: false,
       requiresUserApproval: true,
-      reason: snapProvenance.toolProvenanceVerified === true ? 'Requires private Pop T visual acceptance.' : 'Manual handoff provenance is permanently ineligible for Pop T release acceptance.'
+      reason: snapProvenance.toolProvenanceVerified === true ? 'Requires private-project visual acceptance.' : 'Manual handoff provenance is permanently ineligible for private-project release acceptance.'
     } } : {})
   };
   const recorded = await recordRunResultIdempotent({ context, report });
@@ -1186,7 +1208,7 @@ async function finishCorrectionRevision({ context, document, revision, approvalF
     snapReceipt: { path: await portablePath(context.runDir, receiptFile), sha256: receipt.sha256 }, frameApproval: { path: await portablePath(context.runDir, approvalArtifact.path), sha256: approval.sha256, version: approvalVersion },
     validation: { ...portableValue(validation, context.runDir), artifacts },
     profilePromotion: { eligible: false, applied: false, requiresUserApproval: true, reviewRequired: humanReviewOutstanding },
-    popTAcceptance: { eligible: false, applied: false, requiresUserApproval: true, reason: 'Correction replacement was supplied through a manual handoff and cannot inherit verified-tool provenance.' }
+    projectAcceptance: { projectId: context.config.integration.projectId, eligible: false, applied: false, requiresUserApproval: true, reason: 'Correction replacement was supplied through a manual handoff and cannot inherit verified-tool provenance.' }
   };
   const reportFile = path.join(revisionDir, 'report.json');
   await writeJsonIdempotent(reportFile, report, 'correction revision report');
@@ -1218,6 +1240,10 @@ const program = new Command()
   .exitOverride()
   .configureOutput({ writeErr: () => {} });
 
+program.hook('preAction', async (_command, actionCommand) => {
+  await enforceIntegrationPolicy(actionCommand.opts());
+});
+
 program.command('setup-snapper')
   .description('Install and verify the pinned Pixel Snapper binary for this platform')
   .option('--project-dir <path>')
@@ -1239,7 +1265,10 @@ program.command('contract')
   .command('inspect')
   .description('Load, validate, freeze, and hash an explicit animation contract')
   .requiredOption('--file <file>')
-  .action(async (options) => printImpl(await loadAnimationContract(path.resolve(options.file))));
+  .action(async (options) => {
+    const config = await configFor(options);
+    printImpl(await loadAnimationContract(path.resolve(options.file), { projectId: config.integration.projectId }));
+  });
 
 program.command('approve-frames')
   .description('Create one signed numbered post-snap approval from explicit landmark data')
@@ -1251,10 +1280,11 @@ program.command('approve-frames')
   .option('--cwd <dir>')
   .action(async (options) => {
     const projectDir = resolveCwd(options);
+    const config = await configFor(options);
     const request = validateApprovalRequest(JSON.parse(await fs.readFile(path.resolve(options.approvalRequest), 'utf8')));
     await ensureReceiptState(projectDir);
     printImpl(await writeFrameApproval({
-      projectDir, runDir: path.dirname(path.resolve(options.snapReceipt)), contract: await loadAnimationContract(path.resolve(options.contract)),
+      projectDir, runDir: path.dirname(path.resolve(options.snapReceipt)), contract: await loadAnimationContract(path.resolve(options.contract), { projectId: config.integration.projectId }),
       snapReceipt: { path: path.resolve(options.snapReceipt) }, frames: request.frames, approvals: request.approvals, version: options.version
     }));
   });
@@ -1270,7 +1300,8 @@ program.command('produce-contract')
   .action(async (options) => {
     const projectDir = path.resolve(options.projectDir);
     const contractFile = path.resolve(options.contract);
-    const contract = await loadAnimationContract(contractFile);
+    const baseConfig = await configFor({ projectDir });
+    const contract = await loadAnimationContract(contractFile, { projectId: baseConfig.integration.projectId });
     if (contract.document.version !== 2) throw new Error('produce-contract requires an animation contract version 2');
     const selectedInputs = await productionInputs({ contractFile, contract, projectDir });
     const productionBinding = {
@@ -1279,7 +1310,7 @@ program.command('produce-contract')
     };
     const outputRoot = path.resolve(options.output);
     const snapDir = path.join(outputRoot, 'snapped');
-    const config = v2Config(contract, await configFor({ projectDir }));
+    const config = v2Config(contract, baseConfig);
     await ensureReceiptState(projectDir);
     let receipt;
     let snappedOutputs;
@@ -1433,7 +1464,7 @@ program.command('export')
       if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized) || Object.keys(normalized).length !== allowed.length || allowed.some((key) => !Object.hasOwn(normalized, key))) throw new Error('contract export normalization manifest schema is invalid');
       print(await exportContractAnimation({
         normalized,
-        contract: await loadAnimationContract(path.resolve(options.contract)),
+        contract: await loadAnimationContract(path.resolve(options.contract), { projectId: config.integration.projectId }),
         outputDir,
         config,
         columns: options.columns,

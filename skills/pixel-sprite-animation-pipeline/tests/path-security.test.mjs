@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import {
+  assertPathsOutsideForbiddenRoots,
   canonicalPath,
   canonicalRelativePath,
   isPathContained,
@@ -41,4 +44,35 @@ test('canonical relative paths serialize a Windows short-name child portably', a
     'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\run\\frames\\idle.png',
     { fsImpl, pathApi: path.win32 }
   ), 'frames/idle.png');
+});
+
+test('forbidden integration roots reject direct, nested, and symlinked paths without blocking siblings', async () => {
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'integration-policy-'));
+  const forbidden = path.join(workspace, 'forbidden');
+  const allowed = path.join(workspace, 'allowed');
+  const alias = path.join(workspace, 'alias');
+  await fs.mkdir(forbidden);
+  await fs.mkdir(allowed);
+  await fs.symlink(forbidden, alias);
+
+  await assert.rejects(
+    assertPathsOutsideForbiddenRoots({
+      candidates: [path.join(forbidden, 'nested', 'output.json')],
+      forbiddenRoots: [forbidden]
+    }),
+    /forbidden integration path/
+  );
+  await assert.rejects(
+    assertPathsOutsideForbiddenRoots({
+      candidates: [path.join(alias, 'output.json')],
+      forbiddenRoots: [forbidden]
+    }),
+    /forbidden integration path/
+  );
+  await assert.doesNotReject(
+    assertPathsOutsideForbiddenRoots({
+      candidates: [path.join(allowed, 'output.json')],
+      forbiddenRoots: [forbidden]
+    })
+  );
 });

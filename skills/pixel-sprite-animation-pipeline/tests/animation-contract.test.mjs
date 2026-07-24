@@ -74,7 +74,7 @@ export async function writeContract(document = contractDocument()) {
   return file;
 }
 
-test('Pop T contract rejects implicit timing, palette, or landmark semantics', async () => {
+test('v1 contract rejects implicit timing, palette, or landmark semantics', async () => {
   for (const field of ['clips', 'snapperPaletteHex', 'landmarkSemantic']) {
     const document = contractDocument();
     if (field === 'clips') delete document.clips;
@@ -84,13 +84,26 @@ test('Pop T contract rejects implicit timing, palette, or landmark semantics', a
   }
 });
 
-test('contract freezes and hashes one closed Pop T animation document', async () => {
+test('contract freezes and hashes one closed animation document', async () => {
   const document = contractDocument();
   const contract = await loadAnimationContract(await writeContract(document));
   assert.equal(contract.sha256, stableHash(document));
   assert.ok(Object.isFrozen(contract));
   assert.ok(Object.isFrozen(contract.document.clips[0].frames[0].landmarkSemantic.target));
   assert.throws(() => { contract.document.baseline = 112; }, TypeError);
+});
+
+test('v1 contract errors use an optional configured project ID', () => {
+  const invalid = contractDocument();
+  invalid.sizes.pixelSize = 7;
+  assert.throws(
+    () => validateAnimationContract(invalid, { projectId: 'private-project' }),
+    /private-project/
+  );
+  assert.throws(
+    () => validateAnimationContract(invalid),
+    /canonical, generation, runtime, and pixelSize/
+  );
 });
 
 test('contract rejects extra, duplicate, unordered, or invalid fixed values', async () => {

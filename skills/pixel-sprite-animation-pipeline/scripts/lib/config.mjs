@@ -5,8 +5,11 @@ import YAML from 'yaml';
 const SCHEMA = Object.freeze({
   canonical: ['width', 'height'], generation: ['width', 'height'], runtime: ['width', 'height'], pivot: ['x', 'y'],
   palette: ['mode'], background: ['mode', 'color', 'tolerance'], foreground: ['retentionPolicy', 'minimumComponentPixels'],
-  snapper: ['executable', 'args'], correction: ['generativeAttempts', 'skillProposalEvidence']
+  snapper: ['executable', 'args'], correction: ['generativeAttempts', 'skillProposalEvidence'],
+  integration: ['projectId', 'forbiddenIntegrationPaths']
 });
+
+const PORTABLE_ID = /^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/;
 
 function deepFreeze(value) {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
@@ -30,7 +33,8 @@ export const DEFAULT_CONFIG = deepFreeze({
   background: { mode: 'border', color: null, tolerance: 0 },
   foreground: { retentionPolicy: 'all', minimumComponentPixels: 1 },
   snapper: { executable: 'spritefusion-pixel-snapper', args: ['16'] },
-  correction: { generativeAttempts: 2, skillProposalEvidence: 3 }
+  correction: { generativeAttempts: 2, skillProposalEvidence: 3 },
+  integration: { projectId: null, forbiddenIntegrationPaths: [] }
 });
 
 function assertObject(value, label) {
@@ -88,6 +92,9 @@ export function validateConfig(input) {
   if (!Array.isArray(config.snapper.args) || config.snapper.args.some((item) => typeof item !== 'string')) throw new Error('snapper args must be an array of strings');
   if (!Number.isInteger(config.correction.generativeAttempts) || config.correction.generativeAttempts < 0) throw new Error('correction generativeAttempts must be a nonnegative integer');
   if (!Number.isInteger(config.correction.skillProposalEvidence) || config.correction.skillProposalEvidence < 1) throw new Error('correction skillProposalEvidence must be a positive integer');
+  if (config.integration.projectId !== null && (typeof config.integration.projectId !== 'string' || !PORTABLE_ID.test(config.integration.projectId))) throw new Error('integration projectId must be null or a portable ID');
+  if (!Array.isArray(config.integration.forbiddenIntegrationPaths) || config.integration.forbiddenIntegrationPaths.some((value) => typeof value !== 'string' || !path.isAbsolute(value) || path.resolve(value) !== value)) throw new Error('integration forbiddenIntegrationPaths must be normalized absolute paths');
+  if (new Set(config.integration.forbiddenIntegrationPaths).size !== config.integration.forbiddenIntegrationPaths.length) throw new Error('integration forbiddenIntegrationPaths must not contain duplicates');
   return deepFreeze(config);
 }
 

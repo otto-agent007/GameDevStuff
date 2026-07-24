@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship checksum-verified Pixel Snapper binaries for five desktop targets and integrate them into an authenticated, landmark-stable Pop T animation pipeline.
+**Goal:** Ship checksum-verified Pixel Snapper binaries for five desktop targets and integrate them into an authenticated, landmark-stable private-project animation pipeline.
 
 **Architecture:** GameDevStuff builds one immutable Pixel Snapper release from an approved upstream commit, while the Node.js skill installs and verifies the correct target asset into project-local state. A resolver produces a truthful binary identity; signed snap receipts and post-snap frame-approval manifests form an immutable provenance chain that landmark-based normalization, contract-driven export, and validation consume.
 
@@ -22,11 +22,11 @@
 - Archive limits are 25 MiB compressed, 16 entries, 100 MiB total uncompressed, 50 MiB per entry, and 100:1 compression ratio.
 - Snap subprocesses use structured arguments and `shell: false`.
 - The immutable run manifest is never mutated; provenance is added through authenticated chained receipts.
-- Manual handoff provenance is explicitly unverified and cannot satisfy Pop T release acceptance.
-- The Pop T contract fixes 128×128 canonical, 1024×1024 generation, 256×256 runtime, `pixelSize: 8`, pivot `(64,112)`, and baseline `111`.
-- The Pop T palette and durations are contract inputs; never quantize each frame independently or substitute 100 ms defaults.
+- Manual handoff provenance is explicitly unverified and cannot satisfy private-project release acceptance.
+- The private-project contract fixes 128×128 canonical, 1024×1024 generation, 256×256 runtime, `pixelSize: 8`, pivot `(64,112)`, and baseline `111`.
+- The private-project palette and durations are contract inputs; never quantize each frame independently or substitute 100 ms defaults.
 - Actual landmark coordinates are authored after snapping and must map exactly to `(64,112)` during normalization.
-- Preserve all original source files and keep private Pop T assets, receipts, and reports outside the public Git history and npm package.
+- Preserve all original source files and keep private-project assets, receipts, and reports outside the public Git history and npm package.
 
 ---
 
@@ -589,7 +589,7 @@ git commit -m "feat: authenticate Pixel Snapper batches"
 - [ ] **Step 1: Write failing contract and approval-chain tests**
 
 ```js
-test('Pop T contract rejects implicit timing, palette, or landmark semantics', async () => {
+test('private-project contract rejects implicit timing, palette, or landmark semantics', async () => {
   for (const field of ['clips', 'snapperPaletteHex', 'landmarkSemantic']) {
     await assert.rejects(loadAnimationContract(await contractMissing(field)), new RegExp(field));
   }
@@ -812,10 +812,10 @@ test('guided animation waits for signed frame approval after verified snapping',
   assert.equal(approved.state, 'complete');
 });
 
-test('manual handoff can normalize but cannot pass Pop T release acceptance', async () => {
+test('manual handoff can normalize but cannot pass private-project release acceptance', async () => {
   const result = await completeManualRun(manualFixture);
   assert.equal(result.report.toolProvenanceVerified, false);
-  assert.equal(result.report.popTAcceptance.eligible, false);
+  assert.equal(result.report.projectAcceptance.eligible, false);
 });
 ```
 
@@ -951,7 +951,7 @@ Expected: one immutable GameDevStuff release with five platform archives, checks
 
 ---
 
-### Task 11: Production Manifest, Documentation, CI, and Pop T Acceptance
+### Task 11: Production Manifest, Documentation, CI, and private-project acceptance
 
 **Files:**
 - Create: `skills/pixel-sprite-animation-pipeline/references/pixel-snapper-tool-manifest.json`
@@ -962,8 +962,8 @@ Expected: one immutable GameDevStuff release with five platform archives, checks
 - Modify: `.github/workflows/pixel-sprite-skill.yml`
 - Modify: `.gitignore`
 - Create: `skills/pixel-sprite-animation-pipeline/tests/package.test.mjs`
-- Create privately, do not commit: `examples/private/pop-t/animation-contract.json`
-- Create privately, do not commit: `examples/private/pop-t/frame-approval-request.json`
+- Create privately, do not commit: `examples/private/project/animation-contract.json`
+- Create privately, do not commit: `examples/private/project/frame-approval-request.json`
 
 **Interfaces:**
 - The packaged skill discovers the production manifest relative to `scripts/cli.mjs`.
@@ -989,7 +989,7 @@ test('packed skill includes manifest and license but no binaries or private appr
 
 - [ ] **Step 3: Update skill instructions and references**
 
-Document resolution order, `setup-snapper`, verified/manual receipt distinction, contract creation, post-snap landmark approval, `awaiting-frame-approval`, and the rule that Pop T acceptance requires verified-tool provenance. Configuration docs explain explicit executable provenance and why cached tools are versioned local state.
+Document resolution order, `setup-snapper`, verified/manual receipt distinction, contract creation, post-snap landmark approval, `awaiting-frame-approval`, and the rule that private-project acceptance requires verified-tool provenance. Configuration docs explain explicit executable provenance and why cached tools are versioned local state.
 
 - [ ] **Step 4: Extend CI**
 
@@ -1011,7 +1011,7 @@ git diff --check
 
 Expected: full suite has zero failures; official skill validation passes; package contains no binaries/private assets; setup downloads, verifies, and probes the current platform binary; diff check is clean.
 
-- [ ] **Step 6: Run private Pop T acceptance**
+- [ ] **Step 6: Run private-project acceptance**
 
 Use the private approved animation contract with exact clips/order/durations/loop modes, the frozen anchor palette, `pixelSize: 8`, and landmark semantics. Generate or supply every contracted 1024×1024 pose, run the verified snapper, author and sign the frame approvals, normalize to `(64,112)`, export 256×256 clips, and validate.
 
@@ -1040,11 +1040,11 @@ Store private frames, receipts, manifests, previews, and the full report only in
 
 ```bash
 git add .github/workflows/pixel-sprite-skill.yml .gitignore skills/pixel-sprite-animation-pipeline/package.json skills/pixel-sprite-animation-pipeline/npm-shrinkwrap.json skills/pixel-sprite-animation-pipeline/SKILL.md skills/pixel-sprite-animation-pipeline/references/pixel-snapper-tool-manifest.json skills/pixel-sprite-animation-pipeline/references/pixel-snapper.md skills/pixel-sprite-animation-pipeline/references/configuration.md skills/pixel-sprite-animation-pipeline/tests/package.test.mjs
-git commit -m "feat: complete verified Pop T sprite workflow"
+git commit -m "feat: complete verified private-project sprite workflow"
 ```
 
 - [ ] **Step 8: Request final review and update the PR**
 
-Use `superpowers:requesting-code-review`, address any findings, rerun the full verification block, push the branch, update the PR summary with release URLs and CI matrix, and keep private Pop T artifacts excluded.
+Use `superpowers:requesting-code-review`, address any findings, rerun the full verification block, push the branch, update the PR summary with release URLs and CI matrix, and keep private-project artifacts excluded.
 
 Expected: GitHub Actions passes on every required job and the PR remains mergeable.

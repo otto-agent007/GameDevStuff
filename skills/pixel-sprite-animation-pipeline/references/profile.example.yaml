@@ -1,0 +1,4 @@
+# Copy into the active project's ignored .pixel-sprite-pipeline/profile.yaml.
+integration:
+  projectId: null
+  forbiddenIntegrationPaths: []

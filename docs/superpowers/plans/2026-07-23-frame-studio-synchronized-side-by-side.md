@@ -227,8 +227,8 @@ Expected: all selected tests pass on desktop and narrow.
 ### Task 4: Regression, rendered QA, and private comparison handoff
 
 **Files:**
-- Modify: `/mnt/2TBHDD/private-audits/game-character-popt-baseball-slide-2026-07-22/implementation-checkpoint.md`
-- Modify: `/mnt/2TBHDD/private-audits/game-character-popt-baseball-slide-2026-07-22/audit-checkpoint.json`
+- Modify: `<private-audit-root>/implementation-checkpoint.md`
+- Modify: `<private-audit-root>/audit-checkpoint.json`
 - Preserve: all existing private Frame Studio comparison evidence
 
 **Interfaces:**

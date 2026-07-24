@@ -20,7 +20,7 @@
 - Preserve original files and use versioned run directories.
 - Automatic generative correction is limited to two attempts per failed frame.
 - Skill-level rule changes require explicit approval and three independent successful runs unless the reduced evidence is disclosed.
-- The public repository must not commit private Pop T fixture images; use the supplied image from a gitignored local fixture directory for acceptance testing.
+- The public repository must not commit private-project fixture images; use the supplied image from a gitignored local fixture directory for acceptance testing.
 
 ---
 
@@ -1232,7 +1232,7 @@ git commit -m "feat: package reusable pixel sprite animation skill"
 
 ---
 
-### Task 10: Cross-Platform CI, Pop T Acceptance, and Personal Installation
+### Task 10: Cross-Platform CI, private-project acceptance, and personal installation
 
 **Files:**
 - Create: `.github/workflows/pixel-sprite-skill.yml`
@@ -1241,7 +1241,7 @@ git commit -m "feat: package reusable pixel sprite animation skill"
 - Install copy: `/root/.codex/skills/remote-skills/skill-pixel-sprite-animation-pipeline/`
 
 **Interfaces:**
-- Consumes every prior module and the supplied private Pop T anchor.
+- Consumes every prior module and the supplied private-project anchor.
 - Produces a passing CI workflow, acceptance artifacts under a gitignored directory, and an installed personal skill.
 
 - [ ] **Step 1: Add a synthetic end-to-end test**
@@ -1329,14 +1329,14 @@ Run: `cd skills/pixel-sprite-animation-pipeline && npm ci && npm test`
 
 Expected: every configuration, inspection, preparation, snapper, normalization, export, validation, learning, CLI, and end-to-end test passes.
 
-- [ ] **Step 4: Run the private Pop T acceptance fixture**
+- [ ] **Step 4: Run the private-project acceptance fixture**
 
-Copy the supplied `PopTidle-pixel-snapper.png` into `examples/private/` without staging it. Run:
+Copy the supplied private anchor into `examples/private/` without staging it. Run:
 
 ```bash
 node skills/pixel-sprite-animation-pipeline/scripts/cli.mjs prepare \
-  --input examples/private/PopTidle-pixel-snapper.png \
-  --output generated/pop-t-anchor
+  --input examples/private/private-anchor-pixel-snapper.png \
+  --output generated/private-anchor
 ```
 
 Expected measurements:
