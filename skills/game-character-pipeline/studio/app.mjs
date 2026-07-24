@@ -5,8 +5,10 @@ import { analyzeMotion, renderMotionDiagnostics } from './motion-diagnostics.mjs
 import {
   activeIndices,
   cloneFrameState,
+  frameStartElapsedMs,
   nextPlaybackIndex,
   playbackIndices,
+  resolveElapsedFrame,
   reviewDelay
 } from './review-state.mjs';
 
@@ -30,6 +32,11 @@ let reviewSpeed = 1;
 let playbackRange = { in: null, out: null };
 let playing = false;
 let playbackTimer;
+let playbackFrameRequest;
+let comparisonElapsedMs = 0;
+let comparisonStartedAt = 0;
+let comparisonAIndex = 0;
+let requestedZoom = 4;
 let copyNumber = 0;
 let markerAuthoring;
 let dirty = false;
@@ -134,9 +141,16 @@ function applyEdit(edit) {
   return true;
 }
 
+function currentComparisonElapsed(now = performance.now()) {
+  if (!playing || reviewSide !== 'AB') return comparisonElapsedMs;
+  return comparisonElapsedMs + ((now - comparisonStartedAt) * reviewSpeed);
+}
+
 function stopPlayback() {
+  if (playing && reviewSide === 'AB') comparisonElapsedMs = currentComparisonElapsed();
   playing = false;
   clearTimeout(playbackTimer);
+  cancelAnimationFrame(playbackFrameRequest);
   playButton.textContent = 'Play';
 }
 
@@ -169,7 +183,7 @@ function updateFrameCanvas(target, view, index) {
 
 function updateCanvas() {
   if (reviewSide === 'AB') {
-    const reviewAFrame = updateFrameCanvas(reviewACanvas, savedFrames, selectedIndex);
+    const reviewAFrame = updateFrameCanvas(reviewACanvas, savedFrames, comparisonAIndex);
     const reviewBFrame = updateFrameCanvas(canvas, frames, selectedIndex);
     document.querySelector('#review-a-frame').textContent = reviewAFrame?.id ?? '—';
     document.querySelector('#review-b-frame').textContent = reviewBFrame?.id ?? '—';
@@ -226,6 +240,7 @@ function render({ focus = false } = {}) {
   updateReviewState();
   updateRangeState();
   updateApprovalControls();
+  updatePreviewZoom();
   if (focus) timeline.focusSelected();
 }
 
@@ -234,6 +249,10 @@ function selectFrame(index, { manual = false, focus = false } = {}) {
   if (!view.length) return;
   if (manual) stopPlayback();
   selectedIndex = Math.max(0, Math.min(index, view.length - 1));
+  if (reviewSide === 'AB') {
+    comparisonElapsedMs = frameStartElapsedMs(frames, selectedIndex, playbackRange);
+    updateComparisonIndices(comparisonElapsedMs);
+  }
   render({ focus });
 }
 
@@ -256,7 +275,56 @@ function scheduleNext() {
   }, reviewDelay(current.edit.durationMs, reviewSpeed));
 }
 
+function comparisonLoops() {
+  return hasPlaybackRange() || action?.loopMode === 'loop';
+}
+
+function updateComparisonIndices(elapsedMs) {
+  const loop = comparisonLoops();
+  const reviewA = resolveElapsedFrame(savedFrames, elapsedMs, { range: playbackRange, loop });
+  const reviewB = resolveElapsedFrame(frames, elapsedMs, { range: playbackRange, loop });
+  if (reviewA.index !== null) comparisonAIndex = reviewA.index;
+  if (reviewB.index !== null) selectedIndex = reviewB.index;
+  return { reviewA, reviewB };
+}
+
+function renderComparisonElapsed(elapsedMs) {
+  const resolved = updateComparisonIndices(elapsedMs);
+  timeline.selectedIndex = selectedIndex;
+  updateCanvas();
+  updateReadout();
+  return resolved;
+}
+
+function scheduleComparisonFrame(now) {
+  if (!playing || reviewSide !== 'AB') return;
+  const elapsedMs = currentComparisonElapsed(now);
+  const resolved = renderComparisonElapsed(elapsedMs);
+  if (!comparisonLoops() && resolved.reviewA.complete && resolved.reviewB.complete) {
+    comparisonElapsedMs = Math.max(resolved.reviewA.totalDurationMs, resolved.reviewB.totalDurationMs);
+    comparisonStartedAt = now;
+    stopPlayback();
+    return;
+  }
+  playbackFrameRequest = requestAnimationFrame(scheduleComparisonFrame);
+}
+
+function startComparisonPlayback({ fromStart = false } = {}) {
+  stopPlayback();
+  if (fromStart) comparisonElapsedMs = 0;
+  updateComparisonIndices(comparisonElapsedMs);
+  playing = true;
+  comparisonStartedAt = performance.now();
+  playButton.textContent = 'Pause';
+  renderComparisonElapsed(comparisonElapsedMs);
+  playbackFrameRequest = requestAnimationFrame(scheduleComparisonFrame);
+}
+
 function startPlayback({ fromStart = false } = {}) {
+  if (reviewSide === 'AB') {
+    startComparisonPlayback({ fromStart });
+    return;
+  }
   const indices = rangedFrameIndices();
   if (!indices.length) return;
   stopPlayback();
@@ -337,8 +405,22 @@ document.querySelector('#toggle-frame-inclusion').addEventListener('click', () =
 function switchReviewSide(side) {
   if (!['A', 'B', 'AB'].includes(side) || side === reviewSide) return;
   const resume = playing;
+  const previousSide = reviewSide;
   stopPlayback();
   reviewSide = side;
+  if (side === 'AB') {
+    comparisonElapsedMs = previousSide === 'AB'
+      ? comparisonElapsedMs
+      : frameStartElapsedMs(frames, selectedIndex, playbackRange);
+    updateComparisonIndices(comparisonElapsedMs);
+  } else if (previousSide === 'AB') {
+    const resolved = resolveElapsedFrame(
+      side === 'A' ? savedFrames : frames,
+      comparisonElapsedMs,
+      { range: playbackRange, loop: comparisonLoops() }
+    );
+    if (resolved.index !== null) selectedIndex = resolved.index;
+  }
   selectedIndex = Math.min(selectedIndex, Math.max(0, displayFrames().length - 1));
   render();
   if (resume) startPlayback();
@@ -351,10 +433,19 @@ document.querySelector('#review-b').addEventListener('click', () => switchReview
 document.querySelector('#review-side-by-side').addEventListener('click', () => switchReviewSide('AB'));
 
 document.querySelector('#review-speed').addEventListener('change', (event) => {
+  if (playing && reviewSide === 'AB') {
+    comparisonElapsedMs = currentComparisonElapsed();
+    comparisonStartedAt = performance.now();
+  }
   reviewSpeed = Number(event.target.value);
   if (playing) {
-    clearTimeout(playbackTimer);
-    scheduleNext();
+    if (reviewSide === 'AB') {
+      cancelAnimationFrame(playbackFrameRequest);
+      playbackFrameRequest = requestAnimationFrame(scheduleComparisonFrame);
+    } else {
+      clearTimeout(playbackTimer);
+      scheduleNext();
+    }
   }
   status.textContent = `Review speed set to ${event.target.selectedOptions[0].textContent}; authored durations are unchanged.`;
 });
@@ -370,6 +461,10 @@ function setRangeBoundary(boundary) {
   if (Number.isInteger(playbackRange.in) && Number.isInteger(playbackRange.out) && playbackRange.in > playbackRange.out) {
     playbackRange = { in: playbackRange.out, out: playbackRange.in };
   }
+  if (reviewSide === 'AB') {
+    comparisonElapsedMs = frameStartElapsedMs(frames, selectedIndex, playbackRange);
+    updateComparisonIndices(comparisonElapsedMs);
+  }
   render();
   if (resume) startPlayback();
   status.textContent = `Set temporary range ${boundary} at ${displayFrames()[selectedIndex].id}; authored loop mode is unchanged.`;
@@ -381,6 +476,10 @@ document.querySelector('#clear-range').addEventListener('click', () => {
   const resume = playing;
   stopPlayback();
   playbackRange = { in: null, out: null };
+  if (reviewSide === 'AB') {
+    comparisonElapsedMs = frameStartElapsedMs(frames, selectedIndex, playbackRange);
+    updateComparisonIndices(comparisonElapsedMs);
+  }
   render();
   if (resume) startPlayback();
   status.textContent = 'Cleared the temporary playback range.';
@@ -388,12 +487,27 @@ document.querySelector('#clear-range').addEventListener('click', () => {
 
 document.querySelector('#previous-frame').addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, -1), { manual: true }));
 document.querySelector('#next-frame').addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, 1), { manual: true }));
+function updatePreviewZoom() {
+  if (!session) return;
+  let zoom = requestedZoom;
+  if (reviewSide === 'AB') {
+    const paneWidth = Math.min(reviewAPane.clientWidth, reviewBPane.clientWidth);
+    const paneHeight = Math.min(reviewAPane.clientHeight, reviewBPane.clientHeight) - 30;
+    const widthFit = Math.floor(Math.max(1, paneWidth - 16) / session.project.canvas.width);
+    const heightFit = Math.floor(Math.max(1, paneHeight - 16) / session.project.canvas.height);
+    zoom = Math.max(1, Math.min(requestedZoom, widthFit, heightFit));
+  }
+  for (const target of [reviewACanvas, canvas]) target.setAttribute('zoom', String(zoom));
+}
+
 document.querySelector('#zoom').addEventListener('input', (event) => {
-  const zoom = Math.max(1, Math.min(12, Math.trunc(Number(event.target.value) || 1)));
-  event.target.value = String(zoom);
-  canvas.setAttribute('zoom', String(zoom));
+  requestedZoom = Math.max(1, Math.min(12, Math.trunc(Number(event.target.value) || 1)));
+  event.target.value = String(requestedZoom);
+  updatePreviewZoom();
 });
-document.querySelector('#onion-opacity').addEventListener('input', (event) => canvas.setAttribute('onion-opacity', event.target.value));
+document.querySelector('#onion-opacity').addEventListener('input', (event) => {
+  for (const target of [reviewACanvas, canvas]) target.setAttribute('onion-opacity', event.target.value);
+});
 setBooleanOverlay(document.querySelector('#overlay-previous'), 'previous');
 setBooleanOverlay(document.querySelector('#overlay-next'), 'next');
 setBooleanOverlay(document.querySelector('#overlay-seam'), 'seam');
@@ -590,6 +704,7 @@ async function initialize() {
         if (shouldRender) render();
       }
     });
+    new ResizeObserver(updatePreviewZoom).observe(comparisonPreview);
     render();
     updateApprovalControls();
     shell.dataset.loading = 'false';

@@ -153,7 +153,7 @@ Run the same Playwright grep. Expected: PASS for desktop and narrow.
 - Produces: transient review modes `A`, `B`, and `AB`
 - Produces: shared comparison elapsed state driven by `performance.now()`
 
-- [ ] **Step 1: Write failing synchronized-playback browser tests**
+- [x] **Step 1: Write failing synchronized-playback browser tests**
 
 Create immutable Review A, make working B timing shorter, enter Side by side, and verify:
 
@@ -177,7 +177,7 @@ await expect(page.getByRole('button', { name: 'Play', exact: true })).toHaveText
 
 Also record the saved edit hash before auditioning and verify it is unchanged afterward; B must remain marked as an unsaved working copy.
 
-- [ ] **Step 2: Run the synchronized test and verify RED**
+- [x] **Step 2: Run the synchronized test and verify RED**
 
 Run:
 
@@ -187,7 +187,7 @@ npx playwright test tests/browser/frame-studio.spec.mjs --grep "shared elapsed c
 
 Expected: FAIL because comparison mode does not yet drive either pane.
 
-- [ ] **Step 3: Extend review mode without changing edit semantics**
+- [x] **Step 3: Extend review mode without changing edit semantics**
 
 Update `reviewSide` to accept `AB`. In AB:
 
@@ -197,11 +197,11 @@ Update `reviewSide` to accept `AB`. In AB:
 - Review A and Review B buttons exit AB into their existing single modes.
 - `#review-a-pane` and `#review-b-pane` visibility follows A/B/AB.
 
-- [ ] **Step 4: Implement the shared clock**
+- [x] **Step 4: Implement the shared clock**
 
 Track `comparisonElapsedMs`, `comparisonStartedAt`, and one animation-frame handle. On Replay, reset elapsed to zero. During AB playback, compute elapsed from `performance.now()` and review speed, resolve A and B independently with `resolveElapsedFrame`, update both canvases in one render pass, and stop only when both full hold-last sequences are complete. Pause captures elapsed before canceling the scheduler.
 
-- [ ] **Step 5: Keep manual selection, range, speed, and overlays coherent**
+- [x] **Step 5: Keep manual selection, range, speed, and overlays coherent**
 
 - Manual B timeline selection sets shared elapsed with `frameStartElapsedMs`.
 - Range boundaries remain source-index boundaries and resolve independently per side.
@@ -210,11 +210,11 @@ Track `comparisonElapsedMs`, `comparisonStartedAt`, and one animation-frame hand
 - Marker authoring attaches only to `#review-b-canvas`.
 - Returning to A or B resolves that side at current shared elapsed.
 
-- [ ] **Step 6: Add resize-aware integer comparison zoom**
+- [x] **Step 6: Add resize-aware integer comparison zoom**
 
 Observe the comparison preview size. In AB, cap the requested zoom to the largest positive integer fitting both panes using project canvas dimensions; in single mode retain the requested zoom. Apply the same effective integer to both canvases without mutating the Zoom input.
 
-- [ ] **Step 7: Run synchronized and existing focused browser tests**
+- [x] **Step 7: Run synchronized and existing focused browser tests**
 
 Run:
 

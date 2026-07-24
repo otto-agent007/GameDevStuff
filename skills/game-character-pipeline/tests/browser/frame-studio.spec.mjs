@@ -268,6 +268,42 @@ test('side-by-side preview is accessible and responsive', async ({ page }, testI
   expect(overflow).toBe(0);
 });
 
+test('side-by-side playback uses one shared elapsed clock without mutating reviews', async ({ page }) => {
+  await studio.close();
+  await fs.rm(root, { recursive: true, force: true });
+  await startFixture('unlock');
+  await page.goto(studio.origin);
+
+  await page.getByRole('button', { name: 'Save revision' }).click();
+  await expect(page.getByRole('status')).toContainText('Saved edit revision 1.');
+  const savedSession = await page.evaluate(() => fetch('/api/session').then((response) => response.json()));
+
+  for (const [name, duration] of [
+    ['Timeline duration step-contact', '40'],
+    ['Timeline duration step-pass', '40'],
+    ['Timeline duration step-contact-2', '40']
+  ]) {
+    await page.getByLabel(name, { exact: true }).fill(duration);
+    await page.getByLabel(name, { exact: true }).blur();
+  }
+
+  await page.getByRole('button', { name: 'Side by side', exact: true }).click();
+  await page.getByLabel('Review speed').selectOption('0.5');
+  await page.getByRole('button', { name: 'Replay', exact: true }).click();
+  await expect(page.locator('#review-a-frame')).toHaveText('step-contact');
+  await expect(page.locator('#review-b-frame')).toHaveText('step-contact');
+
+  await expect(page.locator('#review-b-frame')).toHaveText('step-contact-2', { timeout: 340 });
+  await expect(page.locator('#review-a-frame')).toHaveText('step-pass');
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible({ timeout: 950 });
+
+  const reviewedSession = await page.evaluate(() => fetch('/api/session').then((response) => response.json()));
+  expect(reviewedSession.editRevision).toBe(savedSession.editRevision);
+  expect(reviewedSession.editSha256).toBe(savedSession.editSha256);
+  await expect(page.locator('#review-b-state')).toContainText('Unsaved working copy');
+});
+
 test('review speed changes playback timing without changing authored duration', async ({ page }) => {
   await page.getByLabel('Review speed').selectOption('0.25');
   await page.getByRole('button', { name: 'Replay', exact: true }).click();
@@ -374,14 +410,15 @@ test('hold-last playback stops on the final authored frame', async ({ page }) =>
 });
 
 test('uses integer zoom, disables interpolation, and toggles overlays', async ({ page }) => {
-  await expect(page.locator('frame-canvas canvas')).toHaveCSS('image-rendering', 'pixelated');
+  const reviewB = page.getByRole('region', { name: 'Review B preview' });
+  await expect(reviewB.locator('frame-canvas canvas')).toHaveCSS('image-rendering', 'pixelated');
   await expect(page.getByLabel('Zoom')).toHaveValue('4');
   await page.getByLabel('Zoom').fill('6');
   await expect(page.getByLabel('Zoom')).toHaveValue('6');
   await page.getByLabel('Previous', { exact: true }).check();
   await page.getByLabel('First / last seam', { exact: true }).check();
-  await expect(page.locator('frame-canvas')).toHaveAttribute('previous', /api\/frame/);
-  await expect(page.locator('frame-canvas')).toHaveAttribute('seam', 'true');
+  await expect(reviewB.locator('frame-canvas')).toHaveAttribute('previous', /api\/frame/);
+  await expect(reviewB.locator('frame-canvas')).toHaveAttribute('seam', 'true');
 });
 
 test('supports inclusion, duplication, labels, and immutable save revisions', async ({ page }) => {
