@@ -235,7 +235,7 @@ Expected: all selected tests pass on desktop and narrow.
 - Consumes: completed synchronized comparison mode
 - Produces: owner-visible live Frame Studio AB playback and private verification evidence
 
-- [ ] **Step 1: Run unit and complete browser regression suites**
+- [x] **Step 1: Run unit and complete browser regression suites**
 
 Run:
 
@@ -246,7 +246,7 @@ npx playwright test tests/browser/frame-studio.spec.mjs
 
 Expected: all tests pass. If the pre-existing narrow hold-last timeout recurs, preserve its trace, rerun only that unchanged test three times, and report both results rather than hiding the flake.
 
-- [ ] **Step 2: Run package-level checks**
+- [x] **Step 2: Run package-level checks**
 
 Run:
 
@@ -258,7 +258,7 @@ git diff --check
 
 Expected: zero failures and no whitespace errors.
 
-- [ ] **Step 3: Validate the rendered private comparison**
+- [x] **Step 3: Validate the rendered private comparison**
 
 Use the existing owner-only post-snap Frame Studio run. Verify the flow:
 
@@ -271,14 +271,14 @@ Review A revision bytes and working B unsaved state remain unchanged.
 Check desktop and narrow layout, page identity, nonblank content, no error
 overlay, console health, interaction state, and screenshot evidence.
 
-- [ ] **Step 4: Update the private checkpoint**
+- [x] **Step 4: Update the private checkpoint**
 
 Record the live origin, synchronized playback verification, A/B identities,
 active counts, authored totals, screenshot hashes, browser console result,
 owner-only permissions, and the fact that no selection or production
 replacement occurred.
 
-- [ ] **Step 5: Stop at owner visual review**
+- [x] **Step 5: Stop at owner visual review**
 
 Leave Frame Studio visibly open in Side by side mode with Replay available.
 Do not save working B, select the candidate, normalize production, export,

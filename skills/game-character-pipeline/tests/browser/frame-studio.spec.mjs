@@ -13,6 +13,8 @@ const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
 const projectFixture = path.join(packageDir, 'tests', 'fixtures', 'project.valid.json');
 let root;
 let studio;
+const editableCanvas = (page) => page.locator('#review-b-canvas');
+const editableBitmap = (page) => editableCanvas(page).locator('canvas');
 
 function spriteFrame(index) {
   const width = 16;
@@ -97,7 +99,7 @@ test('renders the complete editor shell and source timeline', async ({ page }, t
   await expect(page.getByText('Selection', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save revision' })).toBeVisible();
   await expect(page.locator('frame-timeline')).toBeVisible();
-  await expect(page.locator('frame-canvas')).toBeVisible();
+  await expect(editableCanvas(page)).toBeVisible();
   await expect(page.locator('[data-frame-id]')).toHaveCount(3);
   await expect(page.getByText('Frame 1 of 3')).toBeVisible();
   await expect(page.getByText('400 ms total')).toBeVisible();
@@ -185,13 +187,13 @@ test('uses active neighbors for onion skin and cycle seams', async ({ page }) =>
   await page.getByRole('button', { name: 'Exclude step-pass', exact: true }).click();
   const finalUrl = await page.locator('[data-frame-id="step-contact-2"] img').getAttribute('src');
   await page.getByLabel('Next', { exact: true }).check();
-  await expect(page.locator('frame-canvas')).toHaveAttribute('next', finalUrl);
+  await expect(editableCanvas(page)).toHaveAttribute('next', finalUrl);
 
   await page.getByRole('button', { name: 'Exclude step-contact', exact: true }).click();
   await page.locator('[data-frame-id="step-contact-2"] .frame-thumb').click();
   await page.getByLabel('First / last seam', { exact: true }).check();
-  await expect(page.locator('frame-canvas')).toHaveAttribute('first', finalUrl);
-  await expect(page.locator('frame-canvas')).toHaveAttribute('last', finalUrl);
+  await expect(editableCanvas(page)).toHaveAttribute('first', finalUrl);
+  await expect(editableCanvas(page)).toHaveAttribute('last', finalUrl);
 });
 
 test('guards the final active frame and restores excluded frames', async ({ page }) => {
@@ -375,16 +377,16 @@ test('motion diagnostics surface foot slide and jump to the implicated frame', a
   await expect(page.getByRole('heading', { name: 'Motion & grounding' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Root pivot', exact: true }).click();
-  await page.locator('frame-canvas canvas').click({ position: { x: 20, y: 20 } });
+  await editableBitmap(page).click({ position: { x: 20, y: 20 } });
   await page.getByRole('button', { name: 'Left foot', exact: true }).click();
-  await page.locator('frame-canvas canvas').click({ position: { x: 20, y: 48 } });
+  await editableBitmap(page).click({ position: { x: 20, y: 48 } });
   await page.getByLabel('Planted left foot').check();
 
   await page.locator('[data-frame-id="step-pass"] .frame-thumb').click();
   await page.getByRole('button', { name: 'Root pivot', exact: true }).click();
-  await page.locator('frame-canvas canvas').click({ position: { x: 22, y: 20 } });
+  await editableBitmap(page).click({ position: { x: 22, y: 20 } });
   await page.getByRole('button', { name: 'Left foot', exact: true }).click();
-  await page.locator('frame-canvas canvas').click({ position: { x: 34, y: 48 } });
+  await editableBitmap(page).click({ position: { x: 34, y: 48 } });
   await page.getByLabel('Planted left foot').check();
 
   await expect(page.getByRole('button', { name: 'Go to step-pass: foot-slide', exact: true })).toBeVisible();
@@ -439,7 +441,7 @@ test('authors landmarks, contact intervals, travel, timing, and explicit tracks'
     await expect(page.getByText(name, { exact: true })).toBeVisible();
   }
   await page.getByRole('button', { name: 'Root pivot', exact: true }).click();
-  await page.locator('frame-canvas canvas').click({ position: { x: 32, y: 48 } });
+  await editableBitmap(page).click({ position: { x: 32, y: 48 } });
   await page.getByLabel('Planted left foot').check();
   await expect(page.getByText('left-foot', { exact: true })).toBeVisible();
   await page.getByLabel('Ground travel X').fill('2');
