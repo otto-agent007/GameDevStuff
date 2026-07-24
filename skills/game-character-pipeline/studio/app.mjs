@@ -12,7 +12,11 @@ import {
 
 const shell = document.querySelector('.app-shell');
 const timeline = document.querySelector('frame-timeline');
-const canvas = document.querySelector('frame-canvas');
+const canvas = document.querySelector('#review-b-canvas');
+const reviewACanvas = document.querySelector('#review-a-canvas');
+const comparisonPreview = document.querySelector('#comparison-preview');
+const reviewAPane = document.querySelector('#review-a-pane');
+const reviewBPane = document.querySelector('#review-b-pane');
 const status = document.querySelector('#status');
 const playButton = document.querySelector('#play');
 const replayButton = document.querySelector('#replay');
@@ -77,6 +81,10 @@ function updateReviewState() {
   if (!session) return;
   document.querySelector('#review-a').setAttribute('aria-pressed', String(reviewSide === 'A'));
   document.querySelector('#review-b').setAttribute('aria-pressed', String(reviewSide === 'B'));
+  document.querySelector('#review-side-by-side').setAttribute('aria-pressed', String(reviewSide === 'AB'));
+  comparisonPreview.dataset.reviewMode = reviewSide;
+  reviewAPane.hidden = reviewSide === 'B';
+  reviewBPane.hidden = reviewSide === 'A';
   const saved = session.editRevision
     ? `Revision ${session.editRevision} · ${session.editSha256.slice(0, 12)}`
     : 'Source defaults · no saved hash';
@@ -132,26 +140,47 @@ function stopPlayback() {
   playButton.textContent = 'Play';
 }
 
+function updateFrameCanvas(target, view, index) {
+  if (!target) return;
+  const frame = view[index];
+  if (!frame) return;
+  const active = activeIndices(view);
+  const adjacentIndex = (direction) => {
+    if (!active.length) return null;
+    if (direction > 0) return active.find((candidate) => candidate > index) ?? active[0];
+    return active.findLast((candidate) => candidate < index) ?? active.at(-1);
+  };
+  const firstIndex = active[0] ?? null;
+  const lastIndex = active.at(-1) ?? null;
+  const previous = view[adjacentIndex(-1)] ?? frame;
+  const next = view[adjacentIndex(1)] ?? frame;
+  const first = view[firstIndex] ?? frame;
+  const last = view[lastIndex] ?? frame;
+  target.setAttribute('frame', frame.url);
+  target.setAttribute('first', first.url);
+  target.setAttribute('last', last.url);
+  target.markerState = { markers: frame.edit.markers, canvas: session.project.canvas };
+  if (document.querySelector('#overlay-previous').checked) target.setAttribute('previous', previous.url);
+  else target.removeAttribute('previous');
+  if (document.querySelector('#overlay-next').checked) target.setAttribute('next', next.url);
+  else target.removeAttribute('next');
+  return frame;
+}
+
 function updateCanvas() {
+  if (reviewSide === 'AB') {
+    const reviewAFrame = updateFrameCanvas(reviewACanvas, savedFrames, selectedIndex);
+    const reviewBFrame = updateFrameCanvas(canvas, frames, selectedIndex);
+    document.querySelector('#review-a-frame').textContent = reviewAFrame?.id ?? '—';
+    document.querySelector('#review-b-frame').textContent = reviewBFrame?.id ?? '—';
+    return;
+  }
   const view = displayFrames();
   const frame = view[selectedIndex];
   if (!frame) return;
-  const previousIndex = adjacentActiveIndex(selectedIndex, -1);
-  const nextIndex = adjacentActiveIndex(selectedIndex, 1);
-  const firstIndex = firstActiveIndex();
-  const lastIndex = lastActiveIndex();
-  const previous = view[previousIndex] ?? frame;
-  const next = view[nextIndex] ?? frame;
-  const first = view[firstIndex] ?? frame;
-  const last = view[lastIndex] ?? frame;
-  canvas.setAttribute('frame', frame.url);
-  canvas.setAttribute('first', first.url);
-  canvas.setAttribute('last', last.url);
-  canvas.markerState = { markers: frame.edit.markers, canvas: session.project.canvas };
-  if (document.querySelector('#overlay-previous').checked) canvas.setAttribute('previous', previous.url);
-  else canvas.removeAttribute('previous');
-  if (document.querySelector('#overlay-next').checked) canvas.setAttribute('next', next.url);
-  else canvas.removeAttribute('next');
+  const target = reviewSide === 'A' ? reviewACanvas : canvas;
+  updateFrameCanvas(target, view, selectedIndex);
+  document.querySelector(reviewSide === 'A' ? '#review-a-frame' : '#review-b-frame').textContent = frame.id;
 }
 
 function updateReadout() {
@@ -249,7 +278,7 @@ function togglePlayback() {
 function setBooleanOverlay(input, attribute) {
   input.addEventListener('change', () => {
     if (attribute === 'previous' || attribute === 'next') updateCanvas();
-    else canvas.setAttribute(attribute, String(input.checked));
+    else for (const target of [reviewACanvas, canvas]) target.setAttribute(attribute, String(input.checked));
   });
 }
 
@@ -306,18 +335,20 @@ document.querySelector('#toggle-frame-inclusion').addEventListener('click', () =
 });
 
 function switchReviewSide(side) {
-  if (!['A', 'B'].includes(side) || side === reviewSide) return;
+  if (!['A', 'B', 'AB'].includes(side) || side === reviewSide) return;
   const resume = playing;
   stopPlayback();
   reviewSide = side;
   selectedIndex = Math.min(selectedIndex, Math.max(0, displayFrames().length - 1));
   render();
   if (resume) startPlayback();
-  status.textContent = `Reviewing ${side === 'A' ? 'saved revision A' : 'working copy B'}; audition controls do not change edit state.`;
+  const label = side === 'A' ? 'saved revision A' : side === 'B' ? 'working copy B' : 'saved A beside working B';
+  status.textContent = `Reviewing ${label}; audition controls do not change edit state.`;
 }
 
 document.querySelector('#review-a').addEventListener('click', () => switchReviewSide('A'));
 document.querySelector('#review-b').addEventListener('click', () => switchReviewSide('B'));
+document.querySelector('#review-side-by-side').addEventListener('click', () => switchReviewSide('AB'));
 
 document.querySelector('#review-speed').addEventListener('change', (event) => {
   reviewSpeed = Number(event.target.value);

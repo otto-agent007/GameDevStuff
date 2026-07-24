@@ -88,6 +88,7 @@ Expected: all review-state tests pass.
 ### Task 2: Accessible dual-preview shell and responsive layout
 
 **Files:**
+- Modify: `skills/game-character-pipeline/studio/app.mjs`
 - Modify: `skills/game-character-pipeline/studio/index.html`
 - Modify: `skills/game-character-pipeline/studio/styles.css`
 - Modify: `skills/game-character-pipeline/tests/browser/frame-studio.spec.mjs`
@@ -96,11 +97,11 @@ Expected: all review-state tests pass.
 - Consumes: existing Review A/B card and `frame-canvas` element
 - Produces: `#review-side-by-side`, `#review-a-pane`, `#review-b-pane`, `#review-a-canvas`, `#review-b-canvas`, `#review-a-frame`, and `#review-b-frame`
 
-- [ ] **Step 1: Write a failing browser shell test**
+- [x] **Step 1: Write a failing browser shell test**
 
 Add a test that clicks `Side by side`, expects two labeled preview regions and two visible canvases, then checks desktop horizontal ordering or narrow vertical ordering based on `testInfo.project.name`. Verify `document.documentElement.scrollWidth <= document.documentElement.clientWidth`.
 
-- [ ] **Step 2: Run the focused browser test and verify RED**
+- [x] **Step 2: Run the focused browser test and verify RED**
 
 Run:
 
@@ -110,7 +111,7 @@ npx playwright test tests/browser/frame-studio.spec.mjs --grep "side-by-side pre
 
 Expected: FAIL because the Side by side button does not exist.
 
-- [ ] **Step 3: Add the semantic preview markup**
+- [x] **Step 3: Add the semantic preview markup**
 
 Add the third review button:
 
@@ -133,11 +134,11 @@ Replace the single preview canvas with two named panes. A is hidden in single-B 
 </div>
 ```
 
-- [ ] **Step 4: Add responsive comparison styling**
+- [x] **Step 4: Add responsive comparison styling**
 
 Use a two-column grid for `[data-review-mode="AB"]`, a single pane for A or B, and a narrow media rule that stacks comparison panes. Keep pane headers compact, preserve checkerboard stages, constrain each canvas, and maintain zero horizontal page overflow.
 
-- [ ] **Step 5: Run the focused browser test**
+- [x] **Step 5: Run the focused browser test**
 
 Run the same Playwright grep. Expected: PASS for desktop and narrow.
 

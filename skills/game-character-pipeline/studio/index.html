@@ -49,7 +49,16 @@
             </label>
           </div>
           <div class="canvas-stage">
-            <frame-canvas zoom="4" onion-opacity="0.28" seam="false"></frame-canvas>
+            <div class="comparison-preview" id="comparison-preview" data-review-mode="B">
+              <section class="preview-pane" id="review-a-pane" aria-label="Review A preview" hidden>
+                <header><strong>Review A</strong><span id="review-a-frame">—</span></header>
+                <frame-canvas id="review-a-canvas" zoom="4" onion-opacity="0.28" seam="false"></frame-canvas>
+              </section>
+              <section class="preview-pane" id="review-b-pane" aria-label="Review B preview">
+                <header><strong>Review B</strong><span id="review-b-frame">—</span></header>
+                <frame-canvas id="review-b-canvas" zoom="4" onion-opacity="0.28" seam="false"></frame-canvas>
+              </section>
+            </div>
           </div>
         </section>
 
@@ -97,6 +106,7 @@
           <div class="review-switch" role="group" aria-label="A/B review side">
             <button id="review-a" type="button" aria-pressed="false">Review A</button>
             <button id="review-b" type="button" aria-pressed="true">Review B</button>
+            <button id="review-side-by-side" type="button" aria-pressed="false">Side by side</button>
           </div>
           <dl class="review-state-list">
             <div><dt>A</dt><dd id="review-a-state">Source defaults</dd></div>

@@ -246,6 +246,28 @@ test('A/B auditioning keeps saved A immutable and working B editable', async ({ 
   await expect(page.getByRole('button', { name: 'Exclude step-contact', exact: true })).toBeEnabled();
 });
 
+test('side-by-side preview is accessible and responsive', async ({ page }, testInfo) => {
+  await page.getByRole('button', { name: 'Side by side', exact: true }).click();
+
+  const reviewA = page.getByRole('region', { name: 'Review A preview' });
+  const reviewB = page.getByRole('region', { name: 'Review B preview' });
+  await expect(reviewA).toBeVisible();
+  await expect(reviewB).toBeVisible();
+  await expect(reviewA.locator('frame-canvas')).toBeVisible();
+  await expect(reviewB.locator('frame-canvas')).toBeVisible();
+
+  const [aBox, bBox] = await Promise.all([reviewA.boundingBox(), reviewB.boundingBox()]);
+  expect(aBox).not.toBeNull();
+  expect(bBox).not.toBeNull();
+  if (testInfo.project.name === 'narrow') expect(aBox.y).toBeLessThan(bBox.y);
+  else expect(aBox.x).toBeLessThan(bBox.x);
+
+  const overflow = await page.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth
+  );
+  expect(overflow).toBe(0);
+});
+
 test('review speed changes playback timing without changing authored duration', async ({ page }) => {
   await page.getByLabel('Review speed').selectOption('0.25');
   await page.getByRole('button', { name: 'Replay', exact: true }).click();
