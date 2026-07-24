@@ -36,7 +36,7 @@
 - Produces: `frameStartElapsedMs(frames, frameIndex, range) -> number`
 - Produces: `resolveElapsedFrame(frames, elapsedMs, { range, loop }) -> { index, totalDurationMs, elapsedMs, frameElapsedMs, complete }`
 
-- [ ] **Step 1: Write failing duration and frame-resolution tests**
+- [x] **Step 1: Write failing duration and frame-resolution tests**
 
 Add tests that prove exact boundary behavior, exclusions, hold-last clamping, and independent loop wrapping:
 
@@ -61,7 +61,7 @@ test('elapsed review resolution preserves each sequence timing', () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -71,11 +71,11 @@ npm test -- tests/review-state.test.mjs
 
 Expected: FAIL because the three new exports do not exist.
 
-- [ ] **Step 3: Implement the pure sequence helpers**
+- [x] **Step 3: Implement the pure sequence helpers**
 
 Implement the helpers using `playbackIndices`, positive integer authored durations, modulo only for loop mode, and clamping to the final active frame for hold-last mode. Exact frame boundaries select the next active frame. An elapsed value at or beyond total duration returns the last active index with `complete: true`.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run:
 

@@ -4,9 +4,12 @@ import assert from 'node:assert/strict';
 import {
   activeIndices,
   cloneFrameState,
+  frameStartElapsedMs,
   nextPlaybackIndex,
   playbackIndices,
-  reviewDelay
+  resolveElapsedFrame,
+  reviewDelay,
+  sequenceDurationMs
 } from '../studio/review-state.mjs';
 
 const frames = [
@@ -34,4 +37,23 @@ test('review delay preserves authored duration at selectable speeds', () => {
   assert.equal(reviewDelay(80, 0.5), 160);
   assert.equal(reviewDelay(80, 2), 40);
   assert.throws(() => reviewDelay(80, 3), /review speed/);
+});
+
+test('elapsed review resolution preserves each sequence timing', () => {
+  const alternate = cloneFrameState(frames);
+  alternate[0].edit.durationMs = 200;
+
+  assert.deepEqual(resolveElapsedFrame(frames, 100), {
+    index: 2,
+    totalDurationMs: 280,
+    elapsedMs: 100,
+    frameElapsedMs: 20,
+    complete: false
+  });
+  assert.equal(resolveElapsedFrame(alternate, 100).index, 0);
+  assert.equal(resolveElapsedFrame(frames, 280).index, 2);
+  assert.equal(resolveElapsedFrame(frames, 280).complete, true);
+  assert.equal(resolveElapsedFrame(frames, 300, { loop: true }).index, 0);
+  assert.equal(sequenceDurationMs(frames), 280);
+  assert.equal(frameStartElapsedMs(frames, 2), 80);
 });
