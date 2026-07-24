@@ -730,13 +730,20 @@ async function acquireApprovalTransition(context, selection) {
     try { await fs.lstat(finalPath); throw new Error('handoff state transition was already consumed'); }
     catch (finalError) { if (finalError.code !== 'ENOENT') throw finalError; }
     let existing;
-    try {
-      const stat = await fs.lstat(claimPath);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink > 1) throw new Error('approval transition claim is invalid and requires manual recovery');
-      existing = JSON.parse(await fs.readFile(claimPath, 'utf8'));
-    } catch (claimError) {
-      if (/approval transition claim/.test(claimError.message)) throw claimError;
-      throw new Error('approval transition claim is invalid and requires manual recovery');
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      try {
+        const stat = await fs.lstat(claimPath);
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink > 1) throw new Error('approval transition claim is invalid and requires manual recovery');
+        existing = JSON.parse(await fs.readFile(claimPath, 'utf8'));
+        break;
+      } catch (claimError) {
+        if (/approval transition claim/.test(claimError.message)) throw claimError;
+        const incompleteClaim = claimError instanceof SyntaxError || claimError.code === 'ENOENT';
+        if (!incompleteClaim || attempt === 19) throw new Error('approval transition claim is invalid and requires manual recovery');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        try { await fs.lstat(finalPath); throw new Error('handoff state transition was already consumed'); }
+        catch (finalError) { if (finalError.code !== 'ENOENT') throw finalError; }
+      }
     }
     if (existing.handoffSha256 === claim.handoffSha256 && existing.frameApprovalSha256 === claim.frameApprovalSha256 && existing.approvalVersion === claim.approvalVersion) throw new Error('approval transition is already in progress');
     throw new Error('approval transition is claimed by a different signed approval');
