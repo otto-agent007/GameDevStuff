@@ -390,6 +390,7 @@ export async function startStudioServer({
       await new Promise((resolve, reject) => {
         server.close((error) => error ? reject(error) : resolve());
         server.closeIdleConnections?.();
+        server.closeAllConnections?.();
       });
     }
   };
