@@ -34,18 +34,28 @@ test('root manifest declares the two private skill workspaces and shared develop
     'package-boundary':
       'node --test skills/game-character-pipeline/tests/package-boundary.test.mjs skills/pixel-sprite-animation-pipeline/tests/package-boundary.test.mjs'
   });
-  assert.deepEqual(manifest.devDependencies, {
-    '@eslint/js': '9.39.5',
-    '@playwright/test': '1.61.1',
-    eslint: '9.39.5',
-    globals: '16.5.0',
-    prettier: '3.9.6'
-  });
+  assert.deepEqual(Object.keys(manifest.devDependencies).sort(), [
+    '@eslint/js',
+    '@playwright/test',
+    'eslint',
+    'globals',
+    'prettier'
+  ]);
+  for (const [name, version] of Object.entries(manifest.devDependencies)) {
+    assert.match(version, /^\d+\.\d+\.\d+$/, `${name} must use an exact release version`);
+  }
   assert.deepEqual(
     manifest.optionalDependencies,
     { '@img/sharp-win32-x64': '0.35.3' },
     'the cross-platform lock must retain Sharp’s Windows runtime package for CI'
   );
+});
+
+test('workspace policy tests do not pin Dependabot-managed developer-tool revisions', async () => {
+  const source = await fs.readFile(path.join(repositoryRoot, 'tests/workspace-boundary.test.mjs'), 'utf8');
+  for (const version of ['9.39.5', '1.61.1', '16.5.0', '3.9.6']) {
+    assert.doesNotMatch(source, new RegExp(`: '${version.replaceAll('.', '\\.')}'`));
+  }
 });
 
 test('workspaces retain only their exact runtime dependencies and use the root lockfile', async () => {
