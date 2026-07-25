@@ -27,5 +27,8 @@
     "eslint": "9.39.5",
     "globals": "16.5.0",
     "prettier": "3.9.6"
+  },
+  "optionalDependencies": {
+    "@img/sharp-win32-x64": "0.35.3"
   }
 }

@@ -41,6 +41,11 @@ test('root manifest declares the two private skill workspaces and shared develop
     globals: '16.5.0',
     prettier: '3.9.6'
   });
+  assert.deepEqual(
+    manifest.optionalDependencies,
+    { '@img/sharp-win32-x64': '0.35.3' },
+    'the cross-platform lock must retain Sharp’s Windows runtime package for CI'
+  );
 });
 
 test('workspaces retain only their exact runtime dependencies and use the root lockfile', async () => {
