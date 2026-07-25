@@ -1,6 +1,6 @@
 {
   "name": "pixel-sprite-animation-pipeline",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Install-by-copy Pixel Snapper bundle for deterministic pixel-sprite animation processing; not published to npm.",
   "private": true,
   "license": "MIT",
@@ -32,6 +32,7 @@
   },
   "scripts": {
     "test": "node --test",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-lines=50",
     "validate-skill": "node scripts/validate-skill.mjs"
   },
   "dependencies": {
