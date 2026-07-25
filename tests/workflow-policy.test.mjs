@@ -78,7 +78,15 @@ test('ordinary skill CI is consolidated and every workflow action uses an immuta
     actionPins.every((pin) => /^[^@\s]+@[a-f0-9]{40}$/.test(pin)),
     `every action must use a full SHA, received: ${actionPins.join(', ')}`
   );
-  assert.ok(actionPins.includes('dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590'));
+  assert.ok(
+    actionPins.some((pin) => /^dorny\/paths-filter@[a-f0-9]{40}$/.test(pin)),
+    'the path filter must remain present and full-SHA pinned'
+  );
+});
+
+test('CI policy tests do not pin a Dependabot-managed action revision', async () => {
+  const source = await fs.readFile(path.join(repositoryRoot, 'tests/workflow-policy.test.mjs'), 'utf8');
+  assert.doesNotMatch(source, /dorny\/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590/);
 });
 
 test('Dependabot checks the root npm workspace and GitHub Actions every week', async () => {
@@ -104,7 +112,7 @@ test('changed paths select the package unit matrix and compatibility gates', asy
   const filterStep = changes.steps.find((step) => step.id === 'filter');
   const filters = YAML.parse(filterStep.with.filters);
 
-  assert.equal(filterStep.uses, 'dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590');
+  assert.match(filterStep.uses, /^dorny\/paths-filter@[a-f0-9]{40}$/);
   assert.deepEqual(filters, {
     pixel: ['skills/pixel-sprite-animation-pipeline/**'],
     character: ['skills/game-character-pipeline/**', 'integration/fixtures/**'],
