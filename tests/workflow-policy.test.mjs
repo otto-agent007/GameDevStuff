@@ -165,17 +165,25 @@ test('changed paths select the package unit matrix and compatibility gates', asy
   );
 });
 
-test('formatted documentation and donor changes run quality without selecting package gates', async () => {
+test('every push and pull request runs quality without selecting unrelated package gates', async () => {
   const workflow = await readYaml('.github/workflows/skills.yml');
-  const qualityOnlyPaths = ['README.md', 'AGENTS.md', 'docs/**', 'references/donors/**'];
+  const qualityOnlyPaths = [
+    'README.md',
+    'AGENTS.md',
+    'CHANGELOG.md',
+    'LICENSE',
+    '.gitignore',
+    '.gitattributes',
+    'docs/**',
+    'references/donors/**'
+  ];
 
   for (const eventName of ['push', 'pull_request']) {
-    for (const qualityOnlyPath of qualityOnlyPaths) {
-      assert.ok(
-        workflow.on[eventName].paths.includes(qualityOnlyPath),
-        `${eventName} must trigger the repository-wide formatting check for ${qualityOnlyPath}`
-      );
-    }
+    assert.equal(
+      workflow.on[eventName]?.paths,
+      undefined,
+      `${eventName} must not be limited by top-level path filters`
+    );
   }
 
   const filterStep = workflow.jobs.changes.steps.find((step) => step.id === 'filter');
@@ -193,8 +201,9 @@ test('formatted documentation and donor changes run quality without selecting pa
   assert.equal(
     Object.hasOwn(workflow.jobs.quality, 'if'),
     false,
-    'quality must be unconditional so event-path-only documentation changes run Prettier'
+    'quality must be unconditional so every event runs repository policy checks'
   );
+  assert.equal(Object.hasOwn(workflow.jobs.quality, 'needs'), false, 'quality must start without waiting for changes');
 });
 
 test('unified CI installs once from the root lock and uses root workspace commands', async () => {

@@ -244,7 +244,16 @@ test('donor and dependency ledgers pin every reviewed source boundary', async ()
   );
 
   const notices = await fs.readFile(path.join(repositoryRoot, 'LICENSES', 'THIRD_PARTY.md'), 'utf8');
-  for (const dependency of ['commander 15.0.0', 'sharp 0.35.3', '@playwright/test 1.61.1']) {
+  const manifests = await Promise.all(
+    ['package.json', 'skills/game-character-pipeline/package.json'].map(async (manifestPath) =>
+      JSON.parse(await fs.readFile(path.join(repositoryRoot, manifestPath), 'utf8'))
+    )
+  );
+  const dependencies = [
+    ...Object.entries(manifests[0].devDependencies),
+    ...Object.entries(manifests[1].dependencies)
+  ].map(([name, version]) => `${name} ${version}`);
+  for (const dependency of dependencies) {
     assert.match(notices, new RegExp(dependency.replaceAll('.', '\\.')));
   }
   assert.doesNotMatch(notices, /^\| ffmpeg-static /m);
