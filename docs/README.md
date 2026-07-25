@@ -4,6 +4,10 @@ This directory is the reader-facing record of the repository's design and implem
 
 All entries below are **Shipped**. Future replacements should retain the historical entry and add a `Superseded by` link in the status column; none of the current plans is superseded.
 
+## Skill release history
+
+The two skill bundles version and release together as install-by-copy GitHub Release assets (`skills-vX.Y.Z`); they are not published to npm. Release notes live in the root [changelog](../CHANGELOG.md), and each release contains both package tarballs plus `SHA256SUMS` for verification.
+
 | Plan                                                                                                 | Design                                                                                                             | Shipped feature and delivery                                                    | Status  |
 | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- | ------- |
 | [Pixel Sprite Animation Pipeline](plans/2026-07-17-pixel-sprite-animation-pipeline.md)               | [Pixel Sprite Animation Pipeline design](specs/2026-07-17-pixel-sprite-animation-pipeline-design.md)               | Initial Pixel Snapper skill bundle — PR #1                                      | Shipped |

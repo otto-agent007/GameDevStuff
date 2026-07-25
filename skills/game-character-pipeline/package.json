@@ -1,6 +1,6 @@
 {
   "name": "game-character-pipeline",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Install-by-copy bundle for auditable game-character animation workflows; not published to npm.",
   "private": true,
   "license": "MIT",

@@ -233,3 +233,56 @@ test('immutable release jobs install and cache npm dependencies only from the ro
   assert.equal(publishInstall.run, 'npm ci --ignore-scripts');
   assert.equal(Object.hasOwn(publishInstall, 'working-directory'), false);
 });
+
+test('skill bundles release together from an immutable, protected, install-by-copy workflow', async () => {
+  const version = '0.2.0';
+  const manifestPaths = [
+    'package.json',
+    'skills/game-character-pipeline/package.json',
+    'skills/pixel-sprite-animation-pipeline/package.json'
+  ];
+  for (const manifestPath of manifestPaths) {
+    assert.equal((await readJson(manifestPath)).version, version, `${manifestPath} must release in lockstep`);
+  }
+
+  const changelog = await fs.readFile(path.join(repositoryRoot, 'CHANGELOG.md'), 'utf8');
+  assert.match(changelog, /^## \[?0\.2\.0\]?/m);
+  assert.match(changelog, /^### Game Character Pipeline$/m);
+  assert.match(changelog, /^### Pixel Sprite Animation Pipeline$/m);
+
+  const workflowPath = '.github/workflows/skills-release.yml';
+  const workflow = await readYaml(workflowPath);
+  const source = await fs.readFile(path.join(repositoryRoot, workflowPath), 'utf8');
+  assert.ok(workflow.on.workflow_dispatch.inputs.version.required);
+  assert.match(source, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
+  for (const jobName of ['immutability-preflight', 'validate', 'publish']) {
+    assert.equal(workflow.jobs[jobName].if, "github.ref == 'refs/heads/main'");
+  }
+  assert.match(source, /\[1-9\]\[0-9\]\*/);
+  assert.match(source, /skills-v\$\{\{ inputs\.version \}\}/);
+  assert.match(source, /IMMUTABLE_RELEASES_TOKEN/);
+  assert.match(source, /immutable-releases/);
+  assert.match(source, /npm ci --ignore-scripts/);
+  for (const command of ['npm test', 'npm run lint', 'npm run format:check', 'npm run package-boundary']) {
+    assert.match(source, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+
+  const publish = workflow.jobs.publish;
+  assert.deepEqual(publish.permissions, { contents: 'write' });
+  assert.equal(publish.environment, 'skills-release');
+  const checkout = publish.steps.find((step) => step.uses?.startsWith('actions/checkout@'));
+  assert.equal(checkout.with['persist-credentials'], false);
+  assert.match(source, /game-character-pipeline-\$\{VERSION\}\.tgz/);
+  assert.match(source, /pixel-sprite-animation-pipeline-\$\{VERSION\}\.tgz/);
+  assert.match(source, /SHA256SUMS/);
+  assert.match(source, /git ls-remote.*RELEASE_TAG/s);
+  assert.match(source, /gh release view.*RELEASE_TAG/s);
+  assert.match(source, /gh release create.*RELEASE_TAG/s);
+  assert.match(source, /--json isImmutable/);
+  assert.match(source, /gh release download.*RELEASE_TAG/s);
+  assert.match(source, /sha256sum -c SHA256SUMS/);
+
+  const actionPins = [...source.matchAll(/^\s*uses:\s*([^\s#]+)/gm)].map((match) => match[1]);
+  assert.ok(actionPins.length > 0);
+  assert.ok(actionPins.every((pin) => /^[^@\s]+@[a-f0-9]{40}$/.test(pin)));
+});

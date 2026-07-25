@@ -1,7 +1,7 @@
 {
   "name": "game-dev-stuff",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Auditable install-by-copy game-asset workflow skill bundles.",
   "engines": {
     "node": ">=22.12.0"
