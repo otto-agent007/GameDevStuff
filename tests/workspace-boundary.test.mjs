@@ -24,7 +24,7 @@ test('root manifest declares the two private skill workspaces and shared develop
   assert.deepEqual(manifest.workspaces, ['skills/game-character-pipeline', 'skills/pixel-sprite-animation-pipeline']);
   assert.deepEqual(manifest.scripts, {
     test: 'npm run test:workspace && npm run test:workspaces',
-    'test:workspace': 'node --test tests/workspace-boundary.test.mjs',
+    'test:workspace': 'node --test tests/*.test.mjs',
     'test:workspaces': 'npm run test --workspaces --if-present',
     lint: 'eslint .',
     'format:check': 'prettier --check .',
