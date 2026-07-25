@@ -25,7 +25,7 @@ required per-file provenance and license notice here.
 ## Public acceptance fixture
 
 The Clockwork Courier artwork and motion data under
-`skills/game-character-pipeline/examples/clockwork-courier/` were created
+`integration/fixtures/clockwork-courier/` were created
 originally for GameDevStuff. No donor pixels or private production assets are
 included. GameDevStuff dedicates those fixture assets to the public domain
 under CC0-1.0 for testing, examples, and downstream interoperability.

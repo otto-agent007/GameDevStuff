@@ -7,6 +7,8 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
+import { resolvePixelPipelineCli } from '../scripts/lib/pixel-pipeline-cli.mjs';
+
 const execFile = promisify(execFileCallback);
 const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repositoryRoot = path.resolve(packageDir, '..', '..');
@@ -23,9 +25,85 @@ test('CLI advertises the complete initial command surface', async () => {
 
 test('produce command exposes authenticated delegation and resume inputs', async () => {
   const result = await execFile(process.execPath, ['scripts/cli.mjs', 'produce', '--help'], { cwd: packageDir });
-  for (const option of ['--project-dir', '--run', '--approval', '--snap-receipt', '--frame-approval', '--output']) {
+  for (const option of ['--project-dir', '--run', '--approval', '--snap-receipt', '--frame-approval', '--output', '--pipeline-cli']) {
     assert.match(result.stdout, new RegExp(option));
   }
+});
+
+test('standalone produce returns a pixel pipeline configuration handoff before loading approvals', async (t) => {
+  const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'game-character-standalone-'));
+  t.after(() => fs.rm(projectDir, { recursive: true, force: true }));
+
+  await assert.rejects(
+    execFile(process.execPath, [
+      'scripts/cli.mjs', 'produce',
+      '--project-dir', projectDir,
+      '--run', 'missing-run',
+      '--approval', path.join(projectDir, 'missing-approval.json')
+    ], {
+      cwd: packageDir,
+      env: { ...process.env, PIXEL_SPRITE_PIPELINE_CLI: '' }
+    }),
+    (error) => {
+      assert.equal(error.code, 2);
+      const response = JSON.parse(error.stdout.trim());
+      assert.equal(response.status, 'awaiting-pixel-pipeline-cli');
+      assert.match(response.description, /--pipeline-cli|PIXEL_SPRITE_PIPELINE_CLI/);
+      assert.equal(error.stderr, '');
+      return true;
+    }
+  );
+});
+
+test('produce returns a pixel pipeline handoff for missing and non-regular configured CLIs', async (t) => {
+  const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'game-character-pipeline-config-'));
+  t.after(() => fs.rm(projectDir, { recursive: true, force: true }));
+
+  for (const pipelineCli of [path.join(projectDir, 'missing-cli.mjs'), projectDir]) {
+    await assert.rejects(
+      execFile(process.execPath, [
+        'scripts/cli.mjs', 'produce',
+        '--project-dir', projectDir,
+        '--run', 'missing-run',
+        '--approval', path.join(projectDir, 'missing-approval.json'),
+        '--pipeline-cli', pipelineCli
+      ], { cwd: packageDir }),
+      (error) => {
+        assert.equal(error.code, 2);
+        const response = JSON.parse(error.stdout.trim());
+        assert.equal(response.status, 'awaiting-pixel-pipeline-cli');
+        assert.match(response.description, /Pixel Sprite Pipeline CLI/);
+        assert.equal(error.stderr, '');
+        return true;
+      }
+    );
+  }
+});
+
+test('Pixel pipeline CLI configuration prefers an explicit option and otherwise uses the environment', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'game-character-pipeline-resolver-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const explicit = path.join(directory, 'explicit-cli.mjs');
+  const fallback = path.join(directory, 'fallback-cli.mjs');
+  await Promise.all([fs.writeFile(explicit, '// explicit'), fs.writeFile(fallback, '// fallback')]);
+
+  const preferred = await resolvePixelPipelineCli({
+    pipelineCli: explicit,
+    env: { PIXEL_SPRITE_PIPELINE_CLI: fallback }
+  });
+  assert.equal(preferred.pipelineCli, explicit);
+
+  const fromEnvironment = await resolvePixelPipelineCli({
+    env: { PIXEL_SPRITE_PIPELINE_CLI: fallback }
+  });
+  assert.equal(fromEnvironment.pipelineCli, fallback);
+});
+
+test('packed character package excludes the root-only Clockwork Courier integration fixture', async () => {
+  const result = await execFile('npm', ['pack', '--dry-run', '--json'], { cwd: packageDir });
+  const packed = JSON.parse(result.stdout);
+  assert.equal(packed.length, 1);
+  assert.equal(packed[0].files.some(({ path: file }) => file.startsWith('examples/clockwork-courier/')), false);
 });
 
 test('intake command exposes pose-board recovery and approval inputs', async () => {

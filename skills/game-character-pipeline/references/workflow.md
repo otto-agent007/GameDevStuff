@@ -54,12 +54,15 @@ node scripts/cli.mjs produce \
   --project-dir /absolute/path/character-project \
   --run <run-id> \
   --approval /absolute/path/selection-approval.json \
+  --pipeline-cli /absolute/path/pixel-sprite-animation-pipeline-cli.mjs \
   --snap-receipt /absolute/path/snap-receipt.json \
   --frame-approval /absolute/path/frame-approval.json \
   --output /absolute/path/pixel-production
 ```
 
 Do not substitute unsigned files. The delegated response must bind the same contract and input-manifest hashes. Missing receipts or review artifacts are handoffs, not permission to bypass the gate.
+
+Point `--pipeline-cli` at a readable, regular Pixel Sprite Pipeline CLI. If the option is omitted, set `PIXEL_SPRITE_PIPELINE_CLI` to that file. The explicit option takes precedence. When neither location resolves to a readable regular file, `produce` exits `2` with an `awaiting-pixel-pipeline-cli` handoff before it reads approvals or publishes outputs.
 
 Pixel Snapper must receive one ordered input per approved recovered frame, not the source pose board. After Snapper, reopen the normal Studio post-snap review path to align frames and approve final pivots, contacts, sockets, and travel before normalization or export.
 
