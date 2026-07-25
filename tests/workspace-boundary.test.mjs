@@ -31,6 +31,8 @@ test('root manifest declares the two private skill workspaces and shared develop
     'format:write': 'prettier --write .',
     browser: 'npm run test:browser --workspace=game-character-pipeline',
     acceptance: 'npm run acceptance --workspace=game-character-pipeline',
+    coverage:
+      'npm run coverage --workspace=game-character-pipeline && npm run coverage --workspace=pixel-sprite-animation-pipeline',
     'package-boundary':
       'node --test skills/game-character-pipeline/tests/package-boundary.test.mjs skills/pixel-sprite-animation-pipeline/tests/package-boundary.test.mjs'
   });
@@ -65,6 +67,8 @@ test('workspaces retain only their exact runtime dependencies and use the root l
   });
   assert.equal(Object.hasOwn(character, 'devDependencies'), false);
   assert.equal(Object.hasOwn(pixel, 'devDependencies'), false);
+  assert.equal(character.scripts.coverage, 'node --test --experimental-test-coverage --test-coverage-lines=50');
+  assert.equal(pixel.scripts.coverage, 'node --test --experimental-test-coverage --test-coverage-lines=50');
   assert.equal(character.files.includes('npm-shrinkwrap.json'), false);
   assert.equal(pixel.files.includes('npm-shrinkwrap.json'), false);
   await assert.rejects(fs.access(path.join(repositoryRoot, 'skills/game-character-pipeline/npm-shrinkwrap.json')));

@@ -598,8 +598,12 @@ test('workflow policy is pinned, least-privileged, native, locked and publish ne
   const source = await fs.readFile(workflowFile, 'utf8');
   const doc = YAML.parse(source);
   assert.deepEqual(doc.permissions, { contents: 'read' });
-  assert.deepEqual(doc.jobs.build.permissions, { contents: 'read' });
-  assert.deepEqual(doc.jobs.publish.permissions, { contents: 'write' });
+  assert.deepEqual(doc.jobs.build.permissions, {
+    contents: 'read',
+    'id-token': 'write',
+    attestations: 'write'
+  });
+  assert.deepEqual(doc.jobs.publish.permissions, { contents: 'write', attestations: 'read' });
   assert.deepEqual(doc.jobs.compliance.permissions, { contents: 'read' });
   assert.equal(doc.on.workflow_dispatch.inputs.immutable_releases_confirmed.type, 'boolean');
   assert.deepEqual(
@@ -618,7 +622,8 @@ test('workflow policy is pinned, least-privileged, native, locked and publish ne
         'actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5',
         'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
         'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
-        'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093'
+        'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093',
+        'actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26'
       ].includes(pin)
     )
   );
@@ -640,6 +645,8 @@ test('workflow policy is pinned, least-privileged, native, locked and publish ne
   assert.match(source, /X-GitHub-Api-Version: 2026-03-10/);
   assert.match(source, /needs:\s*compliance/);
   assert.match(source, /pixel-snapper-compliance/);
+  assert.equal(doc.jobs.publish.if, "github.ref == 'refs/heads/main'");
+  assert.equal(doc.jobs.publish.environment, 'pixel-snapper-release');
   assert.equal([...source.matchAll(/secrets\.IMMUTABLE_RELEASES_TOKEN/g)].length, 1);
   assert.doesNotMatch(
     source.slice(source.indexOf('\n  build:'), source.indexOf('\n  publish:')),

@@ -206,6 +206,12 @@ test('unified CI installs once from the root lock and uses root workspace comman
   assert.ok(qualityRuns.includes('npm run test:workspace'));
   assert.ok(qualityRuns.includes('npm run lint'));
   assert.ok(qualityRuns.includes('npm run format:check'));
+  assert.ok(qualityRuns.includes('npm run coverage'), 'Linux quality must enforce workspace coverage once');
+  assert.equal(
+    qualityRuns.filter((command) => command === 'npm run coverage').length,
+    1,
+    'coverage must run only in the Linux quality job, not the cross-platform unit matrix'
+  );
 
   const unitRuns = workflow.jobs.unit.steps.map((step) => step.run).filter(Boolean);
   assert.ok(unitRuns.includes('npm test --workspace=${{ matrix.workspace }}'));
@@ -217,6 +223,51 @@ test('unified CI installs once from the root lock and uses root workspace comman
   assert.match(validator.run, /Official quick_validate\.py is not installed on this runner; skipping\./);
   assert.ok(workflow.jobs.browser.steps.some((step) => step.run === 'npm run browser'));
   assert.ok(workflow.jobs.acceptance.steps.some((step) => step.run === 'npm run acceptance'));
+});
+
+test('Pixel Snapper release attests only validated target archives before a protected publish', async () => {
+  const workflow = await readYaml('.github/workflows/pixel-snapper-release.yml');
+  const source = await fs.readFile(path.join(repositoryRoot, '.github/workflows/pixel-snapper-release.yml'), 'utf8');
+  const build = workflow.jobs.build;
+  const publish = workflow.jobs.publish;
+
+  assert.deepEqual(build.permissions, {
+    contents: 'read',
+    'id-token': 'write',
+    attestations: 'write'
+  });
+  const packageStepIndex = build.steps.findIndex(
+    (step) => step.name === 'Execute native probes and package exact files'
+  );
+  const attestationStepIndex = build.steps.findIndex((step) => step.name === 'Attest validated target archive');
+  assert.ok(attestationStepIndex > packageStepIndex, 'the archive must exist before it is attested');
+  const attestation = build.steps[attestationStepIndex];
+  assert.equal(attestation.uses, 'actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26');
+  assert.equal(attestation.with['subject-path'], 'packaged/${{ matrix.key }}/pixel-snapper-${{ matrix.key }}.*');
+  assert.doesNotMatch(attestation.with['subject-path'], /target\//, 'only the final archive may be attested');
+
+  assert.equal(publish.if, "github.ref == 'refs/heads/main'");
+  assert.equal(publish.environment, 'pixel-snapper-release');
+  assert.deepEqual(publish.permissions, { contents: 'write', attestations: 'read' });
+  const inputValidation = stepNamed(publish, 'Validate immutable inputs');
+  assert.match(inputValidation.run, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
+  const attestationVerificationIndex = publish.steps.findIndex(
+    (step) => step.name === 'Verify assembled archive attestations'
+  );
+  const releaseIndex = publish.steps.findIndex((step) => step.name === 'Publish immutable release');
+  assert.ok(attestationVerificationIndex > -1 && attestationVerificationIndex < releaseIndex);
+  const verification = publish.steps[attestationVerificationIndex];
+  assert.match(verification.run, /gh attestation verify/);
+  for (const target of [
+    'windows-x64.zip',
+    'macos-x64.tar.gz',
+    'macos-arm64.tar.gz',
+    'linux-x64.tar.gz',
+    'linux-arm64.tar.gz'
+  ]) {
+    assert.match(verification.run, new RegExp(`pixel-snapper-${target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  }
+  assert.match(source, /gh attestation verify[\s\S]*gh release create/);
 });
 
 test('immutable release jobs install and cache npm dependencies only from the root lockfile', async () => {

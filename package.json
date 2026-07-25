@@ -19,6 +19,7 @@
     "format:write": "prettier --write .",
     "browser": "npm run test:browser --workspace=game-character-pipeline",
     "acceptance": "npm run acceptance --workspace=game-character-pipeline",
+    "coverage": "npm run coverage --workspace=game-character-pipeline && npm run coverage --workspace=pixel-sprite-animation-pipeline",
     "package-boundary": "node --test skills/game-character-pipeline/tests/package-boundary.test.mjs skills/pixel-sprite-animation-pipeline/tests/package-boundary.test.mjs"
   },
   "devDependencies": {
