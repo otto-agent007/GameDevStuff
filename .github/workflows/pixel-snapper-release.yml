@@ -36,6 +36,7 @@ jobs:
           GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_TOKEN }}
         run: |
           set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
           test "$CONFIRMED" = "true"
           test -n "$GH_TOKEN"
           test "$(gh api -H "X-GitHub-Api-Version: 2026-03-10" "repos/${GITHUB_REPOSITORY}/immutable-releases" --jq '.enabled')" = "true"
@@ -131,6 +132,8 @@ jobs:
     needs: compliance
     permissions:
       contents: read
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: true
       matrix:
@@ -257,6 +260,11 @@ jobs:
         shell: bash
         run: node release-tools/skills/pixel-sprite-animation-pipeline/scripts/release/package-pixel-snapper.mjs --request package-request.json --output-dir "packaged/${RELEASE_TARGET}"
 
+      - name: Attest validated target archive
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26
+        with:
+          subject-path: packaged/${{ matrix.key }}/pixel-snapper-${{ matrix.key }}.*
+
       - name: Upload isolated target package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -267,9 +275,12 @@ jobs:
 
   publish:
     needs: build
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    environment: pixel-snapper-release
     permissions:
       contents: write
+      attestations: read
     env:
       UPSTREAM_TAG: ${{ inputs.upstream_tag }}
       UPSTREAM_COMMIT: ${{ inputs.upstream_commit }}
@@ -280,6 +291,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
           [[ "$UPSTREAM_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "$UPSTREAM_COMMIT" =~ ^[a-f0-9]{40}$ ]]
           [[ "$RELEASE_TAG" =~ ^pixel-snapper-v[0-9]+\.[0-9]+\.[0-9]+-commit\.[a-f0-9]{7}$ ]]
@@ -323,6 +335,19 @@ jobs:
       - name: Assemble and validate release without executing downloads
         shell: bash
         run: node skills/pixel-sprite-animation-pipeline/scripts/release/assemble-release.mjs --input-dir build-inputs --output-dir release-output --release-tag "$RELEASE_TAG" --upstream-commit "$UPSTREAM_COMMIT" --workflow-commit "$GITHUB_SHA"
+
+      - name: Verify assembled archive attestations
+        shell: bash
+        run: |
+          set -euo pipefail
+          for archive in \
+            pixel-snapper-windows-x64.zip \
+            pixel-snapper-macos-x64.tar.gz \
+            pixel-snapper-macos-arm64.tar.gz \
+            pixel-snapper-linux-x64.tar.gz \
+            pixel-snapper-linux-arm64.tar.gz; do
+            gh attestation verify "release-output/${archive}" --repo "$GITHUB_REPOSITORY"
+          done
 
       - name: Publish immutable release
         shell: bash

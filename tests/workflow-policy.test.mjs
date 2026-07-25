@@ -214,6 +214,12 @@ test('unified CI installs once from the root lock and uses root workspace comman
   assert.ok(qualityRuns.includes('npm run test:workspace'));
   assert.ok(qualityRuns.includes('npm run lint'));
   assert.ok(qualityRuns.includes('npm run format:check'));
+  assert.ok(qualityRuns.includes('npm run coverage'), 'Linux quality must enforce workspace coverage once');
+  assert.equal(
+    qualityRuns.filter((command) => command === 'npm run coverage').length,
+    1,
+    'coverage must run only in the Linux quality job, not the cross-platform unit matrix'
+  );
 
   const unitRuns = workflow.jobs.unit.steps.map((step) => step.run).filter(Boolean);
   assert.ok(unitRuns.includes('npm test --workspace=${{ matrix.workspace }}'));
@@ -225,6 +231,51 @@ test('unified CI installs once from the root lock and uses root workspace comman
   assert.match(validator.run, /Official quick_validate\.py is not installed on this runner; skipping\./);
   assert.ok(workflow.jobs.browser.steps.some((step) => step.run === 'npm run browser'));
   assert.ok(workflow.jobs.acceptance.steps.some((step) => step.run === 'npm run acceptance'));
+});
+
+test('Pixel Snapper release attests only validated target archives before a protected publish', async () => {
+  const workflow = await readYaml('.github/workflows/pixel-snapper-release.yml');
+  const source = await fs.readFile(path.join(repositoryRoot, '.github/workflows/pixel-snapper-release.yml'), 'utf8');
+  const build = workflow.jobs.build;
+  const publish = workflow.jobs.publish;
+
+  assert.deepEqual(build.permissions, {
+    contents: 'read',
+    'id-token': 'write',
+    attestations: 'write'
+  });
+  const packageStepIndex = build.steps.findIndex(
+    (step) => step.name === 'Execute native probes and package exact files'
+  );
+  const attestationStepIndex = build.steps.findIndex((step) => step.name === 'Attest validated target archive');
+  assert.ok(attestationStepIndex > packageStepIndex, 'the archive must exist before it is attested');
+  const attestation = build.steps[attestationStepIndex];
+  assert.equal(attestation.uses, 'actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26');
+  assert.equal(attestation.with['subject-path'], 'packaged/${{ matrix.key }}/pixel-snapper-${{ matrix.key }}.*');
+  assert.doesNotMatch(attestation.with['subject-path'], /target\//, 'only the final archive may be attested');
+
+  assert.equal(publish.if, "github.ref == 'refs/heads/main'");
+  assert.equal(publish.environment, 'pixel-snapper-release');
+  assert.deepEqual(publish.permissions, { contents: 'write', attestations: 'read' });
+  const inputValidation = stepNamed(publish, 'Validate immutable inputs');
+  assert.match(inputValidation.run, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
+  const attestationVerificationIndex = publish.steps.findIndex(
+    (step) => step.name === 'Verify assembled archive attestations'
+  );
+  const releaseIndex = publish.steps.findIndex((step) => step.name === 'Publish immutable release');
+  assert.ok(attestationVerificationIndex > -1 && attestationVerificationIndex < releaseIndex);
+  const verification = publish.steps[attestationVerificationIndex];
+  assert.match(verification.run, /gh attestation verify/);
+  for (const target of [
+    'windows-x64.zip',
+    'macos-x64.tar.gz',
+    'macos-arm64.tar.gz',
+    'linux-x64.tar.gz',
+    'linux-arm64.tar.gz'
+  ]) {
+    assert.match(verification.run, new RegExp(`pixel-snapper-${target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  }
+  assert.match(source, /gh attestation verify[\s\S]*gh release create/);
 });
 
 test('immutable release jobs install and cache npm dependencies only from the root lockfile', async () => {
@@ -240,4 +291,57 @@ test('immutable release jobs install and cache npm dependencies only from the ro
   assert.equal(buildInstall['working-directory'], 'release-tools');
   assert.equal(publishInstall.run, 'npm ci --ignore-scripts');
   assert.equal(Object.hasOwn(publishInstall, 'working-directory'), false);
+});
+
+test('skill bundles release together from an immutable, protected, install-by-copy workflow', async () => {
+  const version = '0.2.0';
+  const manifestPaths = [
+    'package.json',
+    'skills/game-character-pipeline/package.json',
+    'skills/pixel-sprite-animation-pipeline/package.json'
+  ];
+  for (const manifestPath of manifestPaths) {
+    assert.equal((await readJson(manifestPath)).version, version, `${manifestPath} must release in lockstep`);
+  }
+
+  const changelog = await fs.readFile(path.join(repositoryRoot, 'CHANGELOG.md'), 'utf8');
+  assert.match(changelog, /^## \[?0\.2\.0\]?/m);
+  assert.match(changelog, /^### Game Character Pipeline$/m);
+  assert.match(changelog, /^### Pixel Sprite Animation Pipeline$/m);
+
+  const workflowPath = '.github/workflows/skills-release.yml';
+  const workflow = await readYaml(workflowPath);
+  const source = await fs.readFile(path.join(repositoryRoot, workflowPath), 'utf8');
+  assert.ok(workflow.on.workflow_dispatch.inputs.version.required);
+  assert.match(source, /test "\$GITHUB_REF" = "refs\/heads\/main"/);
+  for (const jobName of ['immutability-preflight', 'validate', 'publish']) {
+    assert.equal(workflow.jobs[jobName].if, "github.ref == 'refs/heads/main'");
+  }
+  assert.match(source, /\[1-9\]\[0-9\]\*/);
+  assert.match(source, /skills-v\$\{\{ inputs\.version \}\}/);
+  assert.match(source, /IMMUTABLE_RELEASES_TOKEN/);
+  assert.match(source, /immutable-releases/);
+  assert.match(source, /npm ci --ignore-scripts/);
+  for (const command of ['npm test', 'npm run lint', 'npm run format:check', 'npm run package-boundary']) {
+    assert.match(source, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+
+  const publish = workflow.jobs.publish;
+  assert.deepEqual(publish.permissions, { contents: 'write' });
+  assert.equal(publish.environment, 'skills-release');
+  const checkout = publish.steps.find((step) => step.uses?.startsWith('actions/checkout@'));
+  assert.equal(checkout.with['persist-credentials'], false);
+  assert.match(source, /game-character-pipeline-\$\{VERSION\}\.tgz/);
+  assert.match(source, /pixel-sprite-animation-pipeline-\$\{VERSION\}\.tgz/);
+  assert.match(source, /SHA256SUMS/);
+  assert.match(source, /git ls-remote.*RELEASE_TAG/s);
+  assert.match(source, /gh release view.*RELEASE_TAG/s);
+  assert.match(source, /gh release create.*RELEASE_TAG/s);
+  assert.match(source, /--json isImmutable/);
+  assert.match(source, /gh release download.*RELEASE_TAG/s);
+  assert.match(source, /sha256sum -c SHA256SUMS/);
+
+  const actionPins = [...source.matchAll(/^\s*uses:\s*([^\s#]+)/gm)].map((match) => match[1]);
+  assert.ok(actionPins.length > 0);
+  assert.ok(actionPins.every((pin) => /^[^@\s]+@[a-f0-9]{40}$/.test(pin)));
 });
