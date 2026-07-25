@@ -157,6 +157,33 @@ test('changed paths select the package unit matrix and compatibility gates', asy
   );
 });
 
+test('formatted documentation and donor changes run quality without selecting package gates', async () => {
+  const workflow = await readYaml('.github/workflows/skills.yml');
+  const qualityOnlyPaths = ['README.md', 'AGENTS.md', 'docs/**', 'references/donors/**'];
+
+  for (const eventName of ['push', 'pull_request']) {
+    for (const qualityOnlyPath of qualityOnlyPaths) {
+      assert.ok(
+        workflow.on[eventName].paths.includes(qualityOnlyPath),
+        `${eventName} must trigger the repository-wide formatting check for ${qualityOnlyPath}`
+      );
+    }
+  }
+
+  const filterStep = workflow.jobs.changes.steps.find((step) => step.id === 'filter');
+  const filters = YAML.parse(filterStep.with.filters);
+  for (const qualityOnlyPath of qualityOnlyPaths) {
+    for (const filterName of ['pixel', 'character', 'root']) {
+      assert.equal(
+        filters[filterName].includes(qualityOnlyPath),
+        false,
+        `${qualityOnlyPath} must not select package unit, browser, or acceptance gates`
+      );
+    }
+  }
+  assert.ok(workflow.jobs.quality.steps.some((step) => step.run === 'npm run format:check'));
+});
+
 test('unified CI installs once from the root lock and uses root workspace commands', async () => {
   const workflow = await readYaml('.github/workflows/skills.yml');
 
