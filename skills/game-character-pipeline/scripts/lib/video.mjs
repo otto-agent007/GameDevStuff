@@ -65,7 +65,8 @@ async function execute(file, args) {
 
 async function verifyUnchanged(expected) {
   const current = await executableIdentity(expected.path);
-  if (current.sha256 !== expected.sha256 || current.size !== expected.size) throw new Error('media tool identity changed during use');
+  if (current.sha256 !== expected.sha256 || current.size !== expected.size)
+    throw new Error('media tool identity changed during use');
 }
 
 export async function inspectMediaTool(file, expectedName) {
@@ -95,12 +96,15 @@ async function pathCandidate(name) {
 }
 
 async function selectFfmpeg(explicitPath) {
-  const selected = explicitPath || process.env.FFMPEG_BIN || await pathCandidate('ffmpeg');
+  const selected = explicitPath || process.env.FFMPEG_BIN || (await pathCandidate('ffmpeg'));
   if (!selected) throw new MediaToolHandoffError('FFmpeg is required to resume video intake');
   try {
     return await inspectMediaTool(selected, 'ffmpeg');
   } catch (error) {
-    if (error.code === 'ENOENT') throw new MediaToolHandoffError('selected FFmpeg executable does not exist', { rejectedPath: path.resolve(selected) });
+    if (error.code === 'ENOENT')
+      throw new MediaToolHandoffError('selected FFmpeg executable does not exist', {
+        rejectedPath: path.resolve(selected)
+      });
     throw error;
   }
 }
@@ -115,16 +119,21 @@ async function runBoundTool(identity, args) {
 function integerTime(value, timeBase, label) {
   if (!/^-?\d+$/.test(value)) throw new Error(`video ${label} presentation timestamp is missing or invalid`);
   const units = Number(value);
-  const milliseconds = units * timeBase.numerator * 1000 / timeBase.denominator;
-  if (!Number.isSafeInteger(milliseconds)) throw new Error(`video ${label} cannot be represented in integer milliseconds`);
+  const milliseconds = (units * timeBase.numerator * 1000) / timeBase.denominator;
+  if (!Number.isSafeInteger(milliseconds))
+    throw new Error(`video ${label} cannot be represented in integer milliseconds`);
   return milliseconds;
 }
 
 export function parseFramehash(output) {
-  const lines = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
   const timeBaseLine = lines.find((line) => /^#tb\s+0:/.test(line));
   const match = timeBaseLine?.match(/^#tb\s+0:\s*(\d+)\/(\d+)$/);
-  if (!match || Number(match[1]) < 1 || Number(match[2]) < 1) throw new Error('video framehash stream time base is missing');
+  if (!match || Number(match[1]) < 1 || Number(match[2]) < 1)
+    throw new Error('video framehash stream time base is missing');
   const timeBase = { numerator: Number(match[1]), denominator: Number(match[2]) };
   const records = [];
   for (const line of lines.filter((candidate) => !candidate.startsWith('#'))) {
@@ -164,13 +173,19 @@ async function extractionDirectory(run) {
 
 async function validateExtractedFile(file) {
   const stat = await fs.lstat(file);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new Error('extracted video frame must be a regular single-link file');
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1)
+    throw new Error('extracted video frame must be a regular single-link file');
 }
 
 export async function decodeVideo({ source, run, ffmpegPath }) {
   if (!source) throw new Error('video intake requires a source file');
-  if (!['mp4', 'webm'].includes(run?.document?.sourceRequest?.kind)) throw new Error('video run kind must be mp4 or webm');
-  const copied = await copyImmutable({ source: path.resolve(source), root: run.root, relative: 'source/video/original.bin' });
+  if (!['mp4', 'webm'].includes(run?.document?.sourceRequest?.kind))
+    throw new Error('video run kind must be mp4 or webm');
+  const copied = await copyImmutable({
+    source: path.resolve(source),
+    root: run.root,
+    relative: 'source/video/original.bin'
+  });
   let tool;
   try {
     tool = await selectFfmpeg(ffmpegPath);
@@ -180,14 +195,42 @@ export async function decodeVideo({ source, run, ffmpegPath }) {
     }
     throw error;
   }
-  const framehashArgs = ['-nostdin', '-v', 'error', '-i', copied.path, '-map', '0:v:0', '-f', 'framehash', '-hash', 'sha256', '-'];
+  const framehashArgs = [
+    '-nostdin',
+    '-v',
+    'error',
+    '-i',
+    copied.path,
+    '-map',
+    '0:v:0',
+    '-f',
+    'framehash',
+    '-hash',
+    'sha256',
+    '-'
+  ];
   const framehashResult = await runBoundTool(tool, framehashArgs);
-  if (framehashResult.stderr.trim()) throw new Error(`video framehash reported corruption: ${framehashResult.stderr.trim()}`);
+  if (framehashResult.stderr.trim())
+    throw new Error(`video framehash reported corruption: ${framehashResult.stderr.trim()}`);
   const timing = parseFramehash(framehashResult.stdout);
 
   const staging = await extractionDirectory(run);
   const pattern = path.join(staging, 'frame-%06d.png');
-  const extractArgs = ['-nostdin', '-v', 'error', '-n', '-i', copied.path, '-map', '0:v:0', '-vsync', '0', '-pix_fmt', 'rgba', pattern];
+  const extractArgs = [
+    '-nostdin',
+    '-v',
+    'error',
+    '-n',
+    '-i',
+    copied.path,
+    '-map',
+    '0:v:0',
+    '-vsync',
+    '0',
+    '-pix_fmt',
+    'rgba',
+    pattern
+  ];
   const expectedNames = timing.records.map((_, index) => `frame-${String(index + 1).padStart(6, '0')}.png`);
   const beforeNames = (await fs.readdir(staging)).sort();
   if (beforeNames.length === 0) {
@@ -197,18 +240,21 @@ export async function decodeVideo({ source, run, ffmpegPath }) {
     throw new Error('video extraction staging is partial or contains unknown files');
   }
   const actualNames = (await fs.readdir(staging)).sort();
-  if (JSON.stringify(actualNames) !== JSON.stringify(expectedNames)) throw new Error('video decoded output-count disagreement');
+  if (JSON.stringify(actualNames) !== JSON.stringify(expectedNames))
+    throw new Error('video decoded output-count disagreement');
 
   const decoded = [];
   for (const [index, name] of expectedNames.entries()) {
     const selected = path.join(staging, name);
     await validateExtractedFile(selected);
-    decoded.push(await decodePngArtifact({
-      run,
-      sourceRelative: path.relative(run.root, selected).replaceAll('\\', '/'),
-      frameId: `video-frame-${String(index + 1).padStart(6, '0')}`,
-      durationMs: timing.records[index].durationMs
-    }));
+    decoded.push(
+      await decodePngArtifact({
+        run,
+        sourceRelative: path.relative(run.root, selected).replaceAll('\\', '/'),
+        frameId: `video-frame-${String(index + 1).padStart(6, '0')}`,
+        durationMs: timing.records[index].durationMs
+      })
+    );
   }
   const first = decoded[0];
   if (decoded.some(({ width, height }) => width !== first.width || height !== first.height)) {
@@ -237,7 +283,8 @@ export async function decodeVideo({ source, run, ffmpegPath }) {
   });
   const alpha = decoded.some(({ alpha: present }) => present);
   if (alpha) diagnostics.push({ code: 'ALPHA_PRESENT', frameId: null });
-  if (new Set(timing.records.map(({ durationMs }) => durationMs)).size > 1) diagnostics.push({ code: 'VARIABLE_FRAME_RATE', frameId: null });
+  if (new Set(timing.records.map(({ durationMs }) => durationMs)).size > 1)
+    diagnostics.push({ code: 'VARIABLE_FRAME_RATE', frameId: null });
   return {
     kind: run.document.sourceRequest.kind,
     sourceSha256: copied.sha256,

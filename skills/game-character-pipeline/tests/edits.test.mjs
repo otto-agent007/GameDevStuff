@@ -21,7 +21,9 @@ async function fixture() {
   const run = await createRun({ projectRoot, project, sourceRequest: { actionId: 'idle', kind: 'png-sequence' } });
   const pixels = Buffer.alloc(8 * 8 * 4);
   pixels.set([245, 158, 11, 255], (2 * 8 + 2) * 4);
-  const bytes = await sharp(pixels, { raw: { width: 8, height: 8, channels: 4 } }).png().toBuffer();
+  const bytes = await sharp(pixels, { raw: { width: 8, height: 8, channels: 4 } })
+    .png()
+    .toBuffer();
   const artifact = await writeImmutableBytes({ root: run.root, relative: 'work/decoded/source.png', bytes });
   const source = {
     kind: 'png-sequence',
@@ -31,8 +33,30 @@ async function fixture() {
     alpha: true,
     timeBase: { numerator: 1, denominator: 1000 },
     frames: [
-      { index: 0, id: 'step-contact', path: artifact.relative, sha256: artifact.sha256, width: 8, height: 8, timestampMs: 0, durationMs: 80, sourceRect: { x: 0, y: 0, width: 8, height: 8 }, duplicateOf: null },
-      { index: 1, id: 'step-pass', path: artifact.relative, sha256: artifact.sha256, width: 8, height: 8, timestampMs: 80, durationMs: 120, sourceRect: { x: 0, y: 0, width: 8, height: 8 }, duplicateOf: 'step-contact' }
+      {
+        index: 0,
+        id: 'step-contact',
+        path: artifact.relative,
+        sha256: artifact.sha256,
+        width: 8,
+        height: 8,
+        timestampMs: 0,
+        durationMs: 80,
+        sourceRect: { x: 0, y: 0, width: 8, height: 8 },
+        duplicateOf: null
+      },
+      {
+        index: 1,
+        id: 'step-pass',
+        path: artifact.relative,
+        sha256: artifact.sha256,
+        width: 8,
+        height: 8,
+        timestampMs: 80,
+        durationMs: 120,
+        sourceRect: { x: 0, y: 0, width: 8, height: 8 },
+        duplicateOf: 'step-contact'
+      }
     ],
     diagnostics: [],
     approval: null
@@ -106,7 +130,10 @@ test('rendered edit revisions are deterministic derivatives and preserve source 
   const first = await renderEditRevision({ ...data, edit: data.edit });
   const second = await renderEditRevision({ ...data, edit: structuredClone(data.edit) });
   assert.equal(first.sha256, second.sha256);
-  assert.deepEqual(first.frames.map(({ sha256 }) => sha256), second.frames.map(({ sha256 }) => sha256));
+  assert.deepEqual(
+    first.frames.map(({ sha256 }) => sha256),
+    second.frames.map(({ sha256 }) => sha256)
+  );
   assert.notEqual(first.frames[0].sha256, sourceHash);
   assert.equal(await sha256File(sourceFile), sourceHash);
   assert.equal(first.frames[0].markers[0].id, 'hand');

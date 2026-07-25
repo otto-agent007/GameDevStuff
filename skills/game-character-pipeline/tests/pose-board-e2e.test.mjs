@@ -16,15 +16,9 @@ import { writeRevision } from '../scripts/lib/artifacts.mjs';
 import { createPixelProductionContract, publishExportRevision } from '../scripts/lib/export-contract.mjs';
 import { runPixelProduction } from '../scripts/lib/pixel-pipeline.mjs';
 import { decodePoseBoard, recoverPoseBoard } from '../scripts/lib/pose-board.mjs';
-import {
-  approvePoseSelection,
-  writePoseSelection
-} from '../scripts/lib/pose-selection.mjs';
+import { approvePoseSelection, writePoseSelection } from '../scripts/lib/pose-selection.mjs';
 import { createProject, createRun } from '../scripts/lib/run-contract.mjs';
-import {
-  decodeMotionSource,
-  registerSourceAdapter
-} from '../scripts/lib/source-adapter.mjs';
+import { decodeMotionSource, registerSourceAdapter } from '../scripts/lib/source-adapter.mjs';
 import { sha256File, sha256Value } from '../scripts/lib/schema.mjs';
 import { loadAnimationContract } from '../../pixel-sprite-animation-pipeline/scripts/lib/animation-contract.mjs';
 import { writeFrameApproval } from '../../pixel-sprite-animation-pipeline/scripts/lib/frame-approval.mjs';
@@ -46,16 +40,18 @@ const pixelPipelineCli = path.resolve(
   'cli.mjs'
 );
 
-registerSourceAdapter('pose-board', ({ source, run, project, options }) => decodePoseBoard({
-  source,
-  recoveryContract: options.recoveryContract,
-  selectionApproval: options.selectionApproval,
-  run,
-  project
-}));
+registerSourceAdapter('pose-board', ({ source, run, project, options }) =>
+  decodePoseBoard({
+    source,
+    recoveryContract: options.recoveryContract,
+    selectionApproval: options.selectionApproval,
+    run,
+    project
+  })
+);
 
 function writePixel(pixels, width, x, y, rgba) {
-  pixels.set(rgba, ((y * width) + x) * 4);
+  pixels.set(rgba, (y * width + x) * 4);
 }
 
 async function writeBoard(file) {
@@ -64,9 +60,35 @@ async function writeBoard(file) {
   const pixels = Buffer.alloc(width * height * 4);
   for (let offset = 0; offset < pixels.length; offset += 4) pixels.set(BACKGROUND, offset);
   for (const [color, points] of [
-    [COLORS.red, [[4, 1], [5, 1], [6, 1], [7, 1], [5, 2], [6, 2]]],
-    [COLORS.blue, [[0, 4], [1, 4], [2, 4], [1, 5]]],
-    [COLORS.yellow, [[9, 5], [10, 5], [9, 6], [10, 6]]]
+    [
+      COLORS.red,
+      [
+        [4, 1],
+        [5, 1],
+        [6, 1],
+        [7, 1],
+        [5, 2],
+        [6, 2]
+      ]
+    ],
+    [
+      COLORS.blue,
+      [
+        [0, 4],
+        [1, 4],
+        [2, 4],
+        [1, 5]
+      ]
+    ],
+    [
+      COLORS.yellow,
+      [
+        [9, 5],
+        [10, 5],
+        [9, 6],
+        [10, 6]
+      ]
+    ]
   ]) {
     for (const [x, y] of points) writePixel(pixels, width, x, y, color);
   }
@@ -79,7 +101,14 @@ async function writeAnchor(file) {
   const width = 8;
   const height = 6;
   const pixels = Buffer.alloc(width * height * 4);
-  for (const [x, y] of [[2, 2], [3, 2], [4, 2], [5, 2], [3, 3], [4, 3]]) {
+  for (const [x, y] of [
+    [2, 2],
+    [3, 2],
+    [4, 2],
+    [5, 2],
+    [3, 3],
+    [4, 3]
+  ]) {
     writePixel(pixels, width, x, y, COLORS.red);
   }
   await sharp(pixels, { raw: { width, height, channels: 4 } })
@@ -88,12 +117,7 @@ async function writeAnchor(file) {
 }
 
 async function writeProjectContract(root, anchor) {
-  const palette = [
-    COLORS.transparent,
-    COLORS.red,
-    COLORS.blue,
-    COLORS.yellow
-  ];
+  const palette = [COLORS.transparent, COLORS.red, COLORS.blue, COLORS.yellow];
   const document = {
     schemaVersion: 1,
     id: 'pose-board-proof',
@@ -101,12 +125,14 @@ async function writeProjectContract(root, anchor) {
       name: 'Pose Board Proof',
       identity: 'A synthetic primary-color actor used only for workflow verification.',
       logicalHeight: 6,
-      anchors: [{
-        id: 'canonical-right',
-        role: 'canonical',
-        path: 'source/anchors/canonical-right.png',
-        sha256: await sha256File(anchor)
-      }]
+      anchors: [
+        {
+          id: 'canonical-right',
+          role: 'canonical',
+          path: 'source/anchors/canonical-right.png',
+          sha256: await sha256File(anchor)
+        }
+      ]
     },
     canvas: {
       width: 8,
@@ -122,34 +148,36 @@ async function writeProjectContract(root, anchor) {
       rgba: palette,
       sha256: sha256Value(palette)
     },
-    tracks: [{
-      id: 'actor',
-      kind: 'actor',
-      required: true,
-      attachTo: null
-    }],
+    tracks: [
+      {
+        id: 'actor',
+        kind: 'actor',
+        required: true,
+        attachTo: null
+      }
+    ],
     sockets: [],
     contacts: [],
     sources: {
       allowedKinds: ['generated-still', 'png-sequence', 'pose-board'],
       defaultStillKind: 'generated-still'
     },
-    actions: [{
-      id: 'idle',
-      semantic: 'Cycle through three recovered synthetic poses.',
-      loopMode: 'loop',
-      poses: ['stride-01', 'stride-02', 'stride-03'],
-      tracks: ['actor'],
-      sockets: [],
-      contacts: [],
-      sources: {
-        preferred: 'pose-board',
-        fallbacks: ['png-sequence']
+    actions: [
+      {
+        id: 'idle',
+        semantic: 'Cycle through three recovered synthetic poses.',
+        loopMode: 'loop',
+        poses: ['stride-01', 'stride-02', 'stride-03'],
+        tracks: ['actor'],
+        sockets: [],
+        contacts: [],
+        sources: {
+          preferred: 'pose-board',
+          fallbacks: ['png-sequence']
+        }
       }
-    }],
-    engineTargets: [
-      { id: 'generic-json', kind: 'generic', version: null }
     ],
+    engineTargets: [{ id: 'generic-json', kind: 'generic', version: null }],
     approvals: {
       status: 'anchor-approved',
       identities: ['owner'],
@@ -178,17 +206,20 @@ async function createFixture(root, runId) {
   const board = path.join(root, 'pose-board.png');
   await writeBoard(board);
   const recoveryContract = path.join(root, 'pose-board-recovery.json');
-  await fs.writeFile(recoveryContract, JSON.stringify({
-    schemaVersion: 1,
-    background: { mode: 'color', rgba: BACKGROUND, tolerance: 8 },
-    connectivity: 4,
-    minimumComponentPixels: 4,
-    maxDecodedRgbaBytes: 1024 * 1024,
-    padding: 2,
-    expectedCandidates: { min: 3, max: 3 },
-    allowUnassigned: false,
-    groups: []
-  }));
+  await fs.writeFile(
+    recoveryContract,
+    JSON.stringify({
+      schemaVersion: 1,
+      background: { mode: 'color', rgba: BACKGROUND, tolerance: 8 },
+      connectivity: 4,
+      minimumComponentPixels: 4,
+      maxDecodedRgbaBytes: 1024 * 1024,
+      padding: 2,
+      expectedCandidates: { min: 3, max: 3 },
+      allowUnassigned: false,
+      groups: []
+    })
+  );
   return { projectRoot, project, run, board, recoveryContract };
 }
 
@@ -224,8 +255,7 @@ async function runPoseBoardProof(root, runId) {
       project: fixture.project,
       options: { recoveryContract: fixture.recoveryContract }
     }),
-    (error) => error.exitCode === 4 &&
-      error.handoff.status === 'awaiting-pose-selection'
+    (error) => error.exitCode === 4 && error.handoff.status === 'awaiting-pose-selection'
   );
   const recovery = await recoverPoseBoard({
     source: fixture.board,
@@ -243,7 +273,7 @@ async function runPoseBoardProof(root, runId) {
     frames: recovery.document.candidates.map((candidate, index) => ({
       id: `stride-${String(index + 1).padStart(2, '0')}`,
       candidateId: candidate.id,
-      durationMs: 80 + (index * 20),
+      durationMs: 80 + index * 20,
       tracks: [{ role: 'actor', componentIds: candidate.componentIds }]
     }))
   };
@@ -422,9 +452,7 @@ async function runPoseBoardProof(root, runId) {
 test('crossing-boundary pose boards produce one snapped input per selected frame reproducibly', async (t) => {
   const leftRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'pose-board-proof-a-'));
   const rightRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'pose-board-proof-b-'));
-  t.after(() => Promise.all(
-    [leftRoot, rightRoot].map((root) => fs.rm(root, { recursive: true, force: true }))
-  ));
+  t.after(() => Promise.all([leftRoot, rightRoot].map((root) => fs.rm(root, { recursive: true, force: true }))));
 
   const left = await runPoseBoardProof(leftRoot, 'pose-board-proof-a');
   const right = await runPoseBoardProof(rightRoot, 'pose-board-proof-b');
@@ -432,26 +460,15 @@ test('crossing-boundary pose boards produce one snapped input per selected frame
 
   assert.equal(left.audit.passed, true, JSON.stringify(left.audit.failures));
   assert.equal(right.audit.passed, true, JSON.stringify(right.audit.failures));
+  assert.equal(left.receipt.document.payload.inputs.length, left.selectedFrameCount);
+  assert.equal(left.receipt.document.payload.outputs.length, left.selectedFrameCount);
   assert.equal(
-    left.receipt.document.payload.inputs.length,
-    left.selectedFrameCount
-  );
-  assert.equal(
-    left.receipt.document.payload.outputs.length,
-    left.selectedFrameCount
-  );
-  assert.equal(
-    left.receipt.document.payload.inputs.some(
-      ({ sha256 }) => sha256 === wholeBoardSha256
-    ),
+    left.receipt.document.payload.inputs.some(({ sha256 }) => sha256 === wholeBoardSha256),
     false
   );
   assert.deepEqual(
     left.receipt.document.payload.inputs.map(({ sha256 }) => sha256),
     left.source.frames.map(({ sha256 }) => sha256)
   );
-  assert.deepEqual(
-    compareRuns(left.audit, right.audit).changedDeterministicArtifacts,
-    []
-  );
+  assert.deepEqual(compareRuns(left.audit, right.audit).changedDeterministicArtifacts, []);
 });

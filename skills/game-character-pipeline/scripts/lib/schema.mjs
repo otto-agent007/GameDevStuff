@@ -100,7 +100,11 @@ function stableValue(value) {
     if (prototype !== Object.prototype && prototype !== null) {
       throw new Error('value must contain only JSON-safe plain objects');
     }
-    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableValue(value[key])]));
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, stableValue(value[key])])
+    );
   }
   throw new Error('value must be JSON-safe');
 }
@@ -119,7 +123,10 @@ export function canonicalJson(value) {
 }
 
 export async function sha256File(file) {
-  return crypto.createHash('sha256').update(await fs.readFile(file)).digest('hex');
+  return crypto
+    .createHash('sha256')
+    .update(await fs.readFile(file))
+    .digest('hex');
 }
 
 export function deepFreeze(value) {

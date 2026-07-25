@@ -7,7 +7,16 @@ import sharp from 'sharp';
 import * as imageTools from '../scripts/lib/image.mjs';
 
 async function solid(file, rgba) {
-  await sharp({ create: { width: 2, height: 2, channels: 4, background: { r: rgba[0], g: rgba[1], b: rgba[2], alpha: rgba[3] / 255 } } }).png().toFile(file);
+  await sharp({
+    create: {
+      width: 2,
+      height: 2,
+      channels: 4,
+      background: { r: rgba[0], g: rgba[1], b: rgba[2], alpha: rgba[3] / 255 }
+    }
+  })
+    .png()
+    .toFile(file);
 }
 
 test('captured RGBA hash and pixels come from one immutable byte snapshot', async () => {

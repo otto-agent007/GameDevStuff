@@ -44,12 +44,21 @@ export async function loadRun({ projectRoot, id }) {
   const selected = path.join(runsRoot, id);
   const root = await ensureRealDirectory(selected, { privateMode: true });
   const document = JSON.parse(await fs.readFile(path.join(root, 'run.json'), 'utf8'));
-  exactObject(document, ['schemaVersion', 'id', 'projectSha256', 'createdAt', 'sourceRequest', 'state', 'artifacts', 'decoder'], 'run');
+  exactObject(
+    document,
+    ['schemaVersion', 'id', 'projectSha256', 'createdAt', 'sourceRequest', 'state', 'artifacts', 'decoder'],
+    'run'
+  );
   if (document.schemaVersion !== 1 || document.id !== id) throw new Error('run identity is invalid');
   if (document.projectSha256 !== project.sha256) throw new Error('run project hash mismatch');
   isoDate(document.createdAt, 'run createdAt');
   validateSourceRequest(document.sourceRequest, project);
-  if (document.state !== 'created' || !Array.isArray(document.artifacts) || document.artifacts.length !== 0 || document.decoder !== null) {
+  if (
+    document.state !== 'created' ||
+    !Array.isArray(document.artifacts) ||
+    document.artifacts.length !== 0 ||
+    document.decoder !== null
+  ) {
     throw new Error('run initial state is invalid');
   }
   for (const area of RUN_AREAS) await ensureRealDirectory(path.join(root, area), { privateMode: true });
@@ -62,7 +71,8 @@ export async function createProject({ root, contractFile }) {
   const projectFile = path.join(state, 'project.json');
   try {
     const existing = await loadProjectContract(projectFile);
-    if (existing.sha256 !== contract.sha256) throw new Error('initialized project contains a different project contract');
+    if (existing.sha256 !== contract.sha256)
+      throw new Error('initialized project contains a different project contract');
     return { ...existing, root: path.resolve(root), stateRoot: state, reused: true };
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
@@ -87,7 +97,10 @@ function validateSourceRequest(sourceRequest, project) {
 }
 
 function defaultRunId(now = new Date()) {
-  const timestamp = now.toISOString().replace(/[-:.TZ]/g, '').toLowerCase();
+  const timestamp = now
+    .toISOString()
+    .replace(/[-:.TZ]/g, '')
+    .toLowerCase();
   return `run-${timestamp}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
@@ -108,7 +121,8 @@ export async function createRun({ projectRoot, project, sourceRequest, id, clock
   }
   const request = validateSourceRequest(sourceRequest, initialized);
   const created = clock();
-  if (!(created instanceof Date) || Number.isNaN(created.valueOf())) throw new Error('run clock must return a valid Date');
+  if (!(created instanceof Date) || Number.isNaN(created.valueOf()))
+    throw new Error('run clock must return a valid Date');
   const createdAt = isoDate(created.toISOString(), 'run createdAt');
   const runId = id ?? defaultRunId(created);
   portableId(runId, 'run ID');

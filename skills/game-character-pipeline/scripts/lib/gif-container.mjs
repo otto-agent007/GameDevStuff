@@ -19,7 +19,7 @@ function skipSubBlocks(bytes, start, label) {
 }
 
 function tableBytes(packed) {
-  return (packed & 0x80) === 0 ? 0 : 3 * (2 ** ((packed & 0x07) + 1));
+  return (packed & 0x80) === 0 ? 0 : 3 * 2 ** ((packed & 0x07) + 1);
 }
 
 function disposal(value) {
@@ -55,7 +55,8 @@ export function inspectGif(input) {
       const label = bytes[offset];
       offset += 1;
       if (label === 0xf9) {
-        if (offset + 6 > bytes.length || bytes[offset] !== 4 || bytes[offset + 5] !== 0) truncated('graphic control extension');
+        if (offset + 6 > bytes.length || bytes[offset] !== 4 || bytes[offset + 5] !== 0)
+          truncated('graphic control extension');
         const packed = bytes[offset + 1];
         pending = {
           durationMs: bytes.readUInt16LE(offset + 2) * 10,

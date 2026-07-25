@@ -16,7 +16,7 @@ let root;
 let studio;
 
 function writePixel(pixels, width, x, y, rgba) {
-  pixels.set(rgba, ((y * width) + x) * 4);
+  pixels.set(rgba, (y * width + x) * 4);
 }
 
 async function startFixture() {
@@ -28,24 +28,55 @@ async function startFixture() {
   const pixels = Buffer.alloc(width * height * 4);
   for (let offset = 0; offset < pixels.length; offset += 4) pixels.set(BACKGROUND, offset);
   for (const [color, points] of [
-    [[214, 30, 42, 255], [[4, 1], [5, 1], [6, 1], [7, 1], [5, 2], [6, 2]]],
-    [[44, 77, 221, 255], [[0, 4], [1, 4], [2, 4], [1, 5]]],
-    [[248, 198, 34, 255], [[9, 5], [10, 5], [9, 6], [10, 6]]]
+    [
+      [214, 30, 42, 255],
+      [
+        [4, 1],
+        [5, 1],
+        [6, 1],
+        [7, 1],
+        [5, 2],
+        [6, 2]
+      ]
+    ],
+    [
+      [44, 77, 221, 255],
+      [
+        [0, 4],
+        [1, 4],
+        [2, 4],
+        [1, 5]
+      ]
+    ],
+    [
+      [248, 198, 34, 255],
+      [
+        [9, 5],
+        [10, 5],
+        [9, 6],
+        [10, 6]
+      ]
+    ]
   ]) {
     for (const [x, y] of points) writePixel(pixels, width, x, y, color);
   }
-  await sharp(pixels, { raw: { width, height, channels: 4 } }).png().toFile(source);
-  await fs.writeFile(contract, JSON.stringify({
-    schemaVersion: 1,
-    background: { mode: 'color', rgba: BACKGROUND, tolerance: 8 },
-    connectivity: 4,
-    minimumComponentPixels: 4,
-    maxDecodedRgbaBytes: 1024 * 1024,
-    padding: 2,
-    expectedCandidates: { min: 3, max: 3 },
-    allowUnassigned: true,
-    groups: []
-  }));
+  await sharp(pixels, { raw: { width, height, channels: 4 } })
+    .png()
+    .toFile(source);
+  await fs.writeFile(
+    contract,
+    JSON.stringify({
+      schemaVersion: 1,
+      background: { mode: 'color', rgba: BACKGROUND, tolerance: 8 },
+      connectivity: 4,
+      minimumComponentPixels: 4,
+      maxDecodedRgbaBytes: 1024 * 1024,
+      padding: 2,
+      expectedCandidates: { min: 3, max: 3 },
+      allowUnassigned: true,
+      groups: []
+    })
+  );
   const projectRoot = path.join(root, 'project');
   const project = await createProject({ root: projectRoot, contractFile: projectFixture });
   const run = await createRun({
@@ -77,9 +108,7 @@ test.afterEach(async () => {
 });
 
 test('recovery Studio curates, saves, and approves a numbered sequence', async ({ page }) => {
-  await expect(
-    page.getByRole('img', { name: 'Pose-board component overlay' })
-  ).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Pose-board component overlay' })).toBeVisible();
   await expect(page.getByRole('checkbox', { name: /candidate-0001/ })).not.toBeChecked();
   await page.getByRole('checkbox', { name: /candidate-0001/ }).check();
   await page.getByRole('button', { name: 'Move candidate-0002 earlier' }).click();
@@ -93,9 +122,7 @@ test('recovery Studio curates, saves, and approves a numbered sequence', async (
 });
 
 test('recovery Studio surfaces invalid duplicate membership and stale revisions', async ({ page }) => {
-  const session = await page.evaluate(() => (
-    fetch('/api/recovery-session').then((response) => response.json())
-  ));
+  const session = await page.evaluate(() => fetch('/api/recovery-session').then((response) => response.json()));
   const candidate = session.recovery.candidates[0];
   const duplicate = {
     schemaVersion: 1,
@@ -119,39 +146,45 @@ test('recovery Studio surfaces invalid duplicate membership and stale revisions'
       }
     ]
   };
-  const invalid = await page.evaluate(async ({ value, sha256 }) => {
-    const response = await fetch('/api/pose-selections', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'If-Match': sha256
-      },
-      body: JSON.stringify(value)
-    });
-    return { status: response.status, body: await response.json() };
-  }, { value: duplicate, sha256: session.selectionSha256 });
+  const invalid = await page.evaluate(
+    async ({ value, sha256 }) => {
+      const response = await fetch('/api/pose-selections', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'If-Match': sha256
+        },
+        body: JSON.stringify(value)
+      });
+      return { status: response.status, body: await response.json() };
+    },
+    { value: duplicate, sha256: session.selectionSha256 }
+  );
   expect(invalid.status).toBe(400);
   expect(invalid.body.error).toContain('component membership must be unique');
 
   await page.getByRole('checkbox', { name: /candidate-0001/ }).check();
   await page.getByRole('button', { name: 'Save recovery revision' }).click();
-  const stale = await page.evaluate(async ({ value, sha256 }) => {
-    const response = await fetch('/api/pose-selections', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'If-Match': sha256
-      },
-      body: JSON.stringify(value)
-    });
-    return { status: response.status, body: await response.json() };
-  }, {
-    value: {
-      ...duplicate,
-      frames: [duplicate.frames[0]]
+  const stale = await page.evaluate(
+    async ({ value, sha256 }) => {
+      const response = await fetch('/api/pose-selections', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'If-Match': sha256
+        },
+        body: JSON.stringify(value)
+      });
+      return { status: response.status, body: await response.json() };
     },
-    sha256: session.selectionSha256
-  });
+    {
+      value: {
+        ...duplicate,
+        frames: [duplicate.frames[0]]
+      },
+      sha256: session.selectionSha256
+    }
+  );
   expect(stale.status).toBe(409);
   expect(stale.body.error).toContain('stale pose selection');
 });
@@ -168,12 +201,10 @@ test('recovery Studio is keyboard accessible at narrow reduced-motion viewports'
   await checkbox.focus();
   await page.keyboard.press('Space');
   await expect(checkbox).toBeChecked();
-  const outline = await checkbox.evaluate(
-    (element) => getComputedStyle(element).outlineStyle
-  );
+  const outline = await checkbox.evaluate((element) => getComputedStyle(element).outlineStyle);
   expect(outline).not.toBe('none');
-  const transitions = await page.locator('.recovery-shell').evaluate(
-    (element) => getComputedStyle(element).transitionDuration
-  );
+  const transitions = await page
+    .locator('.recovery-shell')
+    .evaluate((element) => getComputedStyle(element).transitionDuration);
   expect(transitions).toBe('0s');
 });

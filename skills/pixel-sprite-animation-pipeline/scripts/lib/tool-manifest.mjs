@@ -40,7 +40,11 @@ function assertSize(value) {
 function assertUrl(value) {
   assertString(value);
   let parsed;
-  try { parsed = new URL(value); } catch { invalid(); }
+  try {
+    parsed = new URL(value);
+  } catch {
+    invalid();
+  }
   if (parsed.protocol !== 'https:') invalid();
 }
 
@@ -48,18 +52,46 @@ function immutableReleaseUrl(value, tag) {
   assertUrl(value);
   const parsed = new URL(value);
   const parts = parsed.pathname.split('/').filter(Boolean);
-  if (parsed.hostname !== 'github.com' || parsed.username || parsed.password || parsed.port || parsed.search || parsed.hash ||
-    parts.length !== 5 || parts[0] !== 'otto-agent007' || parts[1] !== 'GameDevStuff' || parts[2] !== 'releases' || parts[3] !== 'tag' ||
-    parts[4] !== encodeURIComponent(tag) || decodeURIComponent(parts[4]) !== tag) invalid();
+  if (
+    parsed.hostname !== 'github.com' ||
+    parsed.username ||
+    parsed.password ||
+    parsed.port ||
+    parsed.search ||
+    parsed.hash ||
+    parts.length !== 5 ||
+    parts[0] !== 'otto-agent007' ||
+    parts[1] !== 'GameDevStuff' ||
+    parts[2] !== 'releases' ||
+    parts[3] !== 'tag' ||
+    parts[4] !== encodeURIComponent(tag) ||
+    decodeURIComponent(parts[4]) !== tag
+  )
+    invalid();
 }
 
 function immutableAssetUrl(value, tag, archiveName) {
   assertUrl(value);
   const parsed = new URL(value);
   const parts = parsed.pathname.split('/').filter(Boolean);
-  if (parsed.hostname !== 'github.com' || parsed.username || parsed.password || parsed.port || parsed.search || parsed.hash ||
-    parts.length !== 6 || parts[0] !== 'otto-agent007' || parts[1] !== 'GameDevStuff' || parts[2] !== 'releases' || parts[3] !== 'download' ||
-    parts[4] !== encodeURIComponent(tag) || decodeURIComponent(parts[4]) !== tag || parts[5] !== encodeURIComponent(archiveName) || decodeURIComponent(parts[5]) !== archiveName) invalid();
+  if (
+    parsed.hostname !== 'github.com' ||
+    parsed.username ||
+    parsed.password ||
+    parsed.port ||
+    parsed.search ||
+    parsed.hash ||
+    parts.length !== 6 ||
+    parts[0] !== 'otto-agent007' ||
+    parts[1] !== 'GameDevStuff' ||
+    parts[2] !== 'releases' ||
+    parts[3] !== 'download' ||
+    parts[4] !== encodeURIComponent(tag) ||
+    decodeURIComponent(parts[4]) !== tag ||
+    parts[5] !== encodeURIComponent(archiveName) ||
+    decodeURIComponent(parts[5]) !== archiveName
+  )
+    invalid();
 }
 
 function assertBasename(value) {
@@ -68,14 +100,28 @@ function assertBasename(value) {
 }
 
 function validateAsset(asset, target, tag) {
-  assertClosedObject(asset, ['url', 'archiveName', 'archiveFormat', 'archiveSize', 'archiveSha256', 'executable', 'executableSize', 'executableSha256']);
+  assertClosedObject(asset, [
+    'url',
+    'archiveName',
+    'archiveFormat',
+    'archiveSize',
+    'archiveSha256',
+    'executable',
+    'executableSize',
+    'executableSha256'
+  ]);
   assertBasename(asset.archiveName);
   immutableAssetUrl(asset.url, tag, asset.archiveName);
   if (asset.archiveFormat !== (target === 'windows-x64' ? 'zip' : 'tar.gz')) invalid();
   assertSize(asset.archiveSize);
   assertHash(asset.archiveSha256);
   assertBasename(asset.executable);
-  if (target === 'windows-x64' ? !asset.executable.toLowerCase().endsWith('.exe') : asset.executable.toLowerCase().endsWith('.exe')) invalid();
+  if (
+    target === 'windows-x64'
+      ? !asset.executable.toLowerCase().endsWith('.exe')
+      : asset.executable.toLowerCase().endsWith('.exe')
+  )
+    invalid();
   assertSize(asset.executableSize);
   assertHash(asset.executableSha256);
 }
@@ -100,7 +146,8 @@ export function validateToolManifest(input) {
 
   assertClosedObject(input.release, ['tag', 'url']);
   assertString(input.release.tag);
-  if (!/^pixel-snapper-v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?-commit\.[a-f0-9]{7,40}$/.test(input.release.tag)) invalid();
+  if (!/^pixel-snapper-v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?-commit\.[a-f0-9]{7,40}$/.test(input.release.tag))
+    invalid();
   immutableReleaseUrl(input.release.url, input.release.tag);
 
   assertClosedObject(input.upstream, ['repository', 'version', 'commit']);
@@ -123,7 +170,8 @@ export function validateToolManifest(input) {
 }
 
 export function selectToolAsset(manifest, platform) {
-  if (!TARGET_KEYS.includes(platform) || !manifest?.assets?.[platform]) throw new Error(`unsupported Pixel Snapper target: ${platform}`);
+  if (!TARGET_KEYS.includes(platform) || !manifest?.assets?.[platform])
+    throw new Error(`unsupported Pixel Snapper target: ${platform}`);
   return manifest.assets[platform];
 }
 

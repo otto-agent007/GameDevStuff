@@ -29,11 +29,13 @@
 ### Task 1: Replay transport behavior
 
 **Files:**
+
 - Modify: `skills/game-character-pipeline/tests/browser/frame-studio.spec.mjs`
 - Modify: `skills/game-character-pipeline/studio/index.html`
 - Modify: `skills/game-character-pipeline/studio/app.mjs`
 
 **Interfaces:**
+
 - Consumes: existing `frames`, `selectedIndex`, `playing`, `playbackTimer`, `selectFrame(index)`, `stopPlayback()`, and `scheduleNext()` playback state.
 - Produces: `startPlayback({ fromStart?: boolean }): void` and the native `#replay` button.
 

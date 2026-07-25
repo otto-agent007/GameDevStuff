@@ -7,11 +7,11 @@ media.
 
 ## Runtime and development dependencies
 
-| Dependency | License | Use | Distribution disposition |
-|---|---|---|---|
-| commander 15.0.0 | MIT | CLI parsing | Source dependency declared in the lockfile; not vendored. |
-| sharp 0.35.3 | Apache-2.0 | Lossless image decoding and encoding | Source dependency declared in the lockfile; prebuilt libvips components retain their upstream LGPL and other notices and are not included by `npm pack`. |
-| @playwright/test 1.61.1 | Apache-2.0 | Frame Studio browser tests | Development-only dependency. Version 1.61.1 excludes the certificate-verification vulnerability affecting versions below 1.55.1. Downloaded browsers and test artifacts are excluded from `npm pack` and releases. |
+| Dependency              | License    | Use                                  | Distribution disposition                                                                                                                                                                                           |
+| ----------------------- | ---------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| commander 15.0.0        | MIT        | CLI parsing                          | Source dependency declared in the lockfile; not vendored.                                                                                                                                                          |
+| sharp 0.35.3            | Apache-2.0 | Lossless image decoding and encoding | Source dependency declared in the lockfile; prebuilt libvips components retain their upstream LGPL and other notices and are not included by `npm pack`.                                                           |
+| @playwright/test 1.61.1 | Apache-2.0 | Frame Studio browser tests           | Development-only dependency. Version 1.61.1 excludes the certificate-verification vulnerability affecting versions below 1.55.1. Downloaded browsers and test artifacts are excluded from `npm pack` and releases. |
 
 ## Selective donor policy
 

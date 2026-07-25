@@ -7,14 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const packageRoot = fileURLToPath(new URL('../', import.meta.url));
 const codexRoot = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
-const validator = path.join(
-  codexRoot,
-  'skills',
-  '.system',
-  'skill-creator',
-  'scripts',
-  'quick_validate.py'
-);
+const validator = path.join(codexRoot, 'skills', '.system', 'skill-creator', 'scripts', 'quick_validate.py');
 
 if (!fs.existsSync(validator)) {
   process.stderr.write(`official skill validator is not installed: ${validator}\n`);

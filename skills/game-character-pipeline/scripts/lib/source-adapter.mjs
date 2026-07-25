@@ -48,7 +48,7 @@ async function verifyFrameArtifact(runRoot, frame) {
   if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new Error('motion source frame escaped the run root');
   }
-  if (await sha256File(selected) !== frame.sha256) throw new Error('motion source frame hash mismatch');
+  if ((await sha256File(selected)) !== frame.sha256) throw new Error('motion source frame hash mismatch');
 }
 
 export function registerSourceAdapter(kind, decode) {
@@ -71,7 +71,10 @@ export async function validateMotionSourceResult(value, { run, expectedKind } = 
   exactObject(result.decoder, ['name', 'version', 'arguments'], 'motion source decoder');
   string(result.decoder.name, 'motion source decoder name');
   string(result.decoder.version, 'motion source decoder version');
-  if (!Array.isArray(result.decoder.arguments) || result.decoder.arguments.some((argument) => typeof argument !== 'string')) {
+  if (
+    !Array.isArray(result.decoder.arguments) ||
+    result.decoder.arguments.some((argument) => typeof argument !== 'string')
+  ) {
     throw new Error('motion source decoder arguments must be strings');
   }
   exactObject(result.canvas, ['width', 'height'], 'motion source canvas');
@@ -101,7 +104,8 @@ export async function validateMotionSourceResult(value, { run, expectedKind } = 
     }
     integer(frame.timestampMs, 'motion source frame timestampMs', { min: 0 });
     integer(frame.durationMs, 'motion source frame durationMs', { min: 1, max: 65535 });
-    if (frame.timestampMs !== nextTimestamp) throw new Error('motion source frame timestamps must preserve ordered durations');
+    if (frame.timestampMs !== nextTimestamp)
+      throw new Error('motion source frame timestamps must preserve ordered durations');
     nextTimestamp += frame.durationMs;
     exactObject(frame.sourceRect, ['x', 'y', 'width', 'height'], 'motion source frame sourceRect');
     integer(frame.sourceRect.x, 'motion source frame sourceRect x', { min: 0 });
@@ -111,7 +115,8 @@ export async function validateMotionSourceResult(value, { run, expectedKind } = 
     if (
       frame.sourceRect.x + frame.sourceRect.width > result.canvas.width ||
       frame.sourceRect.y + frame.sourceRect.height > result.canvas.height
-    ) throw new Error('motion source frame sourceRect exceeds the canvas');
+    )
+      throw new Error('motion source frame sourceRect exceeds the canvas');
     if (frame.duplicateOf !== null && (!seenIds.has(frame.duplicateOf) || frame.duplicateOf === frame.id)) {
       throw new Error('motion source duplicateOf must reference an earlier frame');
     }
@@ -123,7 +128,8 @@ export async function validateMotionSourceResult(value, { run, expectedKind } = 
   if (!Array.isArray(result.diagnostics)) throw new Error('motion source diagnostics must be an array');
   for (const diagnostic of result.diagnostics) {
     exactObject(diagnostic, ['code', 'frameId'], 'motion source diagnostic');
-    if (!DIAGNOSTICS.has(diagnostic.code)) throw new Error(`motion source diagnostic code is invalid: ${diagnostic.code}`);
+    if (!DIAGNOSTICS.has(diagnostic.code))
+      throw new Error(`motion source diagnostic code is invalid: ${diagnostic.code}`);
     if (diagnostic.frameId !== null && !seenIds.has(diagnostic.frameId)) {
       throw new Error('motion source diagnostic references an unknown frame');
     }
@@ -134,7 +140,8 @@ export async function validateMotionSourceResult(value, { run, expectedKind } = 
 export async function decodeMotionSource({ kind, source, run, project, options = {} }) {
   const decode = adapters.get(kind);
   if (!decode) throw new Error(`unregistered motion source kind: ${kind}`);
-  if (run?.document?.sourceRequest?.kind !== kind) throw new Error('motion source kind does not match the immutable run request');
+  if (run?.document?.sourceRequest?.kind !== kind)
+    throw new Error('motion source kind does not match the immutable run request');
   const candidate = await decode({ kind, source, run, project, options });
   const result = await validateMotionSourceResult(candidate, { run, expectedKind: kind });
   await writeImmutableJson({ root: run.root, relative: 'reports/source.json', value: result, reuse: true });

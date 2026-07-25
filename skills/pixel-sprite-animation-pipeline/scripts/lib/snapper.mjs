@@ -16,20 +16,37 @@ function snapperConfig(config) {
 function commandArguments(input, output, config, paletteHex, pixelSize) {
   const options = (snapperConfig(config).args ?? []).filter((argument) => String(argument) !== '16');
   if (pixelSize !== undefined) {
-    if (!Number.isInteger(pixelSize) || pixelSize < 1) throw new Error('contracted Pixel Snapper pixel size must be a positive integer');
-    if (options.includes('--pixel-size')) throw new Error('contracted Pixel Snapper pixel size conflicts with configured arguments');
+    if (!Number.isInteger(pixelSize) || pixelSize < 1)
+      throw new Error('contracted Pixel Snapper pixel size must be a positive integer');
+    if (options.includes('--pixel-size'))
+      throw new Error('contracted Pixel Snapper pixel size conflicts with configured arguments');
     options.push('--pixel-size', String(pixelSize));
   }
   if (paletteHex === undefined) return [input, output, '16', ...options];
-  if (!Array.isArray(paletteHex) || paletteHex.length === 0 || paletteHex.length > 16 || paletteHex.some((color) => !/^[0-9a-fA-F]{6}$/.test(color))) throw new Error('contract palette must contain 1-16 six-digit hex colors');
-  if (options.includes('--palette')) throw new Error('contract palette conflicts with configured Pixel Snapper palette arguments');
+  if (
+    !Array.isArray(paletteHex) ||
+    paletteHex.length === 0 ||
+    paletteHex.length > 16 ||
+    paletteHex.some((color) => !/^[0-9a-fA-F]{6}$/.test(color))
+  )
+    throw new Error('contract palette must contain 1-16 six-digit hex colors');
+  if (options.includes('--palette'))
+    throw new Error('contract palette conflicts with configured Pixel Snapper palette arguments');
   return [input, output, '16', ...options, '--palette', paletteHex.join(',')];
 }
 
 function validateOutputCanvas(canvas) {
   if (canvas === undefined) return null;
-  if (!canvas || typeof canvas !== 'object' || Array.isArray(canvas) || Object.keys(canvas).sort().join(',') !== 'height,width' ||
-    !Number.isInteger(canvas.width) || canvas.width < 1 || !Number.isInteger(canvas.height) || canvas.height < 1) {
+  if (
+    !canvas ||
+    typeof canvas !== 'object' ||
+    Array.isArray(canvas) ||
+    Object.keys(canvas).sort().join(',') !== 'height,width' ||
+    !Number.isInteger(canvas.width) ||
+    canvas.width < 1 ||
+    !Number.isInteger(canvas.height) ||
+    canvas.height < 1
+  ) {
     throw new Error('contracted Pixel Snapper output canvas must use positive integer width and height');
   }
   return { width: canvas.width, height: canvas.height };
@@ -38,7 +55,8 @@ function validateOutputCanvas(canvas) {
 async function canonicalizeOutputCanvas(file, canvas) {
   if (!canvas) return;
   const stat = await fs.lstat(file);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new Error('Pixel Snapper output must be a regular single-link file');
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1)
+    throw new Error('Pixel Snapper output must be a regular single-link file');
   const { data, info } = await sharp(file).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   if (info.width === canvas.width && info.height === canvas.height) return;
   for (let y = 0; y < info.height; y += 1) {
@@ -75,15 +93,29 @@ function outputFor(input, outputDir) {
 
 function alignedSourceContract(value) {
   if (value === undefined) return null;
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).sort().join(',') !== 'canvas,paletteRgba,paletteSha256,scale') throw new Error('aligned source contract schema is invalid');
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).sort().join(',') !== 'canvas,paletteRgba,paletteSha256,scale'
+  )
+    throw new Error('aligned source contract schema is invalid');
   const canvas = validateOutputCanvas(value.canvas);
-  if (!Number.isInteger(value.scale) || value.scale < 1) throw new Error('aligned source scale must be a positive integer');
-  if (!Array.isArray(value.paletteRgba) || value.paletteRgba.length === 0 || value.paletteRgba.length > 17) throw new Error('aligned source palette is invalid');
+  if (!Number.isInteger(value.scale) || value.scale < 1)
+    throw new Error('aligned source scale must be a positive integer');
+  if (!Array.isArray(value.paletteRgba) || value.paletteRgba.length === 0 || value.paletteRgba.length > 17)
+    throw new Error('aligned source palette is invalid');
   const paletteRgba = value.paletteRgba.map((color) => {
-    if (!Array.isArray(color) || color.length !== 4 || color.some((component) => !Number.isInteger(component) || component < 0 || component > 255)) throw new Error('aligned source palette is invalid');
+    if (
+      !Array.isArray(color) ||
+      color.length !== 4 ||
+      color.some((component) => !Number.isInteger(component) || component < 0 || component > 255)
+    )
+      throw new Error('aligned source palette is invalid');
     return [...color];
   });
-  if (new Set(paletteRgba.map((color) => color.join(','))).size !== paletteRgba.length) throw new Error('aligned source palette contains duplicate colors');
+  if (new Set(paletteRgba.map((color) => color.join(','))).size !== paletteRgba.length)
+    throw new Error('aligned source palette contains duplicate colors');
   const paletteSha256 = crypto.createHash('sha256').update(JSON.stringify(paletteRgba)).digest('hex');
   if (value.paletteSha256 !== paletteSha256) throw new Error('aligned source palette hash mismatch');
   return { scale: value.scale, canvas, paletteRgba, paletteSha256 };
@@ -97,17 +129,20 @@ async function alignedSourcePlans(inputs, outputDir, contract) {
     if (source.info.channels !== 4) return null;
     sources.push({ input, ...source });
   }
-  const canonical = sources.every(({ info }) =>
-    info.width === contract.canvas.width && info.height === contract.canvas.height);
-  const scaled = sources.every(({ info }) =>
-    info.width === contract.canvas.width * contract.scale &&
-    info.height === contract.canvas.height * contract.scale);
+  const canonical = sources.every(
+    ({ info }) => info.width === contract.canvas.width && info.height === contract.canvas.height
+  );
+  const scaled = sources.every(
+    ({ info }) =>
+      info.width === contract.canvas.width * contract.scale && info.height === contract.canvas.height * contract.scale
+  );
   if (!canonical && !scaled) return null;
 
   const plans = [];
   if (canonical) {
     const opaquePalette = contract.paletteRgba.filter((color) => color[3] === 255);
-    if (opaquePalette.length === 0 || contract.paletteRgba.some((color) => color[3] !== 0 && color[3] !== 255)) return null;
+    if (opaquePalette.length === 0 || contract.paletteRgba.some((color) => color[3] !== 0 && color[3] !== 255))
+      return null;
     let requiresRemap = false;
     for (const { input, data } of sources) {
       const normalized = Buffer.alloc(data.length);
@@ -127,9 +162,8 @@ async function alignedSourcePlans(inputs, outputDir, contract) {
         let nearest = opaquePalette[0];
         let nearestDistance = Number.POSITIVE_INFINITY;
         for (const candidate of opaquePalette) {
-          const distance = (color[0] - candidate[0]) ** 2 +
-            (color[1] - candidate[1]) ** 2 +
-            (color[2] - candidate[2]) ** 2;
+          const distance =
+            (color[0] - candidate[0]) ** 2 + (color[1] - candidate[1]) ** 2 + (color[2] - candidate[2]) ** 2;
           if (distance < nearestDistance) {
             nearest = candidate;
             nearestDistance = distance;
@@ -202,16 +236,17 @@ async function runAlignedSource({ inputs, outputDir, contract, receipt }) {
     expectedInputs: inputs,
     expectedDerivation: derivation
   });
-  if (existing) return {
-    status: 'complete',
-    origin: 'verified-aligned-source',
-    executable: null,
-    identity: null,
-    outputs: existing.document.payload.outputs.map((item) => path.resolve(path.dirname(receiptFile), item.path)),
-    handoffPath: null,
-    receipt: { path: receiptFile, sha256: existing.sha256, signature: existing.document.signature },
-    recoveredExistingReceipt: true
-  };
+  if (existing)
+    return {
+      status: 'complete',
+      origin: 'verified-aligned-source',
+      executable: null,
+      identity: null,
+      outputs: existing.document.payload.outputs.map((item) => path.resolve(path.dirname(receiptFile), item.path)),
+      handoffPath: null,
+      receipt: { path: receiptFile, sha256: existing.sha256, signature: existing.document.signature },
+      recoveredExistingReceipt: true
+    };
   try {
     await fs.mkdir(outputDir, { recursive: false, mode: 0o700 });
   } catch (error) {
@@ -219,7 +254,9 @@ async function runAlignedSource({ inputs, outputDir, contract, receipt }) {
     throw new Error('aligned source output directory already exists without its signed receipt');
   }
   for (const plan of plans) {
-    await sharp(plan.data, { raw: { width: contract.canvas.width, height: contract.canvas.height, channels: 4 } }).png().toFile(plan.output);
+    await sharp(plan.data, { raw: { width: contract.canvas.width, height: contract.canvas.height, channels: 4 } })
+      .png()
+      .toFile(plan.output);
   }
   const published = await writeAlignedSourceReceipt({
     projectDir: receipt.projectDir,
@@ -242,7 +279,14 @@ async function runAlignedSource({ inputs, outputDir, contract, receipt }) {
 
 export async function detectPixelSnapper(config, options = {}) {
   const env = options.env ?? process.env;
-  if (!options.manifest) return { available: false, executable: env.PIXEL_SNAPPER_BIN || snapperConfig(config).executable, probeStatus: null, error: 'pinned Pixel Snapper manifest is required', identity: null };
+  if (!options.manifest)
+    return {
+      available: false,
+      executable: env.PIXEL_SNAPPER_BIN || snapperConfig(config).executable,
+      probeStatus: null,
+      error: 'pinned Pixel Snapper manifest is required',
+      identity: null
+    };
   const identity = await resolvePixelSnapper({
     projectDir: options.projectDir ?? process.cwd(),
     config,
@@ -251,7 +295,8 @@ export async function detectPixelSnapper(config, options = {}) {
     env,
     pathValue: options.pathValue
   });
-  const pinned = identity !== null &&
+  const pinned =
+    identity !== null &&
     identity.pinnedReleaseTag === options.manifest.release.tag &&
     identity.upstreamCommit === options.manifest.upstream.commit;
   return {
@@ -269,58 +314,133 @@ export async function writeSnapperHandoff({ inputs, outputDir, config, paletteHe
   const expectedOutputs = inputs.map((input) => path.basename(outputFor(input, outputDir)));
   const handoffPath = path.join(outputDir, 'pixel-snapper-handoff.json');
   const resumeCommand = `pixel-sprite-pipeline normalize --frames ${outputDir}`;
-  await fs.writeFile(handoffPath, JSON.stringify({
-    version: 1,
-    origin: 'manual-handoff',
-    toolProvenanceVerified: false,
-    binary: null,
-    arguments: null,
-    executable,
-    sourceInputs: inputs,
-    inputs,
-    expectedOutputs,
-    commandTemplate: [executable, '<INPUT>', '<OUTPUT>', ...commandArguments('<INPUT>', '<OUTPUT>', config, paletteHex, pixelSize).slice(2)],
-    resumeCommand
-  }, null, 2));
+  await fs.writeFile(
+    handoffPath,
+    JSON.stringify(
+      {
+        version: 1,
+        origin: 'manual-handoff',
+        toolProvenanceVerified: false,
+        binary: null,
+        arguments: null,
+        executable,
+        sourceInputs: inputs,
+        inputs,
+        expectedOutputs,
+        commandTemplate: [
+          executable,
+          '<INPUT>',
+          '<OUTPUT>',
+          ...commandArguments('<INPUT>', '<OUTPUT>', config, paletteHex, pixelSize).slice(2)
+        ],
+        resumeCommand
+      },
+      null,
+      2
+    )
+  );
   return { status: 'manual-handoff', executable, outputs: [], handoffPath };
 }
 
-export async function runPixelSnapper({ inputs, outputDir, config, paletteHex, pixelSize, outputCanvas, alignedSource, identity = null, resolverOptions = {}, receipt = null }) {
+export async function runPixelSnapper({
+  inputs,
+  outputDir,
+  config,
+  paletteHex,
+  pixelSize,
+  outputCanvas,
+  alignedSource,
+  identity = null,
+  resolverOptions = {},
+  receipt = null
+}) {
   const contractedCanvas = validateOutputCanvas(outputCanvas);
-  const aligned = await runAlignedSource({ inputs, outputDir, contract: alignedSourceContract(alignedSource), receipt });
+  const aligned = await runAlignedSource({
+    inputs,
+    outputDir,
+    contract: alignedSourceContract(alignedSource),
+    receipt
+  });
   if (aligned) return aligned;
-  const detection = identity ? { available: true, executable: identity.physicalPath, identity } : await detectPixelSnapper(config, resolverOptions);
-  if (!detection.available) return writeSnapperHandoff({ inputs, outputDir, config, paletteHex, pixelSize, env: resolverOptions.env ?? process.env });
+  const detection = identity
+    ? { available: true, executable: identity.physicalPath, identity }
+    : await detectPixelSnapper(config, resolverOptions);
+  if (!detection.available)
+    return writeSnapperHandoff({
+      inputs,
+      outputDir,
+      config,
+      paletteHex,
+      pixelSize,
+      env: resolverOptions.env ?? process.env
+    });
 
   const argumentsForReceipt = commandArguments('<INPUT>', '<OUTPUT>', config, paletteHex, pixelSize).slice(2);
   if (receipt) {
     const receiptOutputDir = receipt.run?.outputDir ?? receipt.run?.runDir;
     const receiptFile = receipt.durableReceiptFile ?? path.join(outputDir, 'snap-receipt.json');
-    if (!receipt.durableReceiptFile && path.resolve(receiptOutputDir) !== path.resolve(outputDir)) throw new Error('snap receipt output directory must match Pixel Snapper output directory');
+    if (!receipt.durableReceiptFile && path.resolve(receiptOutputDir) !== path.resolve(outputDir))
+      throw new Error('snap receipt output directory must match Pixel Snapper output directory');
     const existing = await verifyExistingSnapReceipt({
-      projectDir: receipt.projectDir, file: receiptFile, expectedRun: receipt.run,
-      expectedContract: receipt.contract, expectedInputs: inputs, expectedArgs: argumentsForReceipt, expectedIdentity: detection.identity
+      projectDir: receipt.projectDir,
+      file: receiptFile,
+      expectedRun: receipt.run,
+      expectedContract: receipt.contract,
+      expectedInputs: inputs,
+      expectedArgs: argumentsForReceipt,
+      expectedIdentity: detection.identity
     });
-    if (existing) return { status: 'complete', executable: detection.identity.path, identity: detection.identity, outputs: existing.document.payload.outputs.map((item) => path.resolve(path.dirname(receiptFile), item.path)), handoffPath: null, receipt: { path: receiptFile, sha256: existing.sha256, signature: existing.document.signature }, recoveredExistingReceipt: true };
+    if (existing)
+      return {
+        status: 'complete',
+        executable: detection.identity.path,
+        identity: detection.identity,
+        outputs: existing.document.payload.outputs.map((item) => path.resolve(path.dirname(receiptFile), item.path)),
+        handoffPath: null,
+        receipt: { path: receiptFile, sha256: existing.sha256, signature: existing.document.signature },
+        recoveredExistingReceipt: true
+      };
   }
 
   await fs.mkdir(outputDir, { recursive: true });
   const outputs = [];
   for (const input of inputs) {
     const output = outputFor(input, outputDir);
-    const result = spawnSync(detection.identity.physicalPath, commandArguments(input, output, config, paletteHex, pixelSize), {
-      encoding: 'utf8',
-      shell: false
-    });
+    const result = spawnSync(
+      detection.identity.physicalPath,
+      commandArguments(input, output, config, paletteHex, pixelSize),
+      {
+        encoding: 'utf8',
+        shell: false
+      }
+    );
     if (result.status !== 0) {
-      throw new Error(`Pixel Snapper failed for ${input}: ${result.stderr || result.error?.message || `exit status ${result.status}`}`);
+      throw new Error(
+        `Pixel Snapper failed for ${input}: ${result.stderr || result.error?.message || `exit status ${result.status}`}`
+      );
     }
     await canonicalizeOutputCanvas(output, contractedCanvas);
     outputs.push(output);
   }
-  const published = receipt ? await writeSnapReceipt({
-    projectDir: receipt.projectDir, run: receipt.run, contract: receipt.contract, inputs, outputs,
-    args: argumentsForReceipt, identity: detection.identity
-  }) : null;
-  return { status: 'complete', executable: detection.identity.path, identity: detection.identity, outputs, handoffPath: null, ...(published ? { receipt: { path: published.path, sha256: published.sha256, signature: published.document.signature } } : {}) };
+  const published = receipt
+    ? await writeSnapReceipt({
+        projectDir: receipt.projectDir,
+        run: receipt.run,
+        contract: receipt.contract,
+        inputs,
+        outputs,
+        args: argumentsForReceipt,
+        identity: detection.identity
+      })
+    : null;
+  return {
+    status: 'complete',
+    executable: detection.identity.path,
+    identity: detection.identity,
+    outputs,
+    handoffPath: null,
+    ...(published
+      ? { receipt: { path: published.path, sha256: published.sha256, signature: published.document.signature } }
+      : {})
+  };
 }

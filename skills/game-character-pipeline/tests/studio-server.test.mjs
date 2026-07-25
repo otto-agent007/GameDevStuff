@@ -30,7 +30,9 @@ async function studioFixture(t) {
   });
   const png = await sharp({
     create: { width: 2, height: 2, channels: 4, background: { r: 40, g: 80, b: 120, alpha: 0.75 } }
-  }).png().toBuffer();
+  })
+    .png()
+    .toBuffer();
   const frame = await writeImmutableBytes({
     root: run.root,
     relative: 'work/decoded/studio-frame.png',
@@ -43,18 +45,20 @@ async function studioFixture(t) {
     canvas: { width: 2, height: 2 },
     alpha: true,
     timeBase: { numerator: 1, denominator: 1000 },
-    frames: [{
-      index: 0,
-      id: 'studio-frame',
-      path: frame.relative,
-      sha256: frame.sha256,
-      width: 2,
-      height: 2,
-      timestampMs: 0,
-      durationMs: 100,
-      sourceRect: { x: 0, y: 0, width: 2, height: 2 },
-      duplicateOf: null
-    }],
+    frames: [
+      {
+        index: 0,
+        id: 'studio-frame',
+        path: frame.relative,
+        sha256: frame.sha256,
+        width: 2,
+        height: 2,
+        timestampMs: 0,
+        durationMs: 100,
+        sourceRect: { x: 0, y: 0, width: 2, height: 2 },
+        duplicateOf: null
+      }
+    ],
     diagnostics: [{ code: 'ALPHA_PRESENT', frameId: null }],
     approval: null
   };
@@ -84,18 +88,20 @@ function validStudioEdit(fixture) {
     projectSha256: fixture.project.sha256,
     sourceSha256: sha256Value(fixture.manifest),
     actionId: 'idle',
-    frames: [{
-      frameId: 'studio-frame',
-      included: true,
-      label: 'reviewed',
-      durationMs: 100,
-      translation: { x: 0, y: 0 },
-      transform: null,
-      markers: [],
-      contacts: [],
-      groundTravel: { x: 0, y: 0 },
-      tracks: ['actor', 'satchel']
-    }]
+    frames: [
+      {
+        frameId: 'studio-frame',
+        included: true,
+        label: 'reviewed',
+        durationMs: 100,
+        translation: { x: 0, y: 0 },
+        transform: null,
+        markers: [],
+        contacts: [],
+        groundTravel: { x: 0, y: 0 },
+        tracks: ['actor', 'satchel']
+      }
+    ]
   };
 }
 
@@ -110,12 +116,19 @@ test('studio binds only to loopback and exposes a hash-bound session', async (t)
     /studio stage/
   );
 
-  const studio = await startStudioServer({ projectDir: fixture.projectRoot, runId: fixture.run.id, stage: 'selection' });
+  const studio = await startStudioServer({
+    projectDir: fixture.projectRoot,
+    runId: fixture.run.id,
+    stage: 'selection'
+  });
   t.after(() => studio.close());
   assert.match(studio.origin, /^http:\/\/127\.0\.0\.1:\d+$/);
   const { response, body } = await responseJson(`${studio.origin}/api/session`);
   assert.equal(response.status, 200);
-  assert.equal(response.headers.get('content-security-policy'), "default-src 'self'; img-src 'self' blob:; connect-src 'self'");
+  assert.equal(
+    response.headers.get('content-security-policy'),
+    "default-src 'self'; img-src 'self' blob:; connect-src 'self'"
+  );
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.equal(body.runId, fixture.run.id);
@@ -151,7 +164,11 @@ test('studio close terminates active client connections', async (t) => {
 
 test('studio serves only immutable frames allowlisted by the review manifest', async (t) => {
   const fixture = await studioFixture(t);
-  const studio = await startStudioServer({ projectDir: fixture.projectRoot, runId: fixture.run.id, stage: 'selection' });
+  const studio = await startStudioServer({
+    projectDir: fixture.projectRoot,
+    runId: fixture.run.id,
+    stage: 'selection'
+  });
   t.after(() => studio.close());
 
   const frame = await fetch(`${studio.origin}/api/frame/${fixture.frame.sha256}`);
@@ -216,27 +233,46 @@ test('studio exposes a validated comparison working edit without changing saved 
 
 test('studio rejects unsafe methods, content types, origins, bodies, and stale edits', async (t) => {
   const fixture = await studioFixture(t);
-  const studio = await startStudioServer({ projectDir: fixture.projectRoot, runId: fixture.run.id, stage: 'selection' });
+  const studio = await startStudioServer({
+    projectDir: fixture.projectRoot,
+    runId: fixture.run.id,
+    stage: 'selection'
+  });
   t.after(() => studio.close());
   const session = (await responseJson(`${studio.origin}/api/session`)).body;
 
   assert.equal((await fetch(`${studio.origin}/api/session`, { method: 'POST' })).status, 405);
   assert.equal((await fetch(`${studio.origin}/api/edits`, { method: 'DELETE' })).status, 405);
-  assert.equal((await fetch(`${studio.origin}/api/edits`, {
-    method: 'PUT',
-    headers: { Origin: studio.origin, 'If-Match': session.editSha256 },
-    body: '{}'
-  })).status, 415);
-  assert.equal((await fetch(`${studio.origin}/api/edits`, {
-    method: 'PUT',
-    headers: mutationHeaders('https://attacker.invalid', session.editSha256),
-    body: '{}'
-  })).status, 403);
-  assert.equal((await fetch(`${studio.origin}/api/edits`, {
-    method: 'PUT',
-    headers: mutationHeaders(studio.origin, session.editSha256),
-    body: JSON.stringify({ payload: 'x'.repeat(1024 * 1024) })
-  })).status, 413);
+  assert.equal(
+    (
+      await fetch(`${studio.origin}/api/edits`, {
+        method: 'PUT',
+        headers: { Origin: studio.origin, 'If-Match': session.editSha256 },
+        body: '{}'
+      })
+    ).status,
+    415
+  );
+  assert.equal(
+    (
+      await fetch(`${studio.origin}/api/edits`, {
+        method: 'PUT',
+        headers: mutationHeaders('https://attacker.invalid', session.editSha256),
+        body: '{}'
+      })
+    ).status,
+    403
+  );
+  assert.equal(
+    (
+      await fetch(`${studio.origin}/api/edits`, {
+        method: 'PUT',
+        headers: mutationHeaders(studio.origin, session.editSha256),
+        body: JSON.stringify({ payload: 'x'.repeat(1024 * 1024) })
+      })
+    ).status,
+    413
+  );
 
   const edit = { schemaVersion: 1, frames: [{ frameId: 'studio-frame', included: true }] };
   const first = await responseJson(`${studio.origin}/api/edits`, {
@@ -263,14 +299,19 @@ test('studio rejects unsafe methods, content types, origins, bodies, and stale e
 
 test('studio serializes concurrent edits so one stale writer loses', async (t) => {
   const fixture = await studioFixture(t);
-  const studio = await startStudioServer({ projectDir: fixture.projectRoot, runId: fixture.run.id, stage: 'selection' });
+  const studio = await startStudioServer({
+    projectDir: fixture.projectRoot,
+    runId: fixture.run.id,
+    stage: 'selection'
+  });
   t.after(() => studio.close());
   const session = (await responseJson(`${studio.origin}/api/session`)).body;
-  const request = (label) => fetch(`${studio.origin}/api/edits`, {
-    method: 'PUT',
-    headers: mutationHeaders(studio.origin, session.editSha256),
-    body: JSON.stringify({ schemaVersion: 1, label })
-  });
+  const request = (label) =>
+    fetch(`${studio.origin}/api/edits`, {
+      method: 'PUT',
+      headers: mutationHeaders(studio.origin, session.editSha256),
+      body: JSON.stringify({ schemaVersion: 1, label })
+    });
   const responses = await Promise.all([request('first'), request('second')]);
   assert.deepEqual(responses.map(({ status }) => status).sort(), [200, 409]);
   assert.deepEqual(await fs.readdir(path.join(fixture.run.root, 'edits')), ['studio-edit-0001.json']);
@@ -278,7 +319,11 @@ test('studio serializes concurrent edits so one stale writer loses', async (t) =
 
 test('studio render and approval endpoints bind immutable derivatives to the current edit', async (t) => {
   const fixture = await studioFixture(t);
-  const studio = await startStudioServer({ projectDir: fixture.projectRoot, runId: fixture.run.id, stage: 'selection' });
+  const studio = await startStudioServer({
+    projectDir: fixture.projectRoot,
+    runId: fixture.run.id,
+    stage: 'selection'
+  });
   t.after(() => studio.close());
   const session = (await responseJson(`${studio.origin}/api/session`)).body;
   const saved = await responseJson(`${studio.origin}/api/edits`, {
@@ -303,7 +348,10 @@ test('studio render and approval endpoints bind immutable derivatives to the cur
   assert.equal(approval.body.revision, 1);
   assert.match(approval.body.sha256, /^[a-f0-9]{64}$/);
   assert.equal(approval.body.renderSha256, rendered.body.renderSha256);
-  assert.equal((await fs.lstat(path.join(fixture.run.root, 'approved', 'selection-approval-0001.json'))).isFile(), true);
+  assert.equal(
+    (await fs.lstat(path.join(fixture.run.root, 'approved', 'selection-approval-0001.json'))).isFile(),
+    true
+  );
 });
 
 test('post-snap studio keeps a separate immutable edit chain from selection review', async (t) => {
@@ -361,12 +409,11 @@ test('post-snap studio keeps a separate immutable edit chain from selection revi
 
 test('studio CLI prints readiness once and closes on SIGTERM without edits', async (t) => {
   const fixture = await studioFixture(t);
-  const child = spawn(process.execPath, [
-    cliPath,
-    'studio',
-    '--project-dir', fixture.projectRoot,
-    '--run', fixture.run.id
-  ], { cwd: packageDir, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(
+    process.execPath,
+    [cliPath, 'studio', '--project-dir', fixture.projectRoot, '--run', fixture.run.id],
+    { cwd: packageDir, stdio: ['ignore', 'pipe', 'pipe'] }
+  );
   t.after(() => {
     if (child.exitCode === null) child.kill('SIGKILL');
   });
@@ -374,8 +421,12 @@ test('studio CLI prints readiness once and closes on SIGTERM without edits', asy
   let stderr = '';
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (chunk) => { stdout += chunk; });
-  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  child.stdout.on('data', (chunk) => {
+    stdout += chunk;
+  });
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
   const ready = await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error(`studio CLI readiness timeout: ${stderr}`)), 3000);
     child.stdout.on('data', () => {

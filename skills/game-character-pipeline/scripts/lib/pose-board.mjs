@@ -3,29 +3,22 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
-import {
-  copyImmutable,
-  writeImmutableBytes,
-  writeImmutableJson
-} from './artifacts.mjs';
-import {
-  analyzePoseBoard,
-  renderRecoveredCandidate
-} from './pose-board-recovery.mjs';
+import { copyImmutable, writeImmutableBytes, writeImmutableJson } from './artifacts.mjs';
+import { analyzePoseBoard, renderRecoveredCandidate } from './pose-board-recovery.mjs';
 import { loadApprovedPoseSelection } from './pose-selection.mjs';
 import { sha256Value } from './schema.mjs';
 
 const DIGITS = Object.freeze({
-  '0': ['111', '101', '101', '101', '111'],
-  '1': ['010', '110', '010', '010', '111'],
-  '2': ['111', '001', '111', '100', '111'],
-  '3': ['111', '001', '111', '001', '111'],
-  '4': ['101', '101', '111', '001', '001'],
-  '5': ['111', '100', '111', '001', '111'],
-  '6': ['111', '100', '111', '101', '111'],
-  '7': ['111', '001', '010', '010', '010'],
-  '8': ['111', '101', '111', '101', '111'],
-  '9': ['111', '101', '111', '001', '111']
+  0: ['111', '101', '101', '101', '111'],
+  1: ['010', '110', '010', '010', '111'],
+  2: ['111', '001', '111', '100', '111'],
+  3: ['111', '001', '111', '001', '111'],
+  4: ['101', '101', '111', '001', '001'],
+  5: ['111', '100', '111', '001', '111'],
+  6: ['111', '100', '111', '101', '111'],
+  7: ['111', '001', '010', '010', '010'],
+  8: ['111', '101', '111', '101', '111'],
+  9: ['111', '101', '111', '001', '111']
 });
 const OVERLAY_COLORS = Object.freeze([
   [255, 64, 64, 255],
@@ -37,7 +30,7 @@ const OVERLAY_COLORS = Object.freeze([
 
 function setPixel(data, width, height, x, y, rgba) {
   if (x < 0 || x >= width || y < 0 || y >= height) return;
-  data.set(rgba, ((y * width) + x) * 4);
+  data.set(rgba, (y * width + x) * 4);
 }
 
 function drawBox(data, width, height, bounds, rgba) {
@@ -74,7 +67,9 @@ export async function renderPoseBoardMask(analysis) {
   }
   return sharp(rgba, {
     raw: { width: analysis.width, height: analysis.height, channels: 4 }
-  }).png({ compressionLevel: 9, adaptiveFiltering: false }).toBuffer();
+  })
+    .png({ compressionLevel: 9, adaptiveFiltering: false })
+    .toBuffer();
 }
 
 export async function renderPoseBoardOverlay(analysis) {
@@ -82,19 +77,13 @@ export async function renderPoseBoardOverlay(analysis) {
   for (const [index, candidate] of analysis.candidates.entries()) {
     const color = OVERLAY_COLORS[index % OVERLAY_COLORS.length];
     drawBox(rgba, analysis.width, analysis.height, candidate.bounds, color);
-    drawNumber(
-      rgba,
-      analysis.width,
-      analysis.height,
-      index + 1,
-      candidate.bounds.left,
-      candidate.bounds.top,
-      color
-    );
+    drawNumber(rgba, analysis.width, analysis.height, index + 1, candidate.bounds.left, candidate.bounds.top, color);
   }
   return sharp(rgba, {
     raw: { width: analysis.width, height: analysis.height, channels: 4 }
-  }).png({ compressionLevel: 9, adaptiveFiltering: false }).toBuffer();
+  })
+    .png({ compressionLevel: 9, adaptiveFiltering: false })
+    .toBuffer();
 }
 
 function evidenceComponent(component) {
@@ -120,9 +109,7 @@ function validateRunAncestry({ run, project }) {
   if (run.document.sourceRequest?.kind !== 'pose-board') {
     throw new Error('pose-board recovery run kind mismatch');
   }
-  const action = project.document.actions.find(
-    ({ id }) => id === run.document.sourceRequest.actionId
-  );
+  const action = project.document.actions.find(({ id }) => id === run.document.sourceRequest.actionId);
   if (!action) throw new Error('pose-board recovery action ancestry mismatch');
   return action;
 }
@@ -235,11 +222,7 @@ export async function recoverPoseBoard({ source, recoveryContract, run, project 
 }
 
 function awaitingSelectionError({ recovery, run, project }) {
-  const packageRoot = path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    '..',
-    '..'
-  );
+  const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
   const cliPath = path.join(packageRoot, 'scripts', 'cli.mjs');
   const error = new Error('pose-board intake is awaiting an approved pose selection');
   error.exitCode = 4;
@@ -253,53 +236,31 @@ function awaitingSelectionError({ recovery, run, project }) {
     next: {
       kind: 'pose-board-selection',
       cwd: packageRoot,
-      argv: [
-        process.execPath,
-        cliPath,
-        'studio',
-        '--stage',
-        'recovery',
-        '--project-dir',
-        project.root,
-        '--run',
-        run.id
-      ]
+      argv: [process.execPath, cliPath, 'studio', '--stage', 'recovery', '--project-dir', project.root, '--run', run.id]
     }
   };
   return error;
 }
 
 async function centerCandidate({ rendered, width, height }) {
-  const decoded = await sharp(rendered.bytes)
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
+  const decoded = await sharp(rendered.bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const output = Buffer.alloc(width * height * 4);
   const offsetX = Math.floor((width - rendered.width) / 2);
   const offsetY = Math.floor((height - rendered.height) / 2);
   for (let y = 0; y < rendered.height; y += 1) {
     const sourceStart = y * rendered.width * 4;
-    const destinationStart = (((y + offsetY) * width) + offsetX) * 4;
-    decoded.data.copy(
-      output,
-      destinationStart,
-      sourceStart,
-      sourceStart + (rendered.width * 4)
-    );
+    const destinationStart = ((y + offsetY) * width + offsetX) * 4;
+    decoded.data.copy(output, destinationStart, sourceStart, sourceStart + rendered.width * 4);
   }
   const bytes = await sharp(output, {
     raw: { width, height, channels: 4 }
-  }).png({ compressionLevel: 9, adaptiveFiltering: false }).toBuffer();
+  })
+    .png({ compressionLevel: 9, adaptiveFiltering: false })
+    .toBuffer();
   return { bytes, offsetX, offsetY };
 }
 
-export async function decodePoseBoard({
-  source,
-  recoveryContract,
-  selectionApproval,
-  run,
-  project
-}) {
+export async function decodePoseBoard({ source, recoveryContract, selectionApproval, run, project }) {
   const recovery = await recoverPoseBoard({
     source,
     recoveryContract,

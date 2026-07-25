@@ -12,7 +12,12 @@ function hash(value, label) {
 }
 
 function opaquePaletteHex(rgba) {
-  return rgba.slice(1).map((color) => color.slice(0, 3).map((component) => component.toString(16).padStart(2, '0')).join(''));
+  return rgba.slice(1).map((color) =>
+    color
+      .slice(0, 3)
+      .map((component) => component.toString(16).padStart(2, '0'))
+      .join('')
+  );
 }
 
 async function verifiedContainedFile(root, relative, expectedSha256, label) {
@@ -25,38 +30,68 @@ async function verifiedContainedFile(root, relative, expectedSha256, label) {
     if ((await fs.lstat(selected)).isSymbolicLink()) throw new Error(`${label} path must not contain a symlink`);
   }
   const stat = await fs.lstat(selected);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new Error(`${label} must be a regular single-link file`);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1)
+    throw new Error(`${label} must be a regular single-link file`);
   const physical = await fs.realpath(selected);
   const containment = path.relative(physicalRoot, physical);
-  if (containment === '..' || containment.startsWith(`..${path.sep}`) || path.isAbsolute(containment)) throw new Error(`${label} escaped its root`);
-  if (await sha256File(physical) !== expectedSha256) throw new Error(`${label} hash mismatch`);
+  if (containment === '..' || containment.startsWith(`..${path.sep}`) || path.isAbsolute(containment))
+    throw new Error(`${label} escaped its root`);
+  if ((await sha256File(physical)) !== expectedSha256) throw new Error(`${label} hash mismatch`);
   return physical;
 }
 
 export async function createPixelProductionContract({ run, project, selectionApproval, edit }) {
-  if (!run?.id || !run?.root || !run.document?.sourceRequest?.actionId || !HASH.test(run.sha256 ?? '')) throw new Error('pixel contract requires an immutable run');
-  if (!project?.root || !project?.document || !HASH.test(project.sha256 ?? '')) throw new Error('pixel contract requires an initialized project');
-  if (selectionApproval?.verified !== true || selectionApproval.document?.decision !== 'approved' || !HASH.test(selectionApproval.sha256 ?? '')) throw new Error('pixel contract requires a verified owner selection approval');
-  if (!edit || edit.actionId !== run.document.sourceRequest.actionId || !Array.isArray(edit.frames)) throw new Error('pixel contract edit does not match the immutable run action');
+  if (!run?.id || !run?.root || !run.document?.sourceRequest?.actionId || !HASH.test(run.sha256 ?? ''))
+    throw new Error('pixel contract requires an immutable run');
+  if (!project?.root || !project?.document || !HASH.test(project.sha256 ?? ''))
+    throw new Error('pixel contract requires an initialized project');
+  if (
+    selectionApproval?.verified !== true ||
+    selectionApproval.document?.decision !== 'approved' ||
+    !HASH.test(selectionApproval.sha256 ?? '')
+  )
+    throw new Error('pixel contract requires a verified owner selection approval');
+  if (!edit || edit.actionId !== run.document.sourceRequest.actionId || !Array.isArray(edit.frames))
+    throw new Error('pixel contract edit does not match the immutable run action');
   const action = project.document.actions.find(({ id }) => id === edit.actionId);
   if (!action) throw new Error('pixel contract action is not present in the project');
-  if (action.tracks.length !== 1 || action.tracks[0] !== 'actor') throw new Error('separate approved track derivatives are required before multi-track pixel production');
+  if (action.tracks.length !== 1 || action.tracks[0] !== 'actor')
+    throw new Error('separate approved track derivatives are required before multi-track pixel production');
   const selectedFrames = edit.frames.filter(({ included }) => included);
   if (selectedFrames.length === 0) throw new Error('pixel contract requires approved selected frames');
-  if (selectedFrames.length !== selectionApproval.document.derivatives?.length || selectedFrames.length !== selectionApproval.document.selectedFrames?.length) throw new Error('pixel contract approval membership mismatch');
+  if (
+    selectedFrames.length !== selectionApproval.document.derivatives?.length ||
+    selectedFrames.length !== selectionApproval.document.selectedFrames?.length
+  )
+    throw new Error('pixel contract approval membership mismatch');
 
   const canonicalAnchor = project.document.character.anchors.find(({ role }) => role === 'canonical');
   if (!canonicalAnchor) throw new Error('pixel contract requires one canonical character anchor');
-  const anchorSource = await verifiedContainedFile(project.root, canonicalAnchor.path, canonicalAnchor.sha256, 'canonical character anchor');
+  const anchorSource = await verifiedContainedFile(
+    project.root,
+    canonicalAnchor.path,
+    canonicalAnchor.sha256,
+    'canonical character anchor'
+  );
   const base = `work/pixel-contracts/${selectionApproval.sha256}`;
-  const copiedAnchor = await copyImmutable({ source: anchorSource, root: run.root, relative: `${base}/canonical-anchor.png` });
+  const copiedAnchor = await copyImmutable({
+    source: anchorSource,
+    root: run.root,
+    relative: `${base}/canonical-anchor.png`
+  });
   const frames = [];
   const inputFrames = [];
   for (const [index, frame] of selectedFrames.entries()) {
-    if (frame.tracks.length !== 1 || frame.tracks[0] !== 'actor') throw new Error('separate approved track derivatives are required before multi-track pixel production');
+    if (frame.tracks.length !== 1 || frame.tracks[0] !== 'actor')
+      throw new Error('separate approved track derivatives are required before multi-track pixel production');
     const selected = selectionApproval.document.selectedFrames[index];
     const derivative = selectionApproval.document.derivatives[index];
-    if (selected.frameId !== frame.frameId || derivative.frameId !== frame.frameId || selected.derivativeSha256 !== derivative.sha256) throw new Error('pixel contract approval membership mismatch');
+    if (
+      selected.frameId !== frame.frameId ||
+      derivative.frameId !== frame.frameId ||
+      selected.derivativeSha256 !== derivative.sha256
+    )
+      throw new Error('pixel contract approval membership mismatch');
     await verifiedContainedFile(run.root, derivative.path, derivative.sha256, 'approved frame derivative');
     frames.push({
       id: frame.frameId,
@@ -75,12 +110,22 @@ export async function createPixelProductionContract({ run, project, selectionApp
     character: { id: project.document.id, anchorSha256: copiedAnchor.sha256 },
     canvas: structuredClone(project.document.canvas),
     scale: structuredClone(project.document.scale),
-    palette: { ...structuredClone(project.document.palette), snapperPaletteHex: opaquePaletteHex(project.document.palette.rgba) },
+    palette: {
+      ...structuredClone(project.document.palette),
+      snapperPaletteHex: opaquePaletteHex(project.document.palette.rgba)
+    },
     tracks: [structuredClone(project.document.tracks.find(({ id }) => id === 'actor'))],
-    sockets: project.document.sockets.filter(({ id }) => action.sockets.includes(id)).map((socket) => structuredClone(socket)),
-    contacts: project.document.contacts.filter(({ id }) => action.contacts.includes(id)).map((contact) => structuredClone(contact)),
+    sockets: project.document.sockets
+      .filter(({ id }) => action.sockets.includes(id))
+      .map((socket) => structuredClone(socket)),
+    contacts: project.document.contacts
+      .filter(({ id }) => action.contacts.includes(id))
+      .map((contact) => structuredClone(contact)),
     clips: [{ id: action.id, loopMode: action.loopMode, frames }],
-    review: { checkpoints: structuredClone(project.document.approvals.requiredGates), approvers: structuredClone(project.document.approvals.identities) }
+    review: {
+      checkpoints: structuredClone(project.document.approvals.requiredGates),
+      approvers: structuredClone(project.document.approvals.identities)
+    }
   };
   const relative = `${base}/animation-contract-v2.json`;
   const contract = await writeImmutableJson({ root: run.root, relative, value: contractDocument, reuse: true });
@@ -90,13 +135,25 @@ export async function createPixelProductionContract({ run, project, selectionApp
     anchor: { path: copiedAnchor.relative, sha256: copiedAnchor.sha256 },
     frames: inputFrames
   };
-  const inputs = await writeImmutableJson({ root: run.root, relative: `${relative}.inputs.json`, value: inputsDocument, reuse: true });
-  return { path: contract.path, relative: contract.relative, sha256: contract.sha256, document: contractDocument, inputs };
+  const inputs = await writeImmutableJson({
+    root: run.root,
+    relative: `${relative}.inputs.json`,
+    value: inputsDocument,
+    reuse: true
+  });
+  return {
+    path: contract.path,
+    relative: contract.relative,
+    sha256: contract.sha256,
+    document: contractDocument,
+    inputs
+  };
 }
 
 async function nextRevision(exportsRoot) {
   const names = await fs.readdir(exportsRoot);
-  for (const name of names) if (!/^revision-\d{4}$/.test(name)) throw new Error(`unexpected export revision entry: ${name}`);
+  for (const name of names)
+    if (!/^revision-\d{4}$/.test(name)) throw new Error(`unexpected export revision entry: ${name}`);
   const revisions = names.map((name) => Number(name.slice('revision-'.length)));
   const revision = (revisions.length === 0 ? 0 : Math.max(...revisions)) + 1;
   if (revision > 9999) throw new Error('export revision limit exceeded');
@@ -104,27 +161,32 @@ async function nextRevision(exportsRoot) {
 }
 
 async function verifiedArtifacts(pixelExport) {
-  if (!pixelExport?.root || !Array.isArray(pixelExport.artifacts) || pixelExport.artifacts.length === 0) throw new Error('pixel export requires a declared artifact set');
+  if (!pixelExport?.root || !Array.isArray(pixelExport.artifacts) || pixelExport.artifacts.length === 0)
+    throw new Error('pixel export requires a declared artifact set');
   const root = await fs.realpath(pixelExport.root);
   const seen = new Set();
   const artifacts = [];
   for (const record of pixelExport.artifacts) {
     exactObject(record, ['path', 'sha256'], 'pixel export artifact');
     portableRelativePath(record.path, 'pixel export artifact path');
-    if (record.path === 'validation-report.json') throw new Error('pixel export artifact uses the reserved validation report path');
+    if (record.path === 'validation-report.json')
+      throw new Error('pixel export artifact uses the reserved validation report path');
     hash(record.sha256, 'pixel export artifact hash');
     if (seen.has(record.path)) throw new Error('pixel export artifact paths must be unique');
     seen.add(record.path);
     let current = root;
     for (const segment of record.path.split('/')) {
       current = path.join(current, segment);
-      if ((await fs.lstat(current)).isSymbolicLink()) throw new Error('pixel export artifact path must not contain a symlink');
+      if ((await fs.lstat(current)).isSymbolicLink())
+        throw new Error('pixel export artifact path must not contain a symlink');
     }
     const stat = await fs.lstat(current);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new Error('pixel export artifact must be a regular single-link file');
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1)
+      throw new Error('pixel export artifact must be a regular single-link file');
     const physical = await fs.realpath(current);
     const containment = path.relative(root, physical);
-    if (containment === '..' || containment.startsWith(`..${path.sep}`) || path.isAbsolute(containment)) throw new Error('pixel export artifact escaped its root');
+    if (containment === '..' || containment.startsWith(`..${path.sep}`) || path.isAbsolute(containment))
+      throw new Error('pixel export artifact escaped its root');
     const actual = await sha256File(physical);
     if (actual !== record.sha256) throw new Error(`artifact hash mismatch: ${record.path}`);
     artifacts.push({ path: record.path, sha256: actual, source: physical });
@@ -133,9 +195,29 @@ async function verifiedArtifacts(pixelExport) {
 }
 
 export async function publishExportRevision({ run, bindings, pixelExport, validationReport }) {
-  if (!run?.id || !run?.root || !HASH.test(run.sha256 ?? '')) throw new Error('export publication requires an immutable run');
-  if (!validationReport || typeof validationReport !== 'object' || Array.isArray(validationReport) || typeof validationReport.passed !== 'boolean' || !Array.isArray(validationReport.failures) || !Array.isArray(validationReport.warnings)) throw new Error('export publication requires one complete objective validation report');
-  exactObject(bindings, ['projectSha256', 'sourceSha256', 'editSha256', 'selectionApprovalSha256', 'snapReceiptSha256', 'frameApprovalSha256'], 'export bindings');
+  if (!run?.id || !run?.root || !HASH.test(run.sha256 ?? ''))
+    throw new Error('export publication requires an immutable run');
+  if (
+    !validationReport ||
+    typeof validationReport !== 'object' ||
+    Array.isArray(validationReport) ||
+    typeof validationReport.passed !== 'boolean' ||
+    !Array.isArray(validationReport.failures) ||
+    !Array.isArray(validationReport.warnings)
+  )
+    throw new Error('export publication requires one complete objective validation report');
+  exactObject(
+    bindings,
+    [
+      'projectSha256',
+      'sourceSha256',
+      'editSha256',
+      'selectionApprovalSha256',
+      'snapReceiptSha256',
+      'frameApprovalSha256'
+    ],
+    'export bindings'
+  );
   for (const [name, value] of Object.entries(bindings)) hash(value, `export ${name}`);
   const artifacts = await verifiedArtifacts(pixelExport);
   const exportsRoot = path.join(await fs.realpath(run.root), 'exports');
@@ -153,7 +235,8 @@ export async function publishExportRevision({ run, bindings, pixelExport, valida
       await fs.mkdir(path.dirname(output), { recursive: true });
       await fs.copyFile(artifact.source, output, fs.constants.COPYFILE_EXCL);
       const copiedHash = await sha256File(output);
-      if (copiedHash !== artifact.sha256) throw new Error(`artifact changed during export publication: ${artifact.path}`);
+      if (copiedHash !== artifact.sha256)
+        throw new Error(`artifact changed during export publication: ${artifact.path}`);
       published.push({ path: artifact.path, sha256: copiedHash });
     }
     const validationFile = path.join(stage, 'validation-report.json');
@@ -170,7 +253,8 @@ export async function publishExportRevision({ run, bindings, pixelExport, valida
     };
     const manifest = path.join(stage, 'manifest.json');
     await fs.writeFile(manifest, canonicalJson(document), { flag: 'wx' });
-    if (await sha256File(manifest) !== sha256Value(document)) throw new Error('export manifest canonical hash mismatch');
+    if ((await sha256File(manifest)) !== sha256Value(document))
+      throw new Error('export manifest canonical hash mismatch');
     await fs.rename(stage, target);
     return { path: path.join(target, 'manifest.json'), sha256: sha256Value(document), revision, document };
   } catch (error) {

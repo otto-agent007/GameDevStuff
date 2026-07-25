@@ -42,9 +42,13 @@ let markerAuthoring;
 let dirty = false;
 let renderReceipt = null;
 
-const titleCase = (value) => value.split(/[-_]/).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+const titleCase = (value) =>
+  value
+    .split(/[-_]/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 const frameUrl = (sha256) => `/api/frame/${sha256}`;
-const displayFrames = () => reviewSide === 'A' && savedFrames.length ? savedFrames : frames;
+const displayFrames = () => (reviewSide === 'A' && savedFrames.length ? savedFrames : frames);
 const includedFrames = () => displayFrames().filter((frame) => frame.included !== false);
 const activeFrameIndices = () => activeIndices(displayFrames());
 const rangedFrameIndices = () => playbackIndices(displayFrames(), playbackRange);
@@ -107,9 +111,8 @@ function updateRangeState() {
   const view = displayFrames();
   const start = Number.isInteger(playbackRange.in) ? view[playbackRange.in]?.id : null;
   const end = Number.isInteger(playbackRange.out) ? view[playbackRange.out]?.id : null;
-  document.querySelector('#range-readout').textContent = start || end
-    ? `${start ?? 'First active'} → ${end ?? 'Last active'}`
-    : 'Full action';
+  document.querySelector('#range-readout').textContent =
+    start || end ? `${start ?? 'First active'} → ${end ?? 'Last active'}` : 'Full action';
   document.querySelector('#clear-range').disabled = !hasPlaybackRange();
 }
 
@@ -124,10 +127,12 @@ function setDirty(value) {
 }
 
 function compatibleEdit(edit) {
-  return edit?.kind === 'frame-studio-edit' &&
+  return (
+    edit?.kind === 'frame-studio-edit' &&
     Array.isArray(edit.frames) &&
     edit.frames.length === session.source.frames.length &&
-    edit.frames.every((frame, index) => frame.frameId === session.source.frames[index].id);
+    edit.frames.every((frame, index) => frame.frameId === session.source.frames[index].id)
+  );
 }
 
 function applyEdit(edit) {
@@ -145,7 +150,7 @@ function applyEdit(edit) {
 
 function currentComparisonElapsed(now = performance.now()) {
   if (!playing || reviewSide !== 'AB') return comparisonElapsedMs;
-  return comparisonElapsedMs + ((now - comparisonStartedAt) * reviewSpeed);
+  return comparisonElapsedMs + (now - comparisonStartedAt) * reviewSpeed;
 }
 
 function stopPlayback() {
@@ -206,7 +211,8 @@ function updateReadout() {
   const total = active.reduce((sum, item) => sum + item.edit.durationMs, 0);
   document.querySelector('#frame-count').textContent = `${active.length} active / ${view.length} source`;
   document.querySelector('#selected-name').textContent = frame?.id ?? '—';
-  document.querySelector('#frame-position').textContent = `Frame ${view.length ? selectedIndex + 1 : 0} of ${view.length}`;
+  document.querySelector('#frame-position').textContent =
+    `Frame ${view.length ? selectedIndex + 1 : 0} of ${view.length}`;
   document.querySelector('#total-duration').textContent = `${total} ms total`;
   document.querySelector('#selection-frame').textContent = frame?.id ?? '—';
   document.querySelector('#selection-duration').textContent = frame ? `${frame.edit.durationMs} ms` : '—';
@@ -221,10 +227,8 @@ function updateReadout() {
 function updateMotionDiagnostics() {
   if (!session) return;
   const analysis = analyzeMotion(displayFrames(), session.project.canvas);
-  renderMotionDiagnostics(
-    document.querySelector('#motion-diagnostics'),
-    analysis,
-    (frameIndex) => selectFrame(frameIndex, { manual: true, focus: true })
+  renderMotionDiagnostics(document.querySelector('#motion-diagnostics'), analysis, (frameIndex) =>
+    selectFrame(frameIndex, { manual: true, focus: true })
   );
 }
 
@@ -266,15 +270,18 @@ function scheduleNext() {
     return;
   }
   const current = displayFrames()[selectedIndex];
-  playbackTimer = setTimeout(() => {
-    const atEnd = selectedIndex === indices.at(-1);
-    if (atEnd && !hasPlaybackRange() && action?.loopMode !== 'loop') {
-      stopPlayback();
-      return;
-    }
-    selectFrame(nextPlaybackIndex(indices, selectedIndex));
-    scheduleNext();
-  }, reviewDelay(current.edit.durationMs, reviewSpeed));
+  playbackTimer = setTimeout(
+    () => {
+      const atEnd = selectedIndex === indices.at(-1);
+      if (atEnd && !hasPlaybackRange() && action?.loopMode !== 'loop') {
+        stopPlayback();
+        return;
+      }
+      selectFrame(nextPlaybackIndex(indices, selectedIndex));
+      scheduleNext();
+    },
+    reviewDelay(current.edit.durationMs, reviewSpeed)
+  );
 }
 
 function comparisonLoops() {
@@ -352,7 +359,9 @@ function setBooleanOverlay(input, attribute) {
   });
 }
 
-timeline.addEventListener('frame-select', ({ detail }) => selectFrame(detail.index, { manual: true, focus: detail.focus }));
+timeline.addEventListener('frame-select', ({ detail }) =>
+  selectFrame(detail.index, { manual: true, focus: detail.focus })
+);
 timeline.addEventListener('frame-include', ({ detail }) => {
   setFrameInclusion(detail.index, detail.included);
 });
@@ -411,16 +420,14 @@ function switchReviewSide(side) {
   stopPlayback();
   reviewSide = side;
   if (side === 'AB') {
-    comparisonElapsedMs = previousSide === 'AB'
-      ? comparisonElapsedMs
-      : frameStartElapsedMs(frames, selectedIndex, playbackRange);
+    comparisonElapsedMs =
+      previousSide === 'AB' ? comparisonElapsedMs : frameStartElapsedMs(frames, selectedIndex, playbackRange);
     updateComparisonIndices(comparisonElapsedMs);
   } else if (previousSide === 'AB') {
-    const resolved = resolveElapsedFrame(
-      side === 'A' ? savedFrames : frames,
-      comparisonElapsedMs,
-      { range: playbackRange, loop: comparisonLoops() }
-    );
+    const resolved = resolveElapsedFrame(side === 'A' ? savedFrames : frames, comparisonElapsedMs, {
+      range: playbackRange,
+      loop: comparisonLoops()
+    });
     if (resolved.index !== null) selectedIndex = resolved.index;
   }
   selectedIndex = Math.min(selectedIndex, Math.max(0, displayFrames().length - 1));
@@ -460,7 +467,11 @@ function setRangeBoundary(boundary) {
   const resume = playing;
   stopPlayback();
   playbackRange = { ...playbackRange, [boundary]: selectedIndex };
-  if (Number.isInteger(playbackRange.in) && Number.isInteger(playbackRange.out) && playbackRange.in > playbackRange.out) {
+  if (
+    Number.isInteger(playbackRange.in) &&
+    Number.isInteger(playbackRange.out) &&
+    playbackRange.in > playbackRange.out
+  ) {
     playbackRange = { in: playbackRange.out, out: playbackRange.in };
   }
   if (reviewSide === 'AB') {
@@ -487,8 +498,12 @@ document.querySelector('#clear-range').addEventListener('click', () => {
   status.textContent = 'Cleared the temporary playback range.';
 });
 
-document.querySelector('#previous-frame').addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, -1), { manual: true }));
-document.querySelector('#next-frame').addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, 1), { manual: true }));
+document
+  .querySelector('#previous-frame')
+  .addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, -1), { manual: true }));
+document
+  .querySelector('#next-frame')
+  .addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, 1), { manual: true }));
 function updatePreviewZoom() {
   if (!session) return;
   let zoom = requestedZoom;
@@ -685,7 +700,8 @@ async function initialize() {
       }
       dirty = true;
     }
-    document.querySelector('#project-title').textContent = `${session.project.character.name} / ${titleCase(action?.id ?? session.actionId)}`;
+    document.querySelector('#project-title').textContent =
+      `${session.project.character.name} / ${titleCase(action?.id ?? session.actionId)}`;
     document.querySelector('#stage-chip').textContent = titleCase(session.stage);
     document.querySelector('#source-hash').textContent = session.sourceSha256.slice(0, 12);
     document.querySelector('#approval-source-hash').textContent = session.sourceSha256;

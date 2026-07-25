@@ -7,23 +7,38 @@ import { readRgba, sha256 } from './image.mjs';
 import { stableHash } from './state-auth.mjs';
 
 function exact(value, keys, label) {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== keys.length || keys.some((key) => !Object.hasOwn(value, key))) throw new Error(`${label} schema is invalid`);
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== keys.length ||
+    keys.some((key) => !Object.hasOwn(value, key))
+  )
+    throw new Error(`${label} schema is invalid`);
 }
 
 function coordinate(value, label) {
   exact(value, ['x', 'y'], label);
-  if (!Number.isInteger(value.x) || !Number.isInteger(value.y) || value.x < 0 || value.y < 0) throw new Error(`${label} must use non-negative integer coordinates`);
+  if (!Number.isInteger(value.x) || !Number.isInteger(value.y) || value.x < 0 || value.y < 0)
+    throw new Error(`${label} must use non-negative integer coordinates`);
 }
 
-function same(left, right) { return JSON.stringify(left) === JSON.stringify(right); }
+function same(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
 
 function snapshotContract(animationContract, config) {
   if (animationContract === undefined) return null;
   exact(animationContract, ['document', 'sha256'], 'normalization animation contract');
   const document = structuredClone(animationContract.document);
   validateAnimationContract(document);
-  if (animationContract.sha256 !== stableHash(document)) throw new Error('normalization animation contract hash is invalid');
-  if (!same(document.sizes.canonical, [config.canonical.width, config.canonical.height]) || !same(document.pivot, config.pivot)) throw new Error('normalization animation contract geometry does not match the selected config');
+  if (animationContract.sha256 !== stableHash(document))
+    throw new Error('normalization animation contract hash is invalid');
+  if (
+    !same(document.sizes.canonical, [config.canonical.width, config.canonical.height]) ||
+    !same(document.pivot, config.pivot)
+  )
+    throw new Error('normalization animation contract geometry does not match the selected config');
   return { document, sha256: animationContract.sha256 };
 }
 
@@ -33,21 +48,27 @@ function contractFrames(contract) {
 
 function validateLandmarkBatch(landmarks, inputs, config, contract) {
   if (landmarks === undefined && !contract) return null;
-  if (!Array.isArray(landmarks) || landmarks.length !== inputs.length) throw new Error('normalization requires exactly one landmark per input frame');
+  if (!Array.isArray(landmarks) || landmarks.length !== inputs.length)
+    throw new Error('normalization requires exactly one landmark per input frame');
   const definitions = contractFrames(contract);
-  if (definitions && definitions.length !== inputs.length) throw new Error('normalization input count does not match the ordered animation contract frames');
+  if (definitions && definitions.length !== inputs.length)
+    throw new Error('normalization input count does not match the ordered animation contract frames');
   const frameIds = new Set();
   return landmarks.map((landmark, index) => {
     exact(landmark, ['frameId', 'source', 'target'], 'normalization landmark');
-    if (typeof landmark.frameId !== 'string' || landmark.frameId === '' || frameIds.has(landmark.frameId)) throw new Error('normalization landmark frameId values must be non-empty and unique');
+    if (typeof landmark.frameId !== 'string' || landmark.frameId === '' || frameIds.has(landmark.frameId))
+      throw new Error('normalization landmark frameId values must be non-empty and unique');
     frameIds.add(landmark.frameId);
     coordinate(landmark.source, 'normalization landmark source');
     coordinate(landmark.target, 'normalization landmark target');
-    if (landmark.target.x >= config.canonical.width || landmark.target.y >= config.canonical.height) throw new Error(`normalization landmark target for frame ${landmark.frameId} must be inside the canonical cell`);
+    if (landmark.target.x >= config.canonical.width || landmark.target.y >= config.canonical.height)
+      throw new Error(`normalization landmark target for frame ${landmark.frameId} must be inside the canonical cell`);
     const expected = definitions?.[index];
-    if (expected && landmark.frameId !== expected.id) throw new Error(`normalization landmark frame order does not match the animation contract at index ${index}`);
+    if (expected && landmark.frameId !== expected.id)
+      throw new Error(`normalization landmark frame order does not match the animation contract at index ${index}`);
     const expectedTarget = expected?.landmarkSemantic.target ?? config.pivot;
-    if (!same(landmark.target, expectedTarget)) throw new Error(`normalization landmark target for frame ${landmark.frameId} must match its contracted pivot`);
+    if (!same(landmark.target, expectedTarget))
+      throw new Error(`normalization landmark target for frame ${landmark.frameId} must match its contracted pivot`);
     return { frameId: landmark.frameId, source: { ...landmark.source }, target: { ...landmark.target } };
   });
 }
@@ -95,17 +116,21 @@ export async function normalizeFrames({
       minimumComponentPixels: selectedConfig.minimumComponentPixels
     });
     const landmark = approvedLandmarks?.[index] ?? null;
-    if (landmark && (landmark.source.x >= image.width || landmark.source.y >= image.height)) throw new Error(`normalization landmark source for frame ${landmark.frameId} must be inside its input frame`);
+    if (landmark && (landmark.source.x >= image.width || landmark.source.y >= image.height))
+      throw new Error(`normalization landmark source for frame ${landmark.frameId} must be inside its input frame`);
     const width = recovered.bounds.width * scaleFactor;
     const height = recovered.bounds.height * scaleFactor;
-    const scaledLandmark = landmark ? {
-      x: (landmark.source.x - recovered.bounds.left) * scaleFactor,
-      y: (landmark.source.y - recovered.bounds.top) * scaleFactor
-    } : null;
+    const scaledLandmark = landmark
+      ? {
+          x: (landmark.source.x - recovered.bounds.left) * scaleFactor,
+          y: (landmark.source.y - recovered.bounds.top) * scaleFactor
+        }
+      : null;
     const left = landmark ? landmark.target.x - scaledLandmark.x : selectedConfig.pivot.x - Math.floor(width / 2);
     const top = landmark ? landmark.target.y - scaledLandmark.y : selectedConfig.pivot.y - height;
     if (
-      left < 0 || top < 0 ||
+      left < 0 ||
+      top < 0 ||
       left + width > selectedConfig.canonical.width ||
       top + height > selectedConfig.canonical.height
     ) {
@@ -114,7 +139,9 @@ export async function normalizeFrames({
     }
 
     const canonicalLandmark = landmark ? { x: left + scaledLandmark.x, y: top + scaledLandmark.y } : null;
-    const landmarkDrift = landmark ? { x: canonicalLandmark.x - landmark.target.x, y: canonicalLandmark.y - landmark.target.y } : null;
+    const landmarkDrift = landmark
+      ? { x: canonicalLandmark.x - landmark.target.x, y: canonicalLandmark.y - landmark.target.y }
+      : null;
 
     planned.push({
       input,
@@ -151,18 +178,23 @@ export async function normalizeFrames({
         channels: 4,
         background: { r: 0, g: 0, b: 0, alpha: 0 }
       }
-    }).composite([{ input: crop, left: plan.left, top: plan.top }]).png().toFile(plan.output);
+    })
+      .composite([{ input: crop, left: plan.left, top: plan.top }])
+      .png()
+      .toFile(plan.output);
 
     frames.push(plan.output);
     measurements.push({
       input: plan.input,
       output: plan.output,
-      ...(plan.landmark ? {
-        frameId: plan.landmark.frameId,
-        sourceLandmark: { ...plan.landmark.source },
-        canonicalLandmark: { ...plan.canonicalLandmark },
-        landmarkDrift: { ...plan.landmarkDrift }
-      } : {}),
+      ...(plan.landmark
+        ? {
+            frameId: plan.landmark.frameId,
+            sourceLandmark: { ...plan.landmark.source },
+            canonicalLandmark: { ...plan.canonicalLandmark },
+            landmarkDrift: { ...plan.landmarkDrift }
+          }
+        : {}),
       left: plan.left,
       top: plan.top,
       width: plan.width,
@@ -188,35 +220,83 @@ export async function normalizeFrames({
 const SHA256 = /^[a-f0-9]{64}$/;
 
 function portableRelativePath(value, label) {
-  if (typeof value !== 'string' || value === '' || path.isAbsolute(value) || path.win32.isAbsolute(value) || value.includes('\\') || value === '.' || value === '..' || value.startsWith('../') || path.posix.normalize(value) !== value) throw new Error(`${label} must be a contained portable relative path`);
+  if (
+    typeof value !== 'string' ||
+    value === '' ||
+    path.isAbsolute(value) ||
+    path.win32.isAbsolute(value) ||
+    value.includes('\\') ||
+    value === '.' ||
+    value === '..' ||
+    value.startsWith('../') ||
+    path.posix.normalize(value) !== value
+  )
+    throw new Error(`${label} must be a contained portable relative path`);
 }
 
 function namedCoordinates(values, expectedIds, label, canvas) {
-  if (!Array.isArray(values) || values.length !== expectedIds.length) throw new Error(`v2 normalization ${label} must cover every contracted name in order`);
-  return Object.fromEntries(values.map((value, index) => {
-    exact(value, ['id', 'x', 'y'], `v2 normalization ${label.slice(0, -1)}`);
-    if (value.id !== expectedIds[index] || !Number.isInteger(value.x) || !Number.isInteger(value.y) || value.x < 0 || value.y < 0 || value.x >= canvas.width || value.y >= canvas.height) throw new Error(`v2 normalization ${label} contain an invalid or unknown name`);
-    return [value.id, { x: value.x, y: value.y }];
-  }));
+  if (!Array.isArray(values) || values.length !== expectedIds.length)
+    throw new Error(`v2 normalization ${label} must cover every contracted name in order`);
+  return Object.fromEntries(
+    values.map((value, index) => {
+      exact(value, ['id', 'x', 'y'], `v2 normalization ${label.slice(0, -1)}`);
+      if (
+        value.id !== expectedIds[index] ||
+        !Number.isInteger(value.x) ||
+        !Number.isInteger(value.y) ||
+        value.x < 0 ||
+        value.y < 0 ||
+        value.x >= canvas.width ||
+        value.y >= canvas.height
+      )
+        throw new Error(`v2 normalization ${label} contain an invalid or unknown name`);
+      return [value.id, { x: value.x, y: value.y }];
+    })
+  );
 }
 
 function snapshotV2Request({ contract, frameApproval, outputDir }) {
   exact(contract, ['document', 'sha256'], 'v2 normalization animation contract');
   const document = structuredClone(contract.document);
   validateAnimationContract(document);
-  if (document.version !== 2 || contract.sha256 !== stableHash(document)) throw new Error('v2 normalization animation contract binding is invalid');
-  if (!frameApproval || typeof frameApproval !== 'object' || typeof frameApproval.path !== 'string' || !SHA256.test(frameApproval.sha256 ?? '')) throw new Error('v2 normalization requires one verified frame approval');
+  if (document.version !== 2 || contract.sha256 !== stableHash(document))
+    throw new Error('v2 normalization animation contract binding is invalid');
+  if (
+    !frameApproval ||
+    typeof frameApproval !== 'object' ||
+    typeof frameApproval.path !== 'string' ||
+    !SHA256.test(frameApproval.sha256 ?? '')
+  )
+    throw new Error('v2 normalization requires one verified frame approval');
   const payload = structuredClone(frameApproval.document?.payload);
-  if (!payload || payload.version !== 2 || payload.animationContractSha256 !== contract.sha256 || payload.selectionApprovalSha256 !== document.selectionApprovalSha256 || !SHA256.test(payload.snapReceiptSha256 ?? '') || !Array.isArray(payload.frames)) throw new Error('v2 normalization frame approval binding is invalid');
-  const definitions = document.clips.flatMap((clip) => clip.frames.map((frame) => ({ ...frame, loopMode: clip.loopMode })));
-  if (payload.frames.length !== definitions.length) throw new Error('v2 normalization requires exact semantic frame approval coverage');
-  if (typeof outputDir !== 'string' || outputDir.trim() === '') throw new Error('v2 normalization outputDir is required');
-  return { contract: { document, sha256: contract.sha256 }, frameApproval: { path: frameApproval.path, sha256: frameApproval.sha256, payload }, definitions, outputDir: path.resolve(outputDir) };
+  if (
+    !payload ||
+    payload.version !== 2 ||
+    payload.animationContractSha256 !== contract.sha256 ||
+    payload.selectionApprovalSha256 !== document.selectionApprovalSha256 ||
+    !SHA256.test(payload.snapReceiptSha256 ?? '') ||
+    !Array.isArray(payload.frames)
+  )
+    throw new Error('v2 normalization frame approval binding is invalid');
+  const definitions = document.clips.flatMap((clip) =>
+    clip.frames.map((frame) => ({ ...frame, loopMode: clip.loopMode }))
+  );
+  if (payload.frames.length !== definitions.length)
+    throw new Error('v2 normalization requires exact semantic frame approval coverage');
+  if (typeof outputDir !== 'string' || outputDir.trim() === '')
+    throw new Error('v2 normalization outputDir is required');
+  return {
+    contract: { document, sha256: contract.sha256 },
+    frameApproval: { path: frameApproval.path, sha256: frameApproval.sha256, payload },
+    definitions,
+    outputDir: path.resolve(outputDir)
+  };
 }
 
 function translatedCoordinate(value, delta, canvas, label) {
   const translated = { x: value.x + delta.x, y: value.y + delta.y };
-  if (translated.x < 0 || translated.y < 0 || translated.x >= canvas.width || translated.y >= canvas.height) throw new Error(`v2 normalization ${label} leaves the stable canvas`);
+  if (translated.x < 0 || translated.y < 0 || translated.x >= canvas.width || translated.y >= canvas.height)
+    throw new Error(`v2 normalization ${label} leaves the stable canvas`);
   return translated;
 }
 
@@ -254,55 +334,101 @@ export async function normalizeContractFrames(args) {
 
   for (const [frameIndex, definition] of selected.definitions.entries()) {
     const approved = selected.frameApproval.payload.frames[frameIndex];
-    if (!approved || approved.index !== frameIndex || approved.id !== definition.id || approved.semantic !== definition.semantic || approved.duration !== definition.duration || !Array.isArray(approved.outputs) || approved.outputs.length !== definition.tracks.length) throw new Error(`v2 normalization approval frame order is invalid at ${frameIndex}`);
+    if (
+      !approved ||
+      approved.index !== frameIndex ||
+      approved.id !== definition.id ||
+      approved.semantic !== definition.semantic ||
+      approved.duration !== definition.duration ||
+      !Array.isArray(approved.outputs) ||
+      approved.outputs.length !== definition.tracks.length
+    )
+      throw new Error(`v2 normalization approval frame order is invalid at ${frameIndex}`);
     const root = approved.landmarks?.root;
     coordinate(root, 'v2 normalization approved root');
-    if (root.x >= canvas.width || root.y >= canvas.height) throw new Error('v2 normalization approved root must be inside the source canvas');
+    if (root.x >= canvas.width || root.y >= canvas.height)
+      throw new Error('v2 normalization approved root must be inside the source canvas');
     const delta = { x: canvas.pivot.x - root.x, y: canvas.pivot.y - root.y };
     const sockets = namedCoordinates(approved.landmarks?.sockets, definition.sockets, 'sockets', canvas);
     const contacts = namedCoordinates(approved.landmarks?.contacts, definition.contacts, 'contacts', canvas);
-    if (!Number.isInteger(approved.landmarks?.baseline)) throw new Error('v2 normalization approved baseline must be an integer');
+    if (!Number.isInteger(approved.landmarks?.baseline))
+      throw new Error('v2 normalization approved baseline must be an integer');
     const baseline = approved.landmarks.baseline + delta.y;
     if (baseline !== canvas.baseline) throw new Error(`v2 normalization baseline drift for frame ${definition.id}`);
     exact(approved.landmarks.groundTravel, ['x', 'y'], 'v2 normalization groundTravel');
-    if (!same(approved.landmarks.groundTravel, definition.groundTravel)) throw new Error(`v2 normalization groundTravel drift for frame ${definition.id}`);
+    if (!same(approved.landmarks.groundTravel, definition.groundTravel))
+      throw new Error(`v2 normalization groundTravel drift for frame ${definition.id}`);
     const plannedTracks = [];
     for (const [trackIndex, trackId] of definition.tracks.entries()) {
       const track = trackById.get(trackId);
       const output = approved.outputs[trackIndex];
-      if (!track || !output || output.index !== plannedFrames.reduce((count, frame) => count + frame.tracks.length, 0) + trackIndex || output.trackId !== trackId || !SHA256.test(output.sha256 ?? '')) throw new Error(`v2 normalization missing ordered track frame ${definition.id}/${trackId}`);
+      if (
+        !track ||
+        !output ||
+        output.index !== plannedFrames.reduce((count, frame) => count + frame.tracks.length, 0) + trackIndex ||
+        output.trackId !== trackId ||
+        !SHA256.test(output.sha256 ?? '')
+      )
+        throw new Error(`v2 normalization missing ordered track frame ${definition.id}/${trackId}`);
       portableRelativePath(output.path, 'v2 normalization approved output path');
       const source = path.resolve(sourceRoot, ...output.path.split('/'));
       const containment = path.relative(sourceRoot, source);
-      if (containment === '..' || containment.startsWith(`..${path.sep}`) || path.isAbsolute(containment)) throw new Error('v2 normalization approved output escaped its run directory');
+      if (containment === '..' || containment.startsWith(`..${path.sep}`) || path.isAbsolute(containment))
+        throw new Error('v2 normalization approved output escaped its run directory');
       let current = sourceRoot;
       for (const segment of output.path.split('/')) {
         current = path.join(current, segment);
-        if ((await fs.lstat(current)).isSymbolicLink()) throw new Error('v2 normalization source frame path must not contain a symlink');
+        if ((await fs.lstat(current)).isSymbolicLink())
+          throw new Error('v2 normalization source frame path must not contain a symlink');
       }
       const stat = await fs.lstat(source);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink > 1) throw new Error('v2 normalization source frame must be a regular single-link file');
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink > 1)
+        throw new Error('v2 normalization source frame must be a regular single-link file');
       const physical = await fs.realpath(source);
       const physicalContainment = path.relative(sourceRoot, physical);
-      if (physicalContainment === '..' || physicalContainment.startsWith(`..${path.sep}`) || path.isAbsolute(physicalContainment)) throw new Error('v2 normalization source frame escaped its run directory');
+      if (
+        physicalContainment === '..' ||
+        physicalContainment.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(physicalContainment)
+      )
+        throw new Error('v2 normalization source frame escaped its run directory');
       const sourceSha256 = await sha256(source);
-      if (sourceSha256 !== output.sha256) throw new Error(`v2 normalization source hash changed for ${definition.id}/${trackId}`);
+      if (sourceSha256 !== output.sha256)
+        throw new Error(`v2 normalization source hash changed for ${definition.id}/${trackId}`);
       const image = await readRgba(source);
-      if (image.width !== canvas.width || image.height !== canvas.height) throw new Error(`v2 normalization source canvas is unstable for ${definition.id}/${trackId}`);
+      if (image.width !== canvas.width || image.height !== canvas.height)
+        throw new Error(`v2 normalization source canvas is unstable for ${definition.id}/${trackId}`);
       const colors = new Set();
-      for (let offset = 0; offset < image.data.length; offset += 4) colors.add([...image.data.subarray(offset, offset + 4)].join(','));
+      for (let offset = 0; offset < image.data.length; offset += 4)
+        colors.add([...image.data.subarray(offset, offset + 4)].join(','));
       const drift = [...colors].filter((color) => !allowedColors.has(color));
       if (drift.length > 0) throw new Error(`v2 normalization source palette drift for ${definition.id}/${trackId}`);
-      const translated = translatedPixels(image, delta, canvas, { required: track.required, frameId: definition.id, trackId });
+      const translated = translatedPixels(image, delta, canvas, {
+        required: track.required,
+        frameId: definition.id,
+        trackId
+      });
       plannedTracks.push({ track, source, sourceSha256, translated });
     }
-    const translatedSockets = Object.fromEntries(Object.entries(sockets).map(([id, value]) => [id, translatedCoordinate(value, delta, canvas, `socket ${id}`)]));
-    const translatedContacts = Object.fromEntries(Object.entries(contacts).map(([id, value]) => [id, translatedCoordinate(value, delta, canvas, `contact ${id}`)]));
+    const translatedSockets = Object.fromEntries(
+      Object.entries(sockets).map(([id, value]) => [id, translatedCoordinate(value, delta, canvas, `socket ${id}`)])
+    );
+    const translatedContacts = Object.fromEntries(
+      Object.entries(contacts).map(([id, value]) => [id, translatedCoordinate(value, delta, canvas, `contact ${id}`)])
+    );
     for (const [id, value] of Object.entries(translatedContacts)) {
       const contact = document.contacts.find((item) => item.id === id);
-      if (contact?.kind === 'planted-foot' && value.y !== canvas.baseline) throw new Error(`v2 normalization planted contact ${id} must land on the baseline`);
+      if (contact?.kind === 'planted-foot' && value.y !== canvas.baseline)
+        throw new Error(`v2 normalization planted contact ${id} must land on the baseline`);
     }
-    plannedFrames.push({ definition, tracks: plannedTracks, delta, sockets: translatedSockets, contacts: translatedContacts, baseline });
+    plannedFrames.push({
+      definition,
+      tracks: plannedTracks,
+      delta,
+      sockets: translatedSockets,
+      contacts: translatedContacts,
+      baseline
+    });
   }
 
   try {
@@ -322,7 +448,9 @@ export async function normalizeContractFrames(args) {
       for (const item of plan.tracks) {
         const name = `${plan.definition.id}--${item.track.id}.png`;
         const file = path.join(stage, name);
-        await sharp(item.translated.data, { raw: { width: canvas.width, height: canvas.height, channels: 4 } }).png().toFile(file);
+        await sharp(item.translated.data, { raw: { width: canvas.width, height: canvas.height, channels: 4 } })
+          .png()
+          .toFile(file);
         const normalizedSha256 = await sha256(file);
         tracks[item.track.id] = {
           kind: item.track.kind,
@@ -337,7 +465,12 @@ export async function normalizeContractFrames(args) {
         layers.push({ input: file });
       }
       const combinedPath = path.join(stage, `${plan.definition.id}.png`);
-      await sharp({ create: { width: canvas.width, height: canvas.height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite(layers).png().toFile(combinedPath);
+      await sharp({
+        create: { width: canvas.width, height: canvas.height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } }
+      })
+        .composite(layers)
+        .png()
+        .toFile(combinedPath);
       frames.push({
         id: plan.definition.id,
         semantic: plan.definition.semantic,

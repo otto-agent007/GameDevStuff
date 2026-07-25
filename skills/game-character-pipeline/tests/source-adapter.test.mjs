@@ -33,18 +33,20 @@ function resultFor(frame, overrides = {}) {
     canvas: { width: 1, height: 1 },
     alpha: true,
     timeBase: { numerator: 1, denominator: 1000 },
-    frames: [{
-      index: 0,
-      id: 'frame-1',
-      path: frame.relative,
-      sha256: frame.sha256,
-      width: 1,
-      height: 1,
-      timestampMs: 0,
-      durationMs: 100,
-      sourceRect: { x: 0, y: 0, width: 1, height: 1 },
-      duplicateOf: null
-    }],
+    frames: [
+      {
+        index: 0,
+        id: 'frame-1',
+        path: frame.relative,
+        sha256: frame.sha256,
+        width: 1,
+        height: 1,
+        timestampMs: 0,
+        durationMs: 100,
+        sourceRect: { x: 0, y: 0, width: 1, height: 1 },
+        duplicateOf: null
+      }
+    ],
     diagnostics: [{ code: 'ALPHA_PRESENT', frameId: 'frame-1' }],
     approval: null,
     ...overrides
@@ -91,7 +93,10 @@ test('source result rejects absolute paths, bad timing, unknown diagnostics, and
 });
 
 test('unregistered and duplicate adapters fail closed', async () => {
-  await assert.rejects(decodeMotionSource({ kind: 'missing', source: null, run: {}, options: {} }), /unregistered motion source kind/);
+  await assert.rejects(
+    decodeMotionSource({ kind: 'missing', source: null, run: {}, options: {} }),
+    /unregistered motion source kind/
+  );
   registerSourceAdapter('duplicate-source', async () => ({}));
   assert.throws(() => registerSourceAdapter('duplicate-source', async () => ({})), /already registered/);
 });

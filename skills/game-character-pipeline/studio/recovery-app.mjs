@@ -18,9 +18,7 @@ function selectedCandidates() {
 }
 
 function omissionCount() {
-  const selectedComponents = new Set(
-    selectedCandidates().flatMap(({ componentIds }) => componentIds)
-  );
+  const selectedComponents = new Set(selectedCandidates().flatMap(({ componentIds }) => componentIds));
   return session.recovery.components.filter(({ id }) => !selectedComponents.has(id)).length;
 }
 
@@ -41,14 +39,14 @@ function stateErrors() {
   if (new Set(frameIds).size !== frameIds.length) {
     errors.push('Frame names must be unique.');
   }
-  if (selected.some(({ durationMs }) => (
-    !Number.isInteger(durationMs) || durationMs < 1 || durationMs > 65535
-  ))) {
+  if (selected.some(({ durationMs }) => !Number.isInteger(durationMs) || durationMs < 1 || durationMs > 65535)) {
     errors.push('Durations must be integers from 1 to 65535 ms.');
   }
-  if (selected.some(({ componentRoles }) => (
-    Object.values(componentRoles).some((role) => !['actor', 'prop', 'effect'].includes(role))
-  ))) {
+  if (
+    selected.some(({ componentRoles }) =>
+      Object.values(componentRoles).some((role) => !['actor', 'prop', 'effect'].includes(role))
+    )
+  ) {
     errors.push('Every selected component needs a configured track role.');
   }
   const omitted = omissionCount();
@@ -86,11 +84,12 @@ function selectionDocument() {
 function setStatusForState(prefix = '') {
   const errors = stateErrors();
   const omitted = omissionCount();
-  const suffix = errors.length > 0
-    ? errors[0]
-    : omitted > 0
-      ? `${omitted} eligible components omitted by the recovery contract.`
-      : 'All eligible foreground is dispositioned.';
+  const suffix =
+    errors.length > 0
+      ? errors[0]
+      : omitted > 0
+        ? `${omitted} eligible components omitted by the recovery contract.`
+        : 'All eligible foreground is dispositioned.';
   status.textContent = `${prefix}${suffix}`;
 }
 
@@ -100,10 +99,10 @@ function updateControls() {
   const canDecide = valid && !dirty && session.selectionRevision > 0;
   approveButton.disabled = !canDecide;
   rejectButton.disabled = !canDecide;
-  document.querySelector('#selected-count').textContent =
-    `${selectedCandidates().length} selected`;
-  document.querySelector('#validation-summary').textContent =
-    valid ? 'Selection is structurally valid.' : stateErrors().join(' ');
+  document.querySelector('#selected-count').textContent = `${selectedCandidates().length} selected`;
+  document.querySelector('#validation-summary').textContent = valid
+    ? 'Selection is structurally valid.'
+    : stateErrors().join(' ');
 }
 
 function markDirty(message) {
@@ -156,9 +155,7 @@ function renderCandidates() {
       }
       markDirty(`${candidate.id} ${candidate.selected ? 'selected.' : 'omitted.'}`);
       render();
-      document.querySelector(
-        `input[aria-label="Select ${candidate.id}"]`
-      )?.focus();
+      document.querySelector(`input[aria-label="Select ${candidate.id}"]`)?.focus();
     });
     const title = document.createElement('strong');
     title.textContent = candidate.id;
@@ -320,8 +317,7 @@ async function submitDecision(decision) {
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? 'owner decision failed');
-    status.textContent =
-      `${decision === 'approved' ? 'Approved' : 'Rejected'} recovered sequence revision ${result.revision}.`;
+    status.textContent = `${decision === 'approved' ? 'Approved' : 'Rejected'} recovered sequence revision ${result.revision}.`;
   } catch (error) {
     status.textContent = `Could not record owner decision: ${error.message}`;
   }
@@ -335,9 +331,7 @@ async function initialize() {
     const response = await fetch('/api/recovery-session');
     if (!response.ok) throw new Error(`recovery session returned ${response.status}`);
     session = await response.json();
-    const selectedByCandidate = new Map(
-      (session.selection?.frames ?? []).map((frame) => [frame.candidateId, frame])
-    );
+    const selectedByCandidate = new Map((session.selection?.frames ?? []).map((frame) => [frame.candidateId, frame]));
     candidates = session.recovery.proposedOrder.map((candidateId) => {
       const source = session.recovery.candidates.find(({ id }) => id === candidateId);
       const selected = selectedByCandidate.get(candidateId);
@@ -355,12 +349,9 @@ async function initialize() {
         componentRoles
       };
     });
-    document.querySelector('#project-title').textContent =
-      `${session.project.character.name} / Recovery`;
-    document.querySelector('#component-count').textContent =
-      `${session.recovery.components.length} components`;
-    document.querySelector('#recovery-overlay').src =
-      `/api/overlay/${session.recovery.overlay.sha256}`;
+    document.querySelector('#project-title').textContent = `${session.project.character.name} / Recovery`;
+    document.querySelector('#component-count').textContent = `${session.recovery.components.length} components`;
+    document.querySelector('#recovery-overlay').src = `/api/overlay/${session.recovery.overlay.sha256}`;
     document.querySelector('#recovery-hash').textContent = session.recoverySha256;
     document.querySelector('#selection-hash').textContent =
       session.selectionRevision > 0 ? session.selectionSha256 : 'Not saved';

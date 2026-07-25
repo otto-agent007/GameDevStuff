@@ -37,11 +37,7 @@ function projectContext(project) {
 
 function recoveryContext(recovery) {
   const document = recovery?.document ?? recovery;
-  if (
-    !document ||
-    document.kind !== 'pose-board-recovery' ||
-    typeof recovery?.sha256 !== 'string'
-  ) {
+  if (!document || document.kind !== 'pose-board-recovery' || typeof recovery?.sha256 !== 'string') {
     throw new Error('pose selection requires a published recovery report');
   }
   hash(recovery.sha256, 'pose-board recovery hash');
@@ -76,11 +72,7 @@ async function readCanonicalJson(file, runRoot, label) {
 async function verifyRecoveryArtifact(run, recovery) {
   const selected = recoveryContext(recovery);
   if (selected.path) {
-    const loaded = await readCanonicalJson(
-      selected.path,
-      run.root,
-      'pose-board recovery report'
-    );
+    const loaded = await readCanonicalJson(selected.path, run.root, 'pose-board recovery report');
     if (loaded.sha256 !== selected.sha256 || sha256Value(loaded.document) !== selected.sha256) {
       throw new Error('pose selection recovery ancestry mismatch');
     }
@@ -108,15 +100,7 @@ function validateSelectionDocument(value, { run, project, recovery }) {
   const selection = structuredClone(value);
   exactObject(
     selection,
-    [
-      'schemaVersion',
-      'kind',
-      'projectSha256',
-      'runId',
-      'actionId',
-      'recoverySha256',
-      'frames'
-    ],
+    ['schemaVersion', 'kind', 'projectSha256', 'runId', 'actionId', 'recoverySha256', 'frames'],
     'pose selection'
   );
   if (selection.schemaVersion !== 1 || selection.kind !== 'pose-board-selection') {
@@ -139,12 +123,8 @@ function validateSelectionDocument(value, { run, project, recovery }) {
   const action = project.document.actions.find(({ id }) => id === selection.actionId);
   const trackById = new Map(project.document.tracks.map((track) => [track.id, track]));
   const allowedRoles = new Set(action.tracks.map((trackId) => trackById.get(trackId).kind));
-  const candidateById = new Map(
-    recovery.document.candidates.map((candidate) => [candidate.id, candidate])
-  );
-  const knownComponents = new Set(
-    recovery.document.components.map((component) => component.id)
-  );
+  const candidateById = new Map(recovery.document.candidates.map((candidate) => [candidate.id, candidate]));
+  const knownComponents = new Set(recovery.document.components.map((component) => component.id));
   const assignedComponents = new Set();
 
   for (const frame of selection.frames) {
@@ -164,10 +144,7 @@ function validateSelectionDocument(value, { run, project, recovery }) {
       if (!ROLES.has(track.role) || !allowedRoles.has(track.role)) {
         throw new Error(`pose selection track role is not configured for the action: ${track.role}`);
       }
-      uniqueList(
-        track.componentIds,
-        `pose selection frame ${frame.id} ${track.role} component IDs`
-      );
+      uniqueList(track.componentIds, `pose selection frame ${frame.id} ${track.role} component IDs`);
       for (const componentId of track.componentIds) {
         portableId(componentId, 'pose selection component ID');
         if (!knownComponents.has(componentId)) {
@@ -245,7 +222,10 @@ async function verifySelectionArtifact({ run, project, recovery, selection }) {
   return {
     ...loaded,
     relative: portableRelativePath(
-      path.relative(await fs.realpath(run.root), loaded.path).split(path.sep).join('/'),
+      path
+        .relative(await fs.realpath(run.root), loaded.path)
+        .split(path.sep)
+        .join('/'),
       'pose selection revision path'
     ),
     revision: selection.revision,
@@ -322,10 +302,7 @@ function validateApprovalDocument(document) {
     ],
     'pose selection approval'
   );
-  if (
-    document.schemaVersion !== 1 ||
-    document.kind !== 'pose-board-selection-approval'
-  ) {
+  if (document.schemaVersion !== 1 || document.kind !== 'pose-board-selection-approval') {
     throw new Error('pose selection approval identity is invalid');
   }
   hash(document.projectSha256, 'pose selection approval project hash');
@@ -367,15 +344,8 @@ export async function loadApprovedPoseSelection({ run, project, recovery, file }
     throw new Error('approved pose selection is required before source publication');
   }
 
-  const selectionFile = path.join(
-    run.root,
-    ...document.selection.path.split('/')
-  );
-  const selected = await readCanonicalJson(
-    selectionFile,
-    run.root,
-    'pose selection revision'
-  );
+  const selectionFile = path.join(run.root, ...document.selection.path.split('/'));
+  const selected = await readCanonicalJson(selectionFile, run.root, 'pose selection revision');
   if (selected.sha256 !== document.selectionSha256) {
     throw new Error('pose selection approval selection hash mismatch');
   }

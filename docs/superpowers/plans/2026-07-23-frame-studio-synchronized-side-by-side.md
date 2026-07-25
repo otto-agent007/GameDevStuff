@@ -27,10 +27,12 @@
 ### Task 1: Deterministic elapsed-time sequence resolution
 
 **Files:**
+
 - Modify: `skills/game-character-pipeline/studio/review-state.mjs`
 - Test: `skills/game-character-pipeline/tests/review-state.test.mjs`
 
 **Interfaces:**
+
 - Consumes: existing `playbackIndices(frames, range)`
 - Produces: `sequenceDurationMs(frames, range) -> number`
 - Produces: `frameStartElapsedMs(frames, frameIndex, range) -> number`
@@ -88,12 +90,14 @@ Expected: all review-state tests pass.
 ### Task 2: Accessible dual-preview shell and responsive layout
 
 **Files:**
+
 - Modify: `skills/game-character-pipeline/studio/app.mjs`
 - Modify: `skills/game-character-pipeline/studio/index.html`
 - Modify: `skills/game-character-pipeline/studio/styles.css`
 - Modify: `skills/game-character-pipeline/tests/browser/frame-studio.spec.mjs`
 
 **Interfaces:**
+
 - Consumes: existing Review A/B card and `frame-canvas` element
 - Produces: `#review-side-by-side`, `#review-a-pane`, `#review-b-pane`, `#review-a-canvas`, `#review-b-canvas`, `#review-a-frame`, and `#review-b-frame`
 
@@ -145,10 +149,12 @@ Run the same Playwright grep. Expected: PASS for desktop and narrow.
 ### Task 3: Shared monotonic playback and immutable comparison behavior
 
 **Files:**
+
 - Modify: `skills/game-character-pipeline/studio/app.mjs`
 - Test: `skills/game-character-pipeline/tests/browser/frame-studio.spec.mjs`
 
 **Interfaces:**
+
 - Consumes: Task 1 helpers and Task 2 DOM IDs
 - Produces: transient review modes `A`, `B`, and `AB`
 - Produces: shared comparison elapsed state driven by `performance.now()`
@@ -227,11 +233,13 @@ Expected: all selected tests pass on desktop and narrow.
 ### Task 4: Regression, rendered QA, and private comparison handoff
 
 **Files:**
+
 - Modify: `<private-audit-root>/implementation-checkpoint.md`
 - Modify: `<private-audit-root>/audit-checkpoint.json`
 - Preserve: all existing private Frame Studio comparison evidence
 
 **Interfaces:**
+
 - Consumes: completed synchronized comparison mode
 - Produces: owner-visible live Frame Studio AB playback and private verification evidence
 

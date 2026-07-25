@@ -24,7 +24,9 @@ test('manifest has a closed schema and returns a frozen copy', async () => {
   delete manifest.assets['linux-x64'].unexpected;
   const validated = validateToolManifest(manifest);
   assert.equal(Object.isFrozen(validated.assets['linux-x64']), true);
-  assert.throws(() => { validated.release.tag = 'changed'; }, TypeError);
+  assert.throws(() => {
+    validated.release.tag = 'changed';
+  }, TypeError);
 });
 
 test('asset selection rejects target names outside the reviewed manifest', async () => {
@@ -35,10 +37,12 @@ test('asset selection rejects target names outside the reviewed manifest', async
 
 test('manifest rejects mutable or non-GameDevStuff release URLs', async () => {
   const manifest = await fixtureManifest();
-  manifest.assets['linux-x64'].url = 'https://github.com/otto-agent007/GameDevStuff/releases/download/latest/pixel-snapper-linux-x64.tar.gz';
+  manifest.assets['linux-x64'].url =
+    'https://github.com/otto-agent007/GameDevStuff/releases/download/latest/pixel-snapper-linux-x64.tar.gz';
   assert.throws(() => validateToolManifest(manifest), /invalid pinned Pixel Snapper manifest/);
 
-  manifest.assets['linux-x64'].url = 'https://github.com/otto-agent007/GameDevStuff/releases/download/pixel-snapper-v1.2.3-commit.0123456/pixel-snapper-linux-x64.tar.gz';
+  manifest.assets['linux-x64'].url =
+    'https://github.com/otto-agent007/GameDevStuff/releases/download/pixel-snapper-v1.2.3-commit.0123456/pixel-snapper-linux-x64.tar.gz';
   manifest.release.url = 'https://example.invalid/releases/tag/pixel-snapper-v1.2.3-commit.0123456';
   assert.throws(() => validateToolManifest(manifest), /invalid pinned Pixel Snapper manifest/);
 });

@@ -4,12 +4,20 @@ import path from 'node:path';
 
 function stable(value) {
   if (Array.isArray(value)) return value.map(stable);
-  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
+  if (value && typeof value === 'object')
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, stable(value[key])])
+    );
   return value;
 }
 
 export function stableHash(value) {
-  return crypto.createHash('sha256').update(JSON.stringify(stable(value))).digest('hex');
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(stable(value)))
+    .digest('hex');
 }
 
 function missingSigningKey() {
@@ -17,7 +25,8 @@ function missingSigningKey() {
 }
 
 function requireOwned(stat, label) {
-  if (process.platform !== 'win32' && typeof process.geteuid === 'function' && stat.uid !== process.geteuid()) throw new Error(`${label} must be owned by the current effective uid`);
+  if (process.platform !== 'win32' && typeof process.geteuid === 'function' && stat.uid !== process.geteuid())
+    throw new Error(`${label} must be owned by the current effective uid`);
 }
 
 async function requireDirectory(directory, label) {
@@ -38,7 +47,8 @@ async function signingKey(projectDir, { create = false } = {}) {
   const stateDir = path.join(project, '.pixel-sprite-pipeline');
   const state = await requireDirectory(stateDir, 'correction state directory');
   requireOwned(state, 'correction state directory');
-  if (process.platform !== 'win32' && (state.mode & 0o022) !== 0) throw new Error('correction state directory permissions are unsafe');
+  if (process.platform !== 'win32' && (state.mode & 0o022) !== 0)
+    throw new Error('correction state directory permissions are unsafe');
   const keysDir = path.join(project, '.pixel-sprite-pipeline', 'keys');
   let createdKeysDirectory = false;
   if (create) {
@@ -52,7 +62,11 @@ async function signingKey(projectDir, { create = false } = {}) {
   }
   const directory = await requireDirectory(keysDir, 'correction key directory');
   requireOwned(directory, 'correction key directory');
-  if (process.platform !== 'win32' && ((directory.mode & 0o077) !== 0 || (createdKeysDirectory && (directory.mode & 0o777) !== 0o700))) throw new Error('correction key directory permissions are unsafe');
+  if (
+    process.platform !== 'win32' &&
+    ((directory.mode & 0o077) !== 0 || (createdKeysDirectory && (directory.mode & 0o777) !== 0o700))
+  )
+    throw new Error('correction key directory permissions are unsafe');
   const file = path.join(keysDir, 'correction-signing-v1.key');
   let keyExists = true;
   try {
@@ -90,9 +104,11 @@ async function signingKey(projectDir, { create = false } = {}) {
     if (stat.nlink === 1) break;
     await new Promise((resolve) => setTimeout(resolve, 1));
   }
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new Error('correction signing key permissions or file type are unsafe');
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1)
+    throw new Error('correction signing key permissions or file type are unsafe');
   requireOwned(stat, 'correction signing key');
-  if (process.platform !== 'win32' && (stat.mode & 0o777) !== 0o600) throw new Error('correction signing key permissions or file type are unsafe');
+  if (process.platform !== 'win32' && (stat.mode & 0o777) !== 0o600)
+    throw new Error('correction signing key permissions or file type are unsafe');
   let key;
   try {
     key = await fs.readFile(file);
@@ -110,7 +126,7 @@ async function atomicNew(file, contents) {
   try {
     await fs.link(temporary, file);
   } catch (error) {
-    if (error.code !== 'EEXIST' || await fs.readFile(file, 'utf8') !== contents) throw error;
+    if (error.code !== 'EEXIST' || (await fs.readFile(file, 'utf8')) !== contents) throw error;
   } finally {
     await fs.rm(temporary, { force: true });
   }
@@ -118,7 +134,11 @@ async function atomicNew(file, contents) {
 
 export async function writeSignedState({ projectDir, file, domain, payload, createKey = false }) {
   const key = await signingKey(projectDir, { create: createKey });
-  const signature = crypto.createHmac('sha256', key).update(`${domain}\0`).update(JSON.stringify(stable(payload))).digest('hex');
+  const signature = crypto
+    .createHmac('sha256', key)
+    .update(`${domain}\0`)
+    .update(JSON.stringify(stable(payload)))
+    .digest('hex');
   const document = { version: 1, payload, signature };
   await atomicNew(file, `${JSON.stringify(document, null, 2)}\n`);
   return { document, sha256: stableHash(document) };
@@ -127,9 +147,14 @@ export async function writeSignedState({ projectDir, file, domain, payload, crea
 export async function readSignedState({ projectDir, file, domain }) {
   const key = await signingKey(projectDir);
   const document = JSON.parse(await fs.readFile(file, 'utf8'));
-  const expected = crypto.createHmac('sha256', key).update(`${domain}\0`).update(JSON.stringify(stable(document.payload))).digest('hex');
+  const expected = crypto
+    .createHmac('sha256', key)
+    .update(`${domain}\0`)
+    .update(JSON.stringify(stable(document.payload)))
+    .digest('hex');
   const left = Buffer.from(document.signature ?? '', 'hex');
   const right = Buffer.from(expected, 'hex');
-  if (document.version !== 1 || left.length !== right.length || !crypto.timingSafeEqual(left, right)) throw new Error('signed state signature mismatch');
+  if (document.version !== 1 || left.length !== right.length || !crypto.timingSafeEqual(left, right))
+    throw new Error('signed state signature mismatch');
   return { ...document, sha256: stableHash(document) };
 }

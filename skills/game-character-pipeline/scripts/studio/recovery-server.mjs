@@ -3,18 +3,9 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  approvePoseSelection,
-  loadApprovedPoseSelection,
-  writePoseSelection
-} from '../lib/pose-selection.mjs';
+import { approvePoseSelection, loadApprovedPoseSelection, writePoseSelection } from '../lib/pose-selection.mjs';
 import { loadInitializedProject, loadRun } from '../lib/run-contract.mjs';
-import {
-  exactObject,
-  portableRelativePath,
-  sha256File,
-  sha256Value
-} from '../lib/schema.mjs';
+import { exactObject, portableRelativePath, sha256File, sha256Value } from '../lib/schema.mjs';
 
 const BODY_LIMIT = 1024 * 1024;
 const CSP = "default-src 'self'; img-src 'self' blob:; connect-src 'self'";
@@ -89,10 +80,7 @@ async function readJson(request) {
     throw new HttpError(415, 'mutation content type must be application/json');
   }
   const declared = request.headers['content-length'];
-  if (
-    declared !== undefined &&
-    (!/^\d+$/.test(declared) || Number(declared) > BODY_LIMIT)
-  ) {
+  if (declared !== undefined && (!/^\d+$/.test(declared) || Number(declared) > BODY_LIMIT)) {
     request.resume();
     throw new HttpError(413, 'request body exceeds 1 MiB');
   }
@@ -104,10 +92,7 @@ async function readJson(request) {
     chunks.push(chunk);
   }
   try {
-    return plainObject(
-      JSON.parse(Buffer.concat(chunks).toString('utf8')),
-      'request body'
-    );
+    return plainObject(JSON.parse(Buffer.concat(chunks).toString('utf8')), 'request body');
   } catch (error) {
     if (error instanceof HttpError) throw error;
     throw new HttpError(400, 'request body must be valid JSON');
@@ -116,11 +101,7 @@ async function readJson(request) {
 
 function contained(root, target, label) {
   const relative = path.relative(root, target);
-  if (
-    relative === '..' ||
-    relative.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relative)
-  ) {
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new Error(`${label} escaped the run root`);
   }
 }
@@ -197,7 +178,7 @@ async function verifyArtifact(runRoot, record, label) {
   }
   const physical = await fs.realpath(selected);
   contained(root, physical, label);
-  if (await sha256File(physical) !== record.sha256) {
+  if ((await sha256File(physical)) !== record.sha256) {
     throw new HttpError(409, `${label} hash mismatch`);
   }
   return physical;
@@ -223,11 +204,7 @@ async function loadSelectionState(run, recovery, project) {
     if (name !== `pose-selection-${String(index + 1).padStart(4, '0')}.json`) {
       throw new Error('pose selection revisions are not contiguous');
     }
-    const loaded = await readCanonicalJson(
-      path.join(run.root, 'edits', name),
-      run.root,
-      'pose selection revision'
-    );
+    const loaded = await readCanonicalJson(path.join(run.root, 'edits', name), run.root, 'pose selection revision');
     if (
       loaded.document.kind !== 'pose-board-selection' ||
       loaded.document.projectSha256 !== project.sha256 ||
@@ -264,12 +241,7 @@ function serialQueue() {
   };
 }
 
-export async function startRecoveryStudioServer({
-  projectDir,
-  runId,
-  host = '127.0.0.1',
-  port = 0
-}) {
+export async function startRecoveryStudioServer({ projectDir, runId, host = '127.0.0.1', port = 0 }) {
   if (host !== '127.0.0.1') {
     throw new Error('recovery Studio must bind to the IPv4 loopback host');
   }
@@ -283,12 +255,8 @@ export async function startRecoveryStudioServer({
     throw new Error('recovery Studio requires a pose-board run');
   }
   const recovery = await loadRecovery(run, project);
-  const candidateByHash = new Map(
-    recovery.document.candidates.map((candidate) => [candidate.sha256, candidate])
-  );
-  const overlayByHash = new Map([
-    [recovery.document.overlay.sha256, recovery.document.overlay]
-  ]);
+  const candidateByHash = new Map(recovery.document.candidates.map((candidate) => [candidate.sha256, candidate]));
+  const overlayByHash = new Map([[recovery.document.overlay.sha256, recovery.document.overlay]]);
   let selectionState = await loadSelectionState(run, recovery, project);
   const serialize = serialQueue();
   let origin;
@@ -395,11 +363,7 @@ export async function startRecoveryStudioServer({
       if (pathname === '/api/pose-selection-approval') {
         if (request.method !== 'POST') throw methodError('POST');
         const body = await readJson(request);
-        exactObject(
-          body,
-          ['approver', 'decision', 'notes'],
-          'pose selection approval request'
-        );
+        exactObject(body, ['approver', 'decision', 'notes'], 'pose selection approval request');
         const written = await serialize(async () => {
           requireMutationHeaders(request, origin, selectionState.selectionSha256);
           if (!selectionState.selectionPath || selectionState.selectionRevision < 1) {
@@ -473,7 +437,7 @@ export async function startRecoveryStudioServer({
       if (closed) return;
       closed = true;
       await new Promise((resolve, reject) => {
-        server.close((error) => error ? reject(error) : resolve());
+        server.close((error) => (error ? reject(error) : resolve()));
         server.closeIdleConnections?.();
       });
     }

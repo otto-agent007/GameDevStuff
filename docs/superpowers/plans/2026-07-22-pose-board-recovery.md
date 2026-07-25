@@ -27,11 +27,13 @@
 ### Task 1: Validate recovery contracts and detect full-board foreground
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/scripts/lib/pose-board-contract.mjs`
 - Create: `skills/game-character-pipeline/scripts/lib/pose-board-recovery.mjs`
 - Create: `skills/game-character-pipeline/tests/pose-board-recovery.test.mjs`
 
 **Interfaces:**
+
 - Consumes: PNG bytes and a closed recovery contract.
 - Produces: `validatePoseBoardContract(value)`, `analyzePoseBoard({ bytes, contract })`, and `renderRecoveredCandidate({ analysis, componentIds })`.
 
@@ -54,7 +56,10 @@ const contract = {
 const selected = validatePoseBoardContract(contract);
 assert.equal(Object.isFrozen(selected), true);
 assert.throws(() => validatePoseBoardContract({ ...contract, connectivity: 8 }), /connectivity/);
-assert.throws(() => validatePoseBoardContract({ ...contract, surprise: true }), /unknown pose-board recovery contract field/);
+assert.throws(
+  () => validatePoseBoardContract({ ...contract, surprise: true }),
+  /unknown pose-board recovery contract field/
+);
 ```
 
 - [x] **Step 2: Run the contract test and verify RED**
@@ -76,11 +81,21 @@ Use existing `exactObject`, `integer`, `portableId`, `uniqueList`, `deepFreeze`,
 ```js
 export function validatePoseBoardContract(value) {
   const document = structuredClone(value);
-  exactObject(document, [
-    'schemaVersion', 'background', 'connectivity', 'minimumComponentPixels',
-    'maxDecodedRgbaBytes', 'padding', 'expectedCandidates',
-    'allowUnassigned', 'groups'
-  ], 'pose-board recovery contract');
+  exactObject(
+    document,
+    [
+      'schemaVersion',
+      'background',
+      'connectivity',
+      'minimumComponentPixels',
+      'maxDecodedRgbaBytes',
+      'padding',
+      'expectedCandidates',
+      'allowUnassigned',
+      'groups'
+    ],
+    'pose-board recovery contract'
+  );
   // Validate every nested field and return a deeply frozen clone.
   return deepFreeze(document);
 }
@@ -102,13 +117,12 @@ Build a synthetic `12x8` board in memory with a solid chroma background, two con
 const analysis = await analyzePoseBoard({ bytes, contract });
 assert.equal(analysis.width, 12);
 assert.equal(analysis.height, 8);
-assert.deepEqual(analysis.components.map(({ id }) => id), [
-  'component-0001', 'component-0002', 'component-0003'
-]);
+assert.deepEqual(
+  analysis.components.map(({ id }) => id),
+  ['component-0001', 'component-0002', 'component-0003']
+);
 assert.equal(analysis.ignoredNoise.length, 2);
-assert.deepEqual(analysis.proposedOrder, [
-  'candidate-0001', 'candidate-0002', 'candidate-0003'
-]);
+assert.deepEqual(analysis.proposedOrder, ['candidate-0001', 'candidate-0002', 'candidate-0003']);
 assert.match(analysis.maskSha256, /^[a-f0-9]{64}$/);
 ```
 
@@ -126,7 +140,9 @@ In `pose-board-recovery.mjs`:
 export async function analyzePoseBoard({ bytes, contract }) {
   const selected = validatePoseBoardContract(contract);
   const { data, info } = await sharp(bytes, { limitInputPixels: 268435456 })
-    .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
   if (data.length > selected.maxDecodedRgbaBytes) {
     throw new Error('pose-board decoded RGBA exceeds the configured byte limit');
   }
@@ -173,6 +189,7 @@ Expected: all Task 1 tests pass and `git diff --check` is silent. Do not commit.
 ### Task 2: Publish immutable recovery evidence and resume from owner approval
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/scripts/lib/pose-board.mjs`
 - Create: `skills/game-character-pipeline/scripts/lib/pose-selection.mjs`
 - Create: `skills/game-character-pipeline/tests/pose-board.test.mjs`
@@ -183,6 +200,7 @@ Expected: all Task 1 tests pass and `git diff --check` is silent. Do not commit.
 - Modify: `skills/game-character-pipeline/tests/cli.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `analyzePoseBoard`, `renderRecoveredCandidate`, immutable run/project state, recovery contract file, optional approved selection file.
 - Produces: `recoverPoseBoard`, `writePoseSelection`, `approvePoseSelection`, `loadApprovedPoseSelection`, and a standard `pose-board` motion-source result.
 
@@ -226,8 +244,7 @@ Create an owner-only project/run and synthetic board. Call:
 ```js
 await assert.rejects(
   decodePoseBoard({ source, recoveryContract, run, project }),
-  (error) => error.exitCode === 4 &&
-    error.handoff.status === 'awaiting-pose-selection'
+  (error) => error.exitCode === 4 && error.handoff.status === 'awaiting-pose-selection'
 );
 ```
 
@@ -262,10 +279,13 @@ Expected: FAIL because `pose-board.mjs` does not exist.
 ```js
 export async function recoverPoseBoard({ source, recoveryContract, run, project }) {
   const capturedSource = await copyImmutable({
-    source, root: run.root, relative: 'source/pose-board/original.png'
+    source,
+    root: run.root,
+    relative: 'source/pose-board/original.png'
   });
   const capturedContract = await copyImmutable({
-    source: recoveryContract, root: run.root,
+    source: recoveryContract,
+    root: run.root,
     relative: 'source/pose-board/recovery-contract.json'
   });
   // Analyze captured bytes, write mask/overlay/candidates, then write report last.
@@ -320,8 +340,14 @@ Resume with a valid approval and assert:
 
 ```js
 assert.equal(result.kind, 'pose-board');
-assert.deepEqual(result.frames.map(({ id }) => id), ['stride-01', 'stride-02']);
-assert.deepEqual(result.frames.map(({ durationMs }) => durationMs), [80, 120]);
+assert.deepEqual(
+  result.frames.map(({ id }) => id),
+  ['stride-01', 'stride-02']
+);
+assert.deepEqual(
+  result.frames.map(({ durationMs }) => durationMs),
+  [80, 120]
+);
 assert.equal(new Set(result.frames.map(({ width }) => width)).size, 1);
 assert.equal(new Set(result.frames.map(({ height }) => height)).size, 1);
 ```
@@ -341,8 +367,7 @@ error.handoff = {
   next: {
     kind: 'pose-board-selection',
     cwd: packageRoot,
-    argv: [process.execPath, cliPath, 'studio', '--stage', 'recovery',
-      '--project-dir', project.root, '--run', run.id]
+    argv: [process.execPath, cliPath, 'studio', '--stage', 'recovery', '--project-dir', project.root, '--run', run.id]
   }
 };
 ```
@@ -377,6 +402,7 @@ Expected: focused tests pass and diff check is silent. Do not commit.
 ### Task 3: Add the Frame Studio recovery stage
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/studio/recovery.html`
 - Create: `skills/game-character-pipeline/studio/recovery-app.mjs`
 - Create: `skills/game-character-pipeline/studio/recovery-server.mjs`
@@ -387,6 +413,7 @@ Expected: focused tests pass and diff check is silent. Do not commit.
 - Modify: `skills/game-character-pipeline/package.json`
 
 **Interfaces:**
+
 - Consumes: verified recovery report and candidate artifacts.
 - Produces: immutable `pose-selection` revisions and `pose-selection-approval` revisions accepted by Task 2.
 
@@ -481,12 +508,14 @@ Expected: all game-character unit and browser tests pass. Do not commit.
 ### Task 4: Prove downstream per-frame production and reproducibility
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/tests/pose-board-e2e.test.mjs`
 - Modify: `skills/game-character-pipeline/examples/clockwork-courier/run-fixture.mjs`
 - Modify: `skills/game-character-pipeline/tests/skill-scenarios.json`
 - Modify: `skills/game-character-pipeline/tests/skill-scenarios.test.mjs`
 
 **Interfaces:**
+
 - Consumes: approved pose-board source result from Tasks 1-3 and existing Pixel Snapper delegation.
 - Produces: public synthetic end-to-end evidence that each selected recovered frame is snapped separately and remains reproducible.
 
@@ -566,6 +595,7 @@ Expected: end-to-end, skill scenarios, and public acceptance pass. Do not commit
 ### Task 5: Document the workflow and run complete verification
 
 **Files:**
+
 - Modify: `skills/game-character-pipeline/SKILL.md`
 - Modify: `skills/game-character-pipeline/references/motion-sources.md`
 - Modify: `skills/game-character-pipeline/references/workflow.md`
@@ -574,6 +604,7 @@ Expected: end-to-end, skill scenarios, and public acceptance pass. Do not commit
 - Modify: `skills/game-character-pipeline/package.json`
 
 **Interfaces:**
+
 - Consumes: verified command surface and artifact contracts from Tasks 1-4.
 - Produces: discoverable operational instructions and complete regression evidence.
 

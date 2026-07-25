@@ -15,30 +15,32 @@ Auditable game-asset workflows for Codex. This repository contains two install-b
 
 ## Quick start
 
-Clone this repository, then install dependencies in the bundle you need. Keep the bundle in your Codex skills location or copy it into the project that will run it; do not use `npm publish`.
+Clone this repository, then install the shared workspace dependencies from the repository root. Keep a bundle in your Codex skills location or copy it into the project that will run it; do not use `npm publish`.
 
 ```bash
 git clone https://github.com/otto-agent007/GameDevStuff.git
-cd GameDevStuff/skills/game-character-pipeline
+cd GameDevStuff
 npm ci
-node scripts/cli.mjs --help
 
-cd ../pixel-sprite-animation-pipeline
-npm ci
-node scripts/cli.mjs --help
+npm run test
+npm run lint
+npm run format:check
+
+node skills/game-character-pipeline/scripts/cli.mjs --help
+node skills/pixel-sprite-animation-pipeline/scripts/cli.mjs --help
 ```
 
-Run the checks from each bundle with `npm test`; use `npm pack --dry-run` to inspect the install-by-copy package boundary.
+Run `npm run package-boundary` to inspect both install-by-copy package boundaries. An installed or copied bundle has no root lockfile, so install only its runtime dependencies with `npm install --omit=dev` from that bundle directory before use.
 
 ## Exit classes
 
-| Class | Meaning | Required action |
-| --- | --- | --- |
-| `0` | Requested stage complete | Report the evidence produced |
-| `1` | Invocation or unexpected failure | Correct the command or diagnose the failure |
-| `2` | External generation/import handoff | Return the handoff and wait for the artifact |
-| `3` | Objective contract or validation failure | Stop; correct the source, edit, contract, or output |
-| `4` | Owner review required or rejected | Stop without publishing or integrating |
+| Class | Meaning                                  | Required action                                     |
+| ----- | ---------------------------------------- | --------------------------------------------------- |
+| `0`   | Requested stage complete                 | Report the evidence produced                        |
+| `1`   | Invocation or unexpected failure         | Correct the command or diagnose the failure         |
+| `2`   | External generation/import handoff       | Return the handoff and wait for the artifact        |
+| `3`   | Objective contract or validation failure | Stop; correct the source, edit, contract, or output |
+| `4`   | Owner review required or rejected        | Stop without publishing or integrating              |
 
 Private inputs, audit roots, and downstream integration locations stay outside Git and package contents. Configure them locally; do not place private paths or assets in public skill files.
 

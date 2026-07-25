@@ -26,7 +26,7 @@ function fixture(name) {
 
 const crcTable = Array.from({ length: 256 }, (_, value) => {
   let crc = value;
-  for (let bit = 0; bit < 8; bit += 1) crc = (crc & 1) ? (0xedb88320 ^ (crc >>> 1)) : (crc >>> 1);
+  for (let bit = 0; bit < 8; bit += 1) crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
   return crc >>> 0;
 });
 
@@ -70,38 +70,83 @@ async function rgbaAt(run, frame, x, y) {
 
 test('container parsers preserve frame rectangles, timing, disposal, and blend metadata', async () => {
   const gif = inspectGif(await fs.readFile(fixture('disposal-previous.gif')));
-  assert.deepEqual(gif.frames.map(({ durationMs }) => durationMs), [70, 130, 90]);
-  assert.equal(gif.frames.some(({ dispose }) => dispose === 'previous'), true);
-  assert.equal(gif.frames.some(({ rect }) => rect.width < gif.canvas.width || rect.height < gif.canvas.height), true);
+  assert.deepEqual(
+    gif.frames.map(({ durationMs }) => durationMs),
+    [70, 130, 90]
+  );
+  assert.equal(
+    gif.frames.some(({ dispose }) => dispose === 'previous'),
+    true
+  );
+  assert.equal(
+    gif.frames.some(({ rect }) => rect.width < gif.canvas.width || rect.height < gif.canvas.height),
+    true
+  );
 
   const apng = inspectApng(await fs.readFile(fixture('alpha.apng.png')));
-  assert.deepEqual(apng.frames.map(({ durationMs }) => durationMs), [80, 120]);
-  assert.equal(apng.frames.every(({ hasAlpha }) => hasAlpha), true);
-  assert.deepEqual(apng.frames.map(({ blend }) => blend), ['source', 'over']);
+  assert.deepEqual(
+    apng.frames.map(({ durationMs }) => durationMs),
+    [80, 120]
+  );
+  assert.equal(
+    apng.frames.every(({ hasAlpha }) => hasAlpha),
+    true
+  );
+  assert.deepEqual(
+    apng.frames.map(({ blend }) => blend),
+    ['source', 'over']
+  );
 
   const webp = inspectAnimatedWebp(await fs.readFile(fixture('alpha.webp')));
-  assert.deepEqual(webp.frames.map(({ durationMs }) => durationMs), [60, 140]);
-  assert.equal(webp.frames.every(({ hasAlpha }) => hasAlpha), true);
-  assert.deepEqual(webp.frames.map(({ blend }) => blend), ['source', 'over']);
+  assert.deepEqual(
+    webp.frames.map(({ durationMs }) => durationMs),
+    [60, 140]
+  );
+  assert.equal(
+    webp.frames.every(({ hasAlpha }) => hasAlpha),
+    true
+  );
+  assert.deepEqual(
+    webp.frames.map(({ blend }) => blend),
+    ['source', 'over']
+  );
 });
 
 test('GIF disposal restores prior composited pixels and retains delays', async (t) => {
   const run = await freshRun(t, 'gif');
   const result = await decodeAnimatedImage({ source: fixture('disposal-previous.gif'), run });
-  assert.deepEqual(result.frames.map(({ durationMs }) => durationMs), [70, 130, 90]);
+  assert.deepEqual(
+    result.frames.map(({ durationMs }) => durationMs),
+    [70, 130, 90]
+  );
   assert.equal(await rgbaAt(run, result.frames[2], 3, 3), '00000000');
-  assert.equal(result.diagnostics.some(({ code }) => code === 'PARTIAL_SOURCE_RECT'), true);
-  assert.equal(result.diagnostics.some(({ code }) => code === 'DISPOSAL_RESTORE_PREVIOUS'), true);
+  assert.equal(
+    result.diagnostics.some(({ code }) => code === 'PARTIAL_SOURCE_RECT'),
+    true
+  );
+  assert.equal(
+    result.diagnostics.some(({ code }) => code === 'DISPOSAL_RESTORE_PREVIOUS'),
+    true
+  );
 });
 
 test('APNG and WebP publish full composited RGBA pages with alpha', async (t) => {
-  for (const [name, kind] of [['alpha.apng.png', 'apng'], ['alpha.webp', 'webp']]) {
+  for (const [name, kind] of [
+    ['alpha.apng.png', 'apng'],
+    ['alpha.webp', 'webp']
+  ]) {
     const run = await freshRun(t, kind);
     const result = await decodeAnimatedImage({ source: fixture(name), run });
     assert.equal(result.kind, kind);
     assert.equal(result.alpha, true);
-    assert.equal(result.frames.every((frame) => frame.width === result.canvas.width), true);
-    assert.equal(result.frames.every((frame) => frame.height === result.canvas.height), true);
+    assert.equal(
+      result.frames.every((frame) => frame.width === result.canvas.width),
+      true
+    );
+    assert.equal(
+      result.frames.every((frame) => frame.height === result.canvas.height),
+      true
+    );
     assert.match(result.decoder.version, /^sharp=.*;vips=/);
   }
 });
@@ -109,8 +154,14 @@ test('APNG and WebP publish full composited RGBA pages with alpha', async (t) =>
 test('animated image intake reports duplicates and empty composited frames', async (t) => {
   const run = await freshRun(t, 'gif');
   const result = await decodeAnimatedImage({ source: fixture('duplicates-empty.gif'), run });
-  assert.equal(result.diagnostics.some(({ code }) => code === 'DUPLICATE_FRAME'), true);
-  assert.equal(result.diagnostics.some(({ code }) => code === 'EMPTY_FRAME'), true);
+  assert.equal(
+    result.diagnostics.some(({ code }) => code === 'DUPLICATE_FRAME'),
+    true
+  );
+  assert.equal(
+    result.diagnostics.some(({ code }) => code === 'EMPTY_FRAME'),
+    true
+  );
 });
 
 test('container corruption, zero delays, and changed bytes fail closed', async (t) => {
@@ -178,10 +229,14 @@ test('CLI decodes animated sources through the closed adapter and publishes a re
   const decoded = await execFile(process.execPath, [
     cliPath,
     'intake',
-    '--project-dir', projectRoot,
-    '--action', 'idle',
-    '--kind', 'gif',
-    '--source', fixture('disposal-previous.gif')
+    '--project-dir',
+    projectRoot,
+    '--action',
+    'idle',
+    '--kind',
+    'gif',
+    '--source',
+    fixture('disposal-previous.gif')
   ]);
   const result = JSON.parse(decoded.stdout);
   assert.equal(result.status, 'intake-complete');

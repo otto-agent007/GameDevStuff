@@ -12,7 +12,13 @@ import {
   verifyApproval,
   writeApproval
 } from './lib/approval.mjs';
-import { auditRun, compareRuns, loadAuditExpected, recordAuditReport, recordProductionValidation } from './lib/audit.mjs';
+import {
+  auditRun,
+  compareRuns,
+  loadAuditExpected,
+  recordAuditReport,
+  recordProductionValidation
+} from './lib/audit.mjs';
 import { createGenerationHandoff, importGeneratedCandidate, loadGenerationHandoff } from './lib/generated-still.mjs';
 import { decodeAnimatedImage } from './lib/animated-image.mjs';
 import { createPixelProductionContract, publishExportRevision } from './lib/export-contract.mjs';
@@ -38,35 +44,43 @@ function print(value) {
 
 function positiveInteger(value) {
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) throw new Error('duration must be an integer from 1 to 65535');
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535)
+    throw new Error('duration must be an integer from 1 to 65535');
   return parsed;
 }
 
 function revisionInteger(value) {
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 999999) throw new Error('revision must be an integer from 1 to 999999');
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 999999)
+    throw new Error('revision must be an integer from 1 to 999999');
   return parsed;
 }
 
 registerSourceAdapter('png-sequence', ({ source, run }) => decodePngSequence({ manifest: source, run }));
-registerSourceAdapter('pose-board', ({ source, run, project, options }) => decodePoseBoard({
-  source,
-  recoveryContract: options.recoveryContract,
-  selectionApproval: options.selectionApproval,
-  run,
-  project
-}));
-registerSourceAdapter('generated-still', ({ source, run, options }) => importGeneratedCandidate({
-  handoff: options.handoff,
-  source,
-  run,
-  durationMs: options.durationMs
-}));
+registerSourceAdapter('pose-board', ({ source, run, project, options }) =>
+  decodePoseBoard({
+    source,
+    recoveryContract: options.recoveryContract,
+    selectionApproval: options.selectionApproval,
+    run,
+    project
+  })
+);
+registerSourceAdapter('generated-still', ({ source, run, options }) =>
+  importGeneratedCandidate({
+    handoff: options.handoff,
+    source,
+    run,
+    durationMs: options.durationMs
+  })
+);
 for (const kind of ['gif', 'apng', 'webp']) {
   registerSourceAdapter(kind, ({ source, run }) => decodeAnimatedImage({ source, run }));
 }
 for (const kind of ['mp4', 'webm']) {
-  registerSourceAdapter(kind, ({ source, run, options }) => decodeVideo({ source, run, ffmpegPath: options.ffmpegPath }));
+  registerSourceAdapter(kind, ({ source, run, options }) =>
+    decodeVideo({ source, run, ffmpegPath: options.ffmpegPath })
+  );
 }
 
 program
@@ -79,16 +93,17 @@ program
     if (!['selection', 'recovery'].includes(options.stage)) {
       throw new Error('studio stage must be selection or recovery');
     }
-    const studio = options.stage === 'recovery'
-      ? await startRecoveryStudioServer({
-        projectDir: path.resolve(options.projectDir),
-        runId: options.run
-      })
-      : await startStudioServer({
-        projectDir: path.resolve(options.projectDir),
-        runId: options.run,
-        stage: 'selection'
-      });
+    const studio =
+      options.stage === 'recovery'
+        ? await startRecoveryStudioServer({
+            projectDir: path.resolve(options.projectDir),
+            runId: options.run
+          })
+        : await startStudioServer({
+            projectDir: path.resolve(options.projectDir),
+            runId: options.run,
+            stage: 'selection'
+          });
     const shutdown = new Promise((resolve) => {
       process.once('SIGINT', resolve);
       process.once('SIGTERM', resolve);
@@ -142,10 +157,10 @@ program
     const run = options.resume
       ? await loadRun({ projectRoot: projectDir, id: options.resume })
       : await createRun({
-        projectRoot: projectDir,
-        project,
-        sourceRequest: { actionId: options.action, kind: options.kind }
-      });
+          projectRoot: projectDir,
+          project,
+          sourceRequest: { actionId: options.action, kind: options.kind }
+        });
 
     if (run.document.sourceRequest.actionId !== options.action || run.document.sourceRequest.kind !== options.kind) {
       throw new Error('resume arguments do not match the immutable run request');
@@ -170,7 +185,8 @@ program
         process.exitCode = 2;
         return;
       }
-      if (!options.handoff || !options.durationMs) throw new Error('generated-still resume requires handoff and explicit duration');
+      if (!options.handoff || !options.durationMs)
+        throw new Error('generated-still resume requires handoff and explicit duration');
       const handoff = await loadGenerationHandoff({ file: options.handoff, run });
       const result = await decodeMotionSource({
         kind: 'generated-still',
@@ -204,9 +220,7 @@ program
         project,
         options: {
           recoveryContract: path.resolve(options.recoveryContract),
-          selectionApproval: options.selectionApproval
-            ? path.resolve(options.selectionApproval)
-            : undefined
+          selectionApproval: options.selectionApproval ? path.resolve(options.selectionApproval) : undefined
         }
       });
       print({
@@ -295,7 +309,13 @@ program
       notes: options.notes,
       allowGlobalTransform: options.allowGlobalTransform
     });
-    const verified = await verifyApproval({ run, file: approval.path, project, source: source.document, edit: revision.edit });
+    const verified = await verifyApproval({
+      run,
+      file: approval.path,
+      project,
+      source: source.document,
+      edit: revision.edit
+    });
     print({
       status: verified.document.decision,
       runId: run.id,
@@ -333,9 +353,24 @@ program
     const source = await loadSourceReport(run);
     const approvalFile = path.resolve(options.approval);
     const approvalEnvelope = JSON.parse(await fs.readFile(approvalFile, 'utf8'));
-    if (!Number.isInteger(approvalEnvelope.editRevision) || approvalEnvelope.editRevision < 1 || approvalEnvelope.editRevision > 999999) throw new Error('selection approval edit revision is invalid');
-    const revision = await loadEditRevision({ run, sourceSha256: source.sha256, revision: approvalEnvelope.editRevision });
-    const selectionApproval = await verifyApproval({ run, file: approvalFile, project, source: source.document, edit: revision.edit });
+    if (
+      !Number.isInteger(approvalEnvelope.editRevision) ||
+      approvalEnvelope.editRevision < 1 ||
+      approvalEnvelope.editRevision > 999999
+    )
+      throw new Error('selection approval edit revision is invalid');
+    const revision = await loadEditRevision({
+      run,
+      sourceSha256: source.sha256,
+      revision: approvalEnvelope.editRevision
+    });
+    const selectionApproval = await verifyApproval({
+      run,
+      file: approvalFile,
+      project,
+      source: source.document,
+      edit: revision.edit
+    });
     requireProductionApproval(selectionApproval);
     const contract = await createPixelProductionContract({ run, project, selectionApproval, edit: revision.edit });
     const output = options.output ? path.resolve(options.output) : path.join(run.root, 'work', 'pixel-production');
@@ -398,8 +433,14 @@ program
     const expected = await loadAuditExpected({ run, revision: options.revision });
     const report = await auditRun({ run, project, expected });
     const written = await recordAuditReport({ run, kind: 'validation-audit', value: { report } });
-    const status = report.failures.length > 0 ? 'objective-failure' : report.reviews.length > 0 ? 'review-required' : 'complete';
-    print({ status, runId: run.id, audit: { path: written.path, sha256: written.sha256, revision: written.revision }, report });
+    const status =
+      report.failures.length > 0 ? 'objective-failure' : report.reviews.length > 0 ? 'review-required' : 'complete';
+    print({
+      status,
+      runId: run.id,
+      audit: { path: written.path, sha256: written.sha256, revision: written.revision },
+      report
+    });
     if (report.failures.length > 0) process.exitCode = 3;
     else if (report.reviews.length > 0) process.exitCode = 4;
   });
@@ -426,11 +467,22 @@ program
       auditRun({ run: rightRun, project, expected: rightExpected })
     ]);
     const comparison = compareRuns(left, right);
-    const written = await recordAuditReport({ run: leftRun, kind: 'reproducibility-audit', value: { repeatRunId: rightRun.id, left, right, comparison } });
+    const written = await recordAuditReport({
+      run: leftRun,
+      kind: 'reproducibility-audit',
+      value: { repeatRunId: rightRun.id, left, right, comparison }
+    });
     const reviews = [...left.reviews, ...right.reviews];
-    const objectiveFailure = left.failures.length > 0 || right.failures.length > 0 || comparison.changedDeterministicArtifacts.length > 0;
+    const objectiveFailure =
+      left.failures.length > 0 || right.failures.length > 0 || comparison.changedDeterministicArtifacts.length > 0;
     const status = objectiveFailure ? 'objective-failure' : reviews.length > 0 ? 'review-required' : 'complete';
-    print({ status, runId: leftRun.id, repeatRunId: rightRun.id, audit: { path: written.path, sha256: written.sha256, revision: written.revision }, comparison });
+    print({
+      status,
+      runId: leftRun.id,
+      repeatRunId: rightRun.id,
+      audit: { path: written.path, sha256: written.sha256, revision: written.revision },
+      comparison
+    });
     if (objectiveFailure) process.exitCode = 3;
     else if (reviews.length > 0) process.exitCode = 4;
   });

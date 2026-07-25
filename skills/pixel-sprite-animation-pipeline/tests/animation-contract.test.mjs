@@ -16,23 +16,49 @@ export function contractDocument() {
     pivot: { x: 64, y: 112 },
     baseline: 111,
     palette: {
-      rgba: [[0, 0, 0, 0], [18, 34, 51, 255], [255, 255, 255, 255]],
-      sha256: stableHash([[0, 0, 0, 0], [18, 34, 51, 255], [255, 255, 255, 255]]),
+      rgba: [
+        [0, 0, 0, 0],
+        [18, 34, 51, 255],
+        [255, 255, 255, 255]
+      ],
+      sha256: stableHash([
+        [0, 0, 0, 0],
+        [18, 34, 51, 255],
+        [255, 255, 255, 255]
+      ]),
       snapperPaletteHex: ['122233', 'ffffff']
     },
-    clips: [{
-      id: 'idle', loopMode: 'loop', loopTransition: { fromFrameId: 'idle-02', toFrameId: 'idle-01', reviewCheckpoint: 'motion' },
-      frames: [
-        { id: 'idle-01', pose: 'rest', duration: 100, landmarkSemantic: { name: 'character-root', target: { x: 64, y: 112 } } },
-        { id: 'idle-02', pose: 'breathe', duration: 120, landmarkSemantic: { name: 'character-root', target: { x: 64, y: 112 } } }
-      ]
-    }],
+    clips: [
+      {
+        id: 'idle',
+        loopMode: 'loop',
+        loopTransition: { fromFrameId: 'idle-02', toFrameId: 'idle-01', reviewCheckpoint: 'motion' },
+        frames: [
+          {
+            id: 'idle-01',
+            pose: 'rest',
+            duration: 100,
+            landmarkSemantic: { name: 'character-root', target: { x: 64, y: 112 } }
+          },
+          {
+            id: 'idle-02',
+            pose: 'breathe',
+            duration: 120,
+            landmarkSemantic: { name: 'character-root', target: { x: 64, y: 112 } }
+          }
+        ]
+      }
+    ],
     review: { checkpoints: ['identity', 'motion'], approvers: ['artist@example.test'] }
   };
 }
 
 export function v2ContractDocument() {
-  const rgba = [[0, 0, 0, 0], [121, 85, 54, 255], [245, 158, 11, 255]];
+  const rgba = [
+    [0, 0, 0, 0],
+    [121, 85, 54, 255],
+    [245, 158, 11, 255]
+  ];
   return {
     version: 2,
     selectionApprovalSha256: HASH('c'),
@@ -53,16 +79,47 @@ export function v2ContractDocument() {
       { id: 'left-foot', trackId: 'actor', kind: 'planted-foot', required: true },
       { id: 'right-foot', trackId: 'actor', kind: 'planted-foot', required: true }
     ],
-    clips: [{
-      id: 'walk', loopMode: 'loop', frames: [
-        { id: 'walk-contact', semantic: 'contact', duration: 80, tracks: ['actor', 'satchel'], sockets: ['hand'], contacts: ['left-foot'], groundTravel: { x: 0, y: 0 } },
-        { id: 'walk-pass', semantic: 'passing', duration: 120, tracks: ['actor', 'satchel'], sockets: ['hand'], contacts: ['right-foot'], groundTravel: { x: 2, y: 0 } }
-      ]
-    }, {
-      id: 'unlock', loopMode: 'hold-last', frames: [
-        { id: 'unlock-release', semantic: 'release', duration: 140, tracks: ['actor', 'satchel', 'unlock-spark'], sockets: ['hand', 'effect-origin'], contacts: [], groundTravel: { x: 0, y: 0 } }
-      ]
-    }],
+    clips: [
+      {
+        id: 'walk',
+        loopMode: 'loop',
+        frames: [
+          {
+            id: 'walk-contact',
+            semantic: 'contact',
+            duration: 80,
+            tracks: ['actor', 'satchel'],
+            sockets: ['hand'],
+            contacts: ['left-foot'],
+            groundTravel: { x: 0, y: 0 }
+          },
+          {
+            id: 'walk-pass',
+            semantic: 'passing',
+            duration: 120,
+            tracks: ['actor', 'satchel'],
+            sockets: ['hand'],
+            contacts: ['right-foot'],
+            groundTravel: { x: 2, y: 0 }
+          }
+        ]
+      },
+      {
+        id: 'unlock',
+        loopMode: 'hold-last',
+        frames: [
+          {
+            id: 'unlock-release',
+            semantic: 'release',
+            duration: 140,
+            tracks: ['actor', 'satchel', 'unlock-spark'],
+            sockets: ['hand', 'effect-origin'],
+            contacts: [],
+            groundTravel: { x: 0, y: 0 }
+          }
+        ]
+      }
+    ],
     review: { checkpoints: ['identity', 'motion', 'landmarks'], approvers: ['owner'] }
   };
 }
@@ -90,20 +147,16 @@ test('contract freezes and hashes one closed animation document', async () => {
   assert.equal(contract.sha256, stableHash(document));
   assert.ok(Object.isFrozen(contract));
   assert.ok(Object.isFrozen(contract.document.clips[0].frames[0].landmarkSemantic.target));
-  assert.throws(() => { contract.document.baseline = 112; }, TypeError);
+  assert.throws(() => {
+    contract.document.baseline = 112;
+  }, TypeError);
 });
 
 test('v1 contract errors use an optional configured project ID', () => {
   const invalid = contractDocument();
   invalid.sizes.pixelSize = 7;
-  assert.throws(
-    () => validateAnimationContract(invalid, { projectId: 'private-project' }),
-    /private-project/
-  );
-  assert.throws(
-    () => validateAnimationContract(invalid),
-    /canonical, generation, runtime, and pixelSize/
-  );
+  assert.throws(() => validateAnimationContract(invalid, { projectId: 'private-project' }), /private-project/);
+  assert.throws(() => validateAnimationContract(invalid), /canonical, generation, runtime, and pixelSize/);
 });
 
 test('contract rejects extra, duplicate, unordered, or invalid fixed values', async () => {
