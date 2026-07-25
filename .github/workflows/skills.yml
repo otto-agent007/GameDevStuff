@@ -3,6 +3,8 @@ name: Skills
 on:
   push:
     paths:
+      - 'AGENTS.md'
+      - 'README.md'
       - '.github/dependabot.yml'
       - '.github/workflows/**'
       - '.editorconfig'
@@ -12,13 +14,17 @@ on:
       - 'eslint.config.mjs'
       - 'integration/fixtures/**'
       - 'LICENSES/**'
+      - 'docs/**'
       - 'package.json'
       - 'package-lock.json'
       - 'skills/game-character-pipeline/**'
       - 'skills/pixel-sprite-animation-pipeline/**'
       - 'tests/**'
+      - 'references/donors/**'
   pull_request:
     paths:
+      - 'AGENTS.md'
+      - 'README.md'
       - '.github/dependabot.yml'
       - '.github/workflows/**'
       - '.editorconfig'
@@ -28,11 +34,13 @@ on:
       - 'eslint.config.mjs'
       - 'integration/fixtures/**'
       - 'LICENSES/**'
+      - 'docs/**'
       - 'package.json'
       - 'package-lock.json'
       - 'skills/game-character-pipeline/**'
       - 'skills/pixel-sprite-animation-pipeline/**'
       - 'tests/**'
+      - 'references/donors/**'
 
 permissions:
   contents: read
