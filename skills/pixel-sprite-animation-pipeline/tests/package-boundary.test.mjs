@@ -3,8 +3,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-const packageDir = path.resolve(import.meta.dirname, '..');
+const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 async function resolveNpmCli() {
   const nodeDir = path.dirname(process.execPath);
