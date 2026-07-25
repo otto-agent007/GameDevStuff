@@ -56,7 +56,10 @@ test('the skill directly links every operational reference and packages them', a
   const skill = (await fs.readFile(path.join(packageRoot, 'SKILL.md'), 'utf8')).replaceAll('\r\n', '\n');
   const packageDocument = JSON.parse(await fs.readFile(path.join(packageRoot, 'package.json'), 'utf8'));
 
-  assert.match(skill, /^---\nname: game-character-pipeline\ndescription: Use when[^\n]+\n---\n/);
+  assert.match(
+    skill,
+    /^---\nname: game-character-pipeline\ndescription: Use for auditable character-animation intake, Frame Studio review, and engine-neutral sprite exports\.\n---\n/
+  );
   assert.deepEqual(packageDocument.files.includes('references/'), true);
   for (const reference of references) {
     await fs.access(path.join(packageRoot, 'references', reference));

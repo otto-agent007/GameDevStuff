@@ -714,8 +714,8 @@ test('approved release documents pin immutable v1.0.0 commit and retain the form
   const formerReviewedCommit = 'a' + 'e20461f60fb39e75d15f184bab1ebec1219511c';
   const obsoleteReleaseTag = ['pixel-snapper', 'v1.0.0', `commit.${'a' + 'e20461'}`].join('-');
   const files = [
-    'docs/superpowers/specs/2026-07-18-pixel-snapper-binary-integration-design.md',
-    'docs/superpowers/plans/2026-07-18-pixel-snapper-binary-integration.md',
+    'docs/specs/2026-07-18-pixel-snapper-binary-integration-design.md',
+    'docs/plans/2026-07-18-pixel-snapper-binary-integration.md',
     'skills/pixel-sprite-animation-pipeline/references/pixel-snapper-release-checklist.md'
   ];
   for (const file of files) {
