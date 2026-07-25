@@ -33,16 +33,17 @@ test('defaults preserve the approved 128 to 1024 to 256 workflow', async () => {
 });
 
 test('integration policy accepts a local project ID and absolute forbidden roots', () => {
+  const forbidden = path.join(path.parse(process.cwd()).root, 'private', 'downstream');
   const configured = validateConfig({
     ...structuredClone(DEFAULT_CONFIG),
     integration: {
       projectId: 'private-project',
-      forbiddenIntegrationPaths: ['/private/downstream']
+      forbiddenIntegrationPaths: [forbidden]
     }
   });
   assert.deepEqual(configured.integration, {
     projectId: 'private-project',
-    forbiddenIntegrationPaths: ['/private/downstream']
+    forbiddenIntegrationPaths: [forbidden]
   });
 
   for (const [projectId, forbiddenIntegrationPaths] of [
