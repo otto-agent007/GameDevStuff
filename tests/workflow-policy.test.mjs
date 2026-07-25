@@ -14,9 +14,51 @@ async function readYaml(relativePath) {
   return YAML.parse(await fs.readFile(path.join(repositoryRoot, relativePath), 'utf8'));
 }
 
+async function readJson(relativePath) {
+  return JSON.parse(await fs.readFile(path.join(repositoryRoot, relativePath), 'utf8'));
+}
+
 function stepNamed(job, name) {
   return job.steps.find((step) => step.name === name);
 }
+
+test('public Node support starts at 22.12.0 and CI exercises Node 22 and Node 24 only', async () => {
+  const expectedNodeRange = '>=22.12.0';
+  const manifests = [
+    'package.json',
+    'skills/game-character-pipeline/package.json',
+    'skills/pixel-sprite-animation-pipeline/package.json'
+  ];
+
+  for (const manifestPath of manifests) {
+    const manifest = await readJson(manifestPath);
+    assert.equal(manifest.engines.node, expectedNodeRange, `${manifestPath} must declare the public Node floor`);
+  }
+
+  assert.equal((await fs.readFile(path.join(repositoryRoot, '.nvmrc'), 'utf8')).trim(), '22.12.0');
+
+  for (const guidancePath of [
+    'README.md',
+    'skills/game-character-pipeline/SKILL.md',
+    'skills/pixel-sprite-animation-pipeline/SKILL.md'
+  ]) {
+    const guidance = await fs.readFile(path.join(repositoryRoot, guidancePath), 'utf8');
+    assert.match(guidance, /Node\.js 22\.12\.0 or newer/, `${guidancePath} must state the installed Node floor`);
+  }
+
+  const skillsWorkflow = await readYaml('.github/workflows/skills.yml');
+  const matrixStep = skillsWorkflow.jobs.changes.steps.find((step) => step.id === 'matrix');
+  assert.match(matrixStep.run, /\[22, 24\]/, 'the unit matrix must cover Node 22 and Node 24');
+
+  for (const workflowPath of ['.github/workflows/skills.yml', '.github/workflows/pixel-snapper-release.yml']) {
+    const source = await fs.readFile(path.join(repositoryRoot, workflowPath), 'utf8');
+    assert.doesNotMatch(
+      source,
+      /node-version:\s*20(?:\.|\b)|\[20, 24\]/,
+      `${workflowPath} must not claim Node 20 support`
+    );
+  }
+});
 
 test('ordinary skill CI is consolidated and every workflow action uses an immutable full SHA', async () => {
   await fs.access(path.join(workflowsDirectory, 'skills.yml'));
@@ -98,7 +140,7 @@ test('changed paths select the package unit matrix and compatibility gates', asy
     "selected.add('pixel-sprite-animation-pipeline')",
     "selected.add('game-character-pipeline')",
     "['ubuntu-latest', 'windows-latest']",
-    '[20, 24]',
+    '[22, 24]',
     'unit_matrix='
   ]) {
     assert.match(matrixStep.run, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
