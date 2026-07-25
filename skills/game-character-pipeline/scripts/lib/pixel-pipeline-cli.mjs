@@ -10,15 +10,15 @@ function handoff(description) {
   };
 }
 
-export async function resolvePixelPipelineCli({ pipelineCli, env = process.env, cwd = process.cwd() } = {}) {
+export async function resolvePixelPipelineCli({ pipelineCli, env = process.env, cwd = process.cwd(), fileSystem = fs } = {}) {
   const configured = pipelineCli === undefined ? env.PIXEL_SPRITE_PIPELINE_CLI : pipelineCli;
   if (typeof configured !== 'string' || configured.trim() === '') return { handoff: handoff(CONFIGURATION_DESCRIPTION) };
 
   const file = path.resolve(cwd, configured);
   try {
-    const stat = await fs.stat(file);
+    const stat = await fileSystem.stat(file);
     if (!stat.isFile()) return { handoff: handoff(`The configured Pixel Sprite Pipeline CLI is not a regular file: ${file}. ${CONFIGURATION_DESCRIPTION}`) };
-    await fs.access(file, fs.constants.R_OK);
+    await fileSystem.access(file, fs.constants.R_OK);
     return { pipelineCli: file };
   } catch {
     return { handoff: handoff(`The configured Pixel Sprite Pipeline CLI is missing or unreadable: ${file}. ${CONFIGURATION_DESCRIPTION}`) };

@@ -99,11 +99,47 @@ test('Pixel pipeline CLI configuration prefers an explicit option and otherwise 
   assert.equal(fromEnvironment.pipelineCli, fallback);
 });
 
+test('Pixel pipeline CLI configuration hands off when access is denied', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'game-character-pipeline-eacces-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const pipelineCli = path.join(directory, 'pipeline-cli.mjs');
+  await fs.writeFile(pipelineCli, '// CLI');
+
+  const result = await resolvePixelPipelineCli({
+    pipelineCli,
+    fileSystem: {
+      stat: async () => ({ isFile: () => true }),
+      access: async () => {
+        const error = new Error('permission denied');
+        error.code = 'EACCES';
+        throw error;
+      }
+    }
+  });
+
+  assert.equal(result.handoff.status, 'awaiting-pixel-pipeline-cli');
+  assert.match(result.handoff.description, /unreadable/);
+});
+
 test('packed character package excludes the root-only Clockwork Courier integration fixture', async () => {
   const result = await execFile('npm', ['pack', '--dry-run', '--json'], { cwd: packageDir });
   const packed = JSON.parse(result.stdout);
   assert.equal(packed.length, 1);
   assert.equal(packed[0].files.some(({ path: file }) => file.startsWith('examples/clockwork-courier/')), false);
+});
+
+test('packed character runtime scripts do not import the sibling Pixel Sprite Pipeline', async () => {
+  const result = await execFile('npm', ['pack', '--dry-run', '--json'], { cwd: packageDir });
+  const packed = JSON.parse(result.stdout);
+  const runtimeScripts = packed[0].files
+    .map(({ path: file }) => file)
+    .filter((file) => file.startsWith('scripts/') && file.endsWith('.mjs'));
+  assert.ok(runtimeScripts.length > 0);
+
+  for (const file of runtimeScripts) {
+    const source = await fs.readFile(path.join(packageDir, file), 'utf8');
+    assert.doesNotMatch(source, /pixel-sprite-animation-pipeline/, file);
+  }
 });
 
 test('intake command exposes pose-board recovery and approval inputs', async () => {
