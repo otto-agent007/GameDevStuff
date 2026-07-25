@@ -3,5 +3,9 @@
   "passed": true,
   "deterministicHashesSha256": "ccdf158bd20a59593ddcbe7d2ad0004a14626108902d1688fee08511549d260f",
   "windowsDeterministicHashesSha256": "4ce759c094b9a41ee3ce8937928bbe178e717ea863744cc6f89106fde257a07d",
-  "clips": [["idle", "loop"], ["walk", "loop"], ["unlock", "hold-last"]]
+  "clips": [
+    ["idle", "loop"],
+    ["walk", "loop"],
+    ["unlock", "hold-last"]
+  ]
 }

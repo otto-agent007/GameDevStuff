@@ -4,9 +4,5 @@
 **/private/
 **/test-results/
 **/playwright-report/
-integration/fixtures/
-references/donors/
-skills/game-character-pipeline/tests/fixtures/
-skills/pixel-sprite-animation-pipeline/tests/fixtures/
 skills/pixel-sprite-animation-pipeline/references/pixel-snapper-tool-manifest.json
 package-lock.json
