@@ -68,7 +68,7 @@ test('workspaces retain only their exact runtime dependencies and use the root l
   );
 });
 
-test('package-boundary tests use the Node 20.9-compatible module URL path API', async () => {
+test('package-boundary tests use the Node 22-compatible module URL path API', async () => {
   for (const packageBoundaryTest of [
     'skills/game-character-pipeline/tests/package-boundary.test.mjs',
     'skills/pixel-sprite-animation-pipeline/tests/package-boundary.test.mjs'

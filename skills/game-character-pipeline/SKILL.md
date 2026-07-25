@@ -5,7 +5,7 @@ description: Use when a user needs to create, import, recover, review, produce, 
 
 # Game Character Pipeline
 
-Run the auditable character-animation workflow from this package. Keep source bytes, review decisions, delegated production, and exported evidence hash-bound from intake through audit. In a source checkout, run `npm ci` at the repository root. In an installed or copied bundle, run `npm install --omit=dev` in this package before dependencies are used.
+Run the auditable character-animation workflow from this package. Keep source bytes, review decisions, delegated production, and exported evidence hash-bound from intake through audit. Node.js 22.12.0 or newer is required. In a source checkout, run `npm ci` at the repository root. In an installed or copied bundle, run `npm install --omit=dev` in this package before dependencies are used.
 
 ## Hard boundaries
 

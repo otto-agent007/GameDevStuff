@@ -102,7 +102,7 @@ jobs:
           }
           const include = [...selected].flatMap((workspace) =>
             ['ubuntu-latest', 'windows-latest'].flatMap((os) =>
-              [20, 24].map((node) => ({ workspace, os, node }))
+              [22, 24].map((node) => ({ workspace, os, node }))
             )
           );
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `unit_matrix=${JSON.stringify({ include })}\n`);

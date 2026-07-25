@@ -9,7 +9,7 @@ Auditable game-asset workflows for Codex. This repository contains two install-b
 
 ## Prerequisites
 
-- Node.js 20.9 or newer.
+- Node.js 22.12.0 or newer.
 - `ffmpeg` and `ffprobe` for video intake.
 - Rust 1.88 only when building Pixel Snapper release binaries; normal skill use consumes verified releases and does not require Rust.
 
