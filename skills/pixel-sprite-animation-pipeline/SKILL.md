@@ -1,6 +1,6 @@
 ---
 name: pixel-sprite-animation-pipeline
-description: Use when working from a pixel-art anchor or sprite frames, building idle, walk, or run cycles, using Pixel Snapper, repairing blurry or interpolated pixels, correcting inconsistent scale, pivot, or baseline, or preparing generation art for game runtime.
+description: Use for deterministic pixel-sprite preparation, Pixel Snapper processing, and contract-validated runtime exports.
 ---
 
 # Pixel Sprite Animation Pipeline

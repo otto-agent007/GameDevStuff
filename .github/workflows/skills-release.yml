@@ -1,0 +1,174 @@
+name: Skills release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact semantic version to release from main, for example 0.2.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  immutability-preflight:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Verify repository immutable-release enforcement before validation
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.IMMUTABLE_RELEASES_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api -H "X-GitHub-Api-Version: 2026-03-10" "repos/${GITHUB_REPOSITORY}/immutable-releases" --jq '.enabled')" = "true"
+
+  validate:
+    if: github.ref == 'refs/heads/main'
+    needs: immutability-preflight
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ inputs.version }}
+      RELEASE_TAG: skills-v${{ inputs.version }}
+    steps:
+      - name: Require an exact main ref and semantic version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+
+      - name: Check out reviewed skill bundles
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Set up locked Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Validate lockstep manifests and changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const version = process.env.VERSION;
+            const manifests = [
+              "package.json",
+              "skills/game-character-pipeline/package.json",
+              "skills/pixel-sprite-animation-pipeline/package.json"
+            ];
+            for (const manifestPath of manifests) {
+              if (JSON.parse(fs.readFileSync(manifestPath, "utf8")).version !== version) {
+                throw new Error(`${manifestPath} must be exactly ${version}`);
+              }
+            }
+            const changelog = fs.readFileSync("CHANGELOG.md", "utf8");
+            if (!changelog.split("\n").includes(`## ${version}`)) {
+              throw new Error(`CHANGELOG.md must contain a ${version} heading`);
+            }
+          '
+
+      - name: Install locked workspace dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run all tests
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Check install-by-copy package boundaries
+        run: npm run package-boundary
+
+  publish:
+    if: github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-24.04
+    environment: skills-release
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ inputs.version }}
+      RELEASE_TAG: skills-v${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out validated skill bundles
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Set up locked Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked workspace dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Reject an existing immutable tag or release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "release tag already exists" >&2
+            exit 1
+          fi
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release already exists" >&2
+            exit 1
+          fi
+
+      - name: Pack exactly the versioned skill bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir release-output
+          npm pack --workspace=game-character-pipeline --pack-destination release-output
+          npm pack --workspace=pixel-sprite-animation-pipeline --pack-destination release-output
+          test -f "release-output/game-character-pipeline-${VERSION}.tgz"
+          test -f "release-output/pixel-sprite-animation-pipeline-${VERSION}.tgz"
+          test "$(find release-output -maxdepth 1 -type f -name '*.tgz' | wc -l | tr -d ' ')" = "2"
+
+      - name: Write release checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd release-output
+            sha256sum "game-character-pipeline-${VERSION}.tgz" "pixel-sprite-animation-pipeline-${VERSION}.tgz" > SHA256SUMS
+          )
+
+      - name: Publish immutable skill release
+        shell: bash
+        run: gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$RELEASE_TAG" --notes "Install-by-copy skill bundles ${VERSION}. Not published to npm." release-output/game-character-pipeline-"${VERSION}".tgz release-output/pixel-sprite-animation-pipeline-"${VERSION}".tgz release-output/SHA256SUMS
+
+      - name: Require published release immutability
+        shell: bash
+        run: test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isImmutable --jq '.isImmutable')" = "true"
+
+      - name: Download and verify public release hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir downloaded-release
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir downloaded-release --pattern 'game-character-pipeline-*.tgz' --pattern 'pixel-sprite-animation-pipeline-*.tgz' --pattern SHA256SUMS
+          (
+            cd downloaded-release
+            sha256sum -c SHA256SUMS
+          )
