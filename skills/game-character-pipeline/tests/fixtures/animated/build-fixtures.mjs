@@ -21,7 +21,7 @@ async function convert(name, args, prefix = '') {
 
 const crcTable = Array.from({ length: 256 }, (_, value) => {
   let crc = value;
-  for (let bit = 0; bit < 8; bit += 1) crc = (crc & 1) ? (0xedb88320 ^ (crc >>> 1)) : (crc >>> 1);
+  for (let bit = 0; bit < 8; bit += 1) crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
   return crc >>> 0;
 });
 
@@ -69,10 +69,7 @@ async function writeApng() {
   ihdr.set([8, 6, 0, 0, 0], 8);
   const animation = Buffer.alloc(8);
   animation.writeUInt32BE(2, 0);
-  const secondData = Buffer.concat([
-    Buffer.from([0, 0, 0, 2]),
-    deflateSync(rgbaFrame(1, 1, [0, 255, 0, 128]))
-  ]);
+  const secondData = Buffer.concat([Buffer.from([0, 0, 0, 2]), deflateSync(rgbaFrame(1, 1, [0, 255, 0, 128]))]);
   const bytes = Buffer.concat([
     Buffer.from('89504e470d0a1a0a', 'hex'),
     pngChunk('IHDR', ihdr),
@@ -119,11 +116,15 @@ async function patchGifLayout(name) {
   const bytes = await fs.readFile(file);
   bytes.writeUInt16LE(4, 6);
   bytes.writeUInt16LE(4, 8);
-  const positions = [[0, 0], [3, 3], [1, 1]];
+  const positions = [
+    [0, 0],
+    [3, 3],
+    [1, 1]
+  ];
   const disposals = [0, 3, 0];
   let frameIndex = 0;
   let controlIndex = 0;
-  let offset = 13 + ((bytes[10] & 0x80) === 0 ? 0 : 3 * (2 ** ((bytes[10] & 7) + 1)));
+  let offset = 13 + ((bytes[10] & 0x80) === 0 ? 0 : 3 * 2 ** ((bytes[10] & 7) + 1));
   while (bytes[offset] !== 0x3b) {
     const marker = bytes[offset];
     offset += 1;
@@ -141,7 +142,7 @@ async function patchGifLayout(name) {
       bytes.writeUInt16LE(positions[frameIndex][0], offset);
       bytes.writeUInt16LE(positions[frameIndex][1], offset + 2);
       const packed = bytes[offset + 8];
-      offset += 9 + ((packed & 0x80) === 0 ? 0 : 3 * (2 ** ((packed & 7) + 1)));
+      offset += 9 + ((packed & 0x80) === 0 ? 0 : 3 * 2 ** ((packed & 7) + 1));
       offset += 1;
       offset = skipGifSubBlocks(bytes, offset);
       frameIndex += 1;
@@ -157,9 +158,34 @@ await fs.mkdir(outputRoot, { recursive: true });
 
 await convert('disposal-previous.gif', [
   ...frame({ point: { x: 0, y: 0, color: '#ff0000ff' }, delay: 7 }),
-  '(', '-size', '1x1', 'xc:#0000ffff', '-page', '+3+3', '-set', 'delay', '13', '-dispose', 'previous', ')',
-  '(', '-size', '1x1', 'xc:#00ff00ff', '-page', '+1+1', '-set', 'delay', '9', '-dispose', 'none', ')',
-  '-background', 'none', '-loop', '0'
+  '(',
+  '-size',
+  '1x1',
+  'xc:#0000ffff',
+  '-page',
+  '+3+3',
+  '-set',
+  'delay',
+  '13',
+  '-dispose',
+  'previous',
+  ')',
+  '(',
+  '-size',
+  '1x1',
+  'xc:#00ff00ff',
+  '-page',
+  '+1+1',
+  '-set',
+  'delay',
+  '9',
+  '-dispose',
+  'none',
+  ')',
+  '-background',
+  'none',
+  '-loop',
+  '0'
 ]);
 await patchGifLayout('disposal-previous.gif');
 
@@ -167,13 +193,15 @@ await convert('duplicates-empty.gif', [
   ...frame({ delay: 5 }),
   ...frame({ delay: 7 }),
   ...frame({ delay: 11 }),
-  '-loop', '0'
+  '-loop',
+  '0'
 ]);
 
 await convert('zero-delay.gif', [
   ...frame({ point: { x: 0, y: 0, color: '#ff0000ff' }, delay: 0 }),
   ...frame({ point: { x: 1, y: 1, color: '#00ff00ff' }, delay: 5 }),
-  '-loop', '0'
+  '-loop',
+  '0'
 ]);
 
 await writeApng();
@@ -181,6 +209,9 @@ await writeApng();
 await convert('alpha.webp', [
   ...frame({ point: { x: 0, y: 0, color: '#ff000080' }, delay: 6 }),
   ...frame({ point: { x: 1, y: 1, color: '#00ff0080' }, delay: 14 }),
-  '-loop', '0', '-define', 'webp:lossless=true'
+  '-loop',
+  '0',
+  '-define',
+  'webp:lossless=true'
 ]);
 await makeSecondWebpFrameBlend();

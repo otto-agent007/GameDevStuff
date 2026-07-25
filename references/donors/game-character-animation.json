@@ -28,10 +28,7 @@
         "body and effect separation",
         "scale profiles, cross-action checks, and engine contracts"
       ],
-      "rejected": [
-        "per-frame fit scaling",
-        "Lanczos resampling in pixel stages"
-      ],
+      "rejected": ["per-frame fit scaling", "Lanczos resampling in pixel stages"],
       "mode": "concept-only",
       "files": []
     },
@@ -55,11 +52,7 @@
       "repository": "https://github.com/notque/vexjoy-agent",
       "commit": "8b07c8eecf0d56d72f00fb44d2d41d4d54e8c4c1",
       "license": "MIT",
-      "contribution": [
-        "video frame intake and selection",
-        "timing metadata",
-        "quality-assurance artifacts"
-      ],
+      "contribution": ["video frame intake and selection", "timing metadata", "quality-assurance artifacts"],
       "rejected": [
         "naive equal-cell slicing",
         "naive equal-time slicing",

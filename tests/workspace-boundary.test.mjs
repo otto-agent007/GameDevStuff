@@ -79,3 +79,15 @@ test('package-boundary tests use the Node 20.9-compatible module URL path API', 
     assert.doesNotMatch(source, /import\.meta\.dirname/);
   }
 });
+
+test('Prettier does not exclude tracked fixtures or donor ledgers from the baseline', async () => {
+  const prettierIgnore = await fs.readFile(path.join(repositoryRoot, '.prettierignore'), 'utf8');
+  for (const excludedTrackedSource of [
+    'integration/fixtures/',
+    'references/donors/',
+    'skills/game-character-pipeline/tests/fixtures/',
+    'skills/pixel-sprite-animation-pipeline/tests/fixtures/'
+  ]) {
+    assert.equal(prettierIgnore.includes(excludedTrackedSource), false, `${excludedTrackedSource} must stay formatted`);
+  }
+});
