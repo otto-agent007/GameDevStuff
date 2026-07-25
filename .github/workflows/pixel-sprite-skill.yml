@@ -3,12 +3,12 @@ name: Pixel sprite skill
 on:
   push:
     paths:
-      - ".github/workflows/pixel-sprite-skill.yml"
-      - "skills/pixel-sprite-animation-pipeline/**"
+      - '.github/workflows/pixel-sprite-skill.yml'
+      - 'skills/pixel-sprite-animation-pipeline/**'
   pull_request:
     paths:
-      - ".github/workflows/pixel-sprite-skill.yml"
-      - "skills/pixel-sprite-animation-pipeline/**"
+      - '.github/workflows/pixel-sprite-skill.yml'
+      - 'skills/pixel-sprite-animation-pipeline/**'
 
 permissions:
   contents: read

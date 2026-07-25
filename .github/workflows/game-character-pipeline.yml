@@ -2,9 +2,21 @@ name: Game character pipeline
 
 on:
   push:
-    paths: [".github/workflows/game-character-pipeline.yml", "skills/game-character-pipeline/**", "skills/pixel-sprite-animation-pipeline/**", "LICENSES/THIRD_PARTY.md"]
+    paths:
+      [
+        '.github/workflows/game-character-pipeline.yml',
+        'skills/game-character-pipeline/**',
+        'skills/pixel-sprite-animation-pipeline/**',
+        'LICENSES/THIRD_PARTY.md'
+      ]
   pull_request:
-    paths: [".github/workflows/game-character-pipeline.yml", "skills/game-character-pipeline/**", "skills/pixel-sprite-animation-pipeline/**", "LICENSES/THIRD_PARTY.md"]
+    paths:
+      [
+        '.github/workflows/game-character-pipeline.yml',
+        'skills/game-character-pipeline/**',
+        'skills/pixel-sprite-animation-pipeline/**',
+        'LICENSES/THIRD_PARTY.md'
+      ]
 
 permissions:
   contents: read

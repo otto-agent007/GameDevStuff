@@ -67,3 +67,15 @@ test('workspaces retain only their exact runtime dependencies and use the root l
     fs.access(path.join(repositoryRoot, 'skills/pixel-sprite-animation-pipeline/npm-shrinkwrap.json'))
   );
 });
+
+test('package-boundary tests use the Node 20.9-compatible module URL path API', async () => {
+  for (const packageBoundaryTest of [
+    'skills/game-character-pipeline/tests/package-boundary.test.mjs',
+    'skills/pixel-sprite-animation-pipeline/tests/package-boundary.test.mjs'
+  ]) {
+    const source = await fs.readFile(path.join(repositoryRoot, packageBoundaryTest), 'utf8');
+    assert.match(source, /from 'node:url'/);
+    assert.match(source, /path\.dirname\(fileURLToPath\(import\.meta\.url\)\)/);
+    assert.doesNotMatch(source, /import\.meta\.dirname/);
+  }
+});
