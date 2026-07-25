@@ -10,42 +10,42 @@ const documentation = [
   {
     plan: '2026-07-17-pixel-sprite-animation-pipeline.md',
     spec: '2026-07-17-pixel-sprite-animation-pipeline-design.md',
-    pullRequests: 'PR #1'
+    pullRequests: [1]
   },
   {
     plan: '2026-07-18-pixel-snapper-binary-integration.md',
     spec: '2026-07-18-pixel-snapper-binary-integration-design.md',
-    pullRequests: 'PRs #2-7'
+    pullRequests: [2, 3, 4, 5, 6, 7]
   },
   {
     plan: '2026-07-21-game-character-animation-workflow.md',
     spec: '2026-07-21-game-character-animation-workflow-design.md',
-    pullRequests: 'PRs #9-10'
+    pullRequests: [9, 10]
   },
   {
     plan: '2026-07-22-pose-board-recovery.md',
     spec: '2026-07-22-pose-board-recovery-design.md',
-    pullRequests: 'PR #11'
+    pullRequests: [11]
   },
   {
     plan: '2026-07-23-frame-studio-saveable-exclusion.md',
     spec: '2026-07-23-frame-studio-review-roadmap-design.md',
-    pullRequests: 'PR #11'
+    pullRequests: [11]
   },
   {
     plan: '2026-07-23-frame-studio-finish.md',
     spec: '2026-07-23-frame-studio-review-roadmap-design.md',
-    pullRequests: 'PR #11'
+    pullRequests: [11]
   },
   {
     plan: '2026-07-23-frame-studio-replay-control.md',
     spec: '2026-07-23-frame-studio-replay-control-design.md',
-    pullRequests: 'PR #11'
+    pullRequests: [11]
   },
   {
     plan: '2026-07-23-frame-studio-synchronized-side-by-side.md',
     spec: '2026-07-23-frame-studio-synchronized-side-by-side-design.md',
-    pullRequests: 'PR #11'
+    pullRequests: [11]
   }
 ];
 
@@ -58,7 +58,12 @@ test('reader-oriented documentation keeps plans and specs together behind a comp
     await fs.access(path.join(repositoryRoot, 'docs/specs', entry.spec));
     assert.match(index, new RegExp(`\\[.*?\\]\\(plans/${entry.plan}\\)`));
     assert.match(index, new RegExp(`\\[.*?\\]\\(specs/${entry.spec}\\)`));
-    assert.match(index, new RegExp(entry.pullRequests));
+    for (const pullRequest of entry.pullRequests) {
+      assert.match(
+        index,
+        new RegExp(`\\[PR #${pullRequest}\\]\\(https://github\\.com/otto-agent007/GameDevStuff/pull/${pullRequest}\\)`)
+      );
+    }
   }
 
   assert.match(index, /Shipped/);
