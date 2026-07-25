@@ -598,8 +598,12 @@ test('workflow policy is pinned, least-privileged, native, locked and publish ne
   const source = await fs.readFile(workflowFile, 'utf8');
   const doc = YAML.parse(source);
   assert.deepEqual(doc.permissions, { contents: 'read' });
-  assert.deepEqual(doc.jobs.build.permissions, { contents: 'read' });
-  assert.deepEqual(doc.jobs.publish.permissions, { contents: 'write' });
+  assert.deepEqual(doc.jobs.build.permissions, {
+    contents: 'read',
+    'id-token': 'write',
+    attestations: 'write'
+  });
+  assert.deepEqual(doc.jobs.publish.permissions, { contents: 'write', attestations: 'read' });
   assert.deepEqual(doc.jobs.compliance.permissions, { contents: 'read' });
   assert.equal(doc.on.workflow_dispatch.inputs.immutable_releases_confirmed.type, 'boolean');
   assert.deepEqual(
@@ -612,6 +616,7 @@ test('workflow policy is pinned, least-privileged, native, locked and publish ne
   );
   const pins = [...source.matchAll(/uses:\s*([^\s]+)/g)].map((match) => match[1]);
   const allowedActions = [
+    'actions/attest',
     'actions/checkout',
     'actions/download-artifact',
     'actions/setup-node',
@@ -641,6 +646,8 @@ test('workflow policy is pinned, least-privileged, native, locked and publish ne
   assert.match(source, /X-GitHub-Api-Version: 2026-03-10/);
   assert.match(source, /needs:\s*compliance/);
   assert.match(source, /pixel-snapper-compliance/);
+  assert.equal(doc.jobs.publish.if, "github.ref == 'refs/heads/main'");
+  assert.equal(doc.jobs.publish.environment, 'pixel-snapper-release');
   assert.equal([...source.matchAll(/secrets\.IMMUTABLE_RELEASES_TOKEN/g)].length, 1);
   assert.doesNotMatch(
     source.slice(source.indexOf('\n  build:'), source.indexOf('\n  publish:')),
@@ -723,8 +730,8 @@ test('approved release documents pin immutable v1.0.0 commit and retain the form
   const formerReviewedCommit = 'a' + 'e20461f60fb39e75d15f184bab1ebec1219511c';
   const obsoleteReleaseTag = ['pixel-snapper', 'v1.0.0', `commit.${'a' + 'e20461'}`].join('-');
   const files = [
-    'docs/superpowers/specs/2026-07-18-pixel-snapper-binary-integration-design.md',
-    'docs/superpowers/plans/2026-07-18-pixel-snapper-binary-integration.md',
+    'docs/specs/2026-07-18-pixel-snapper-binary-integration-design.md',
+    'docs/plans/2026-07-18-pixel-snapper-binary-integration.md',
     'skills/pixel-sprite-animation-pipeline/references/pixel-snapper-release-checklist.md'
   ];
   for (const file of files) {
