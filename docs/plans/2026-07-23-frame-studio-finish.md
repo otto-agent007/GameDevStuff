@@ -412,7 +412,7 @@ git commit -m "feat: diagnose frame studio motion"
 **Files:**
 
 - Modify: `skills/game-character-pipeline/references/frame-studio.md`
-- Modify: `docs/superpowers/plans/2026-07-23-frame-studio-finish.md`
+- Modify: `docs/plans/2026-07-23-frame-studio-finish.md`
 
 **Interfaces:**
 
@@ -463,7 +463,7 @@ Expected: formatting passes, only intended public files are changed, and no priv
 - [x] **Step 5: Commit and push**
 
 ```bash
-git add docs/superpowers/plans/2026-07-23-frame-studio-finish.md skills/game-character-pipeline
+git add docs/plans/2026-07-23-frame-studio-finish.md skills/game-character-pipeline
 git commit -m "docs: finish frame studio review workflow"
 git push origin agent/game-character-animation-workflow
 ```
