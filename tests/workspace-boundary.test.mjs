@@ -5,6 +5,11 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const manifestPaths = [
+  'package.json',
+  'skills/game-character-pipeline/package.json',
+  'skills/pixel-sprite-animation-pipeline/package.json'
+];
 
 async function readJsonOrNull(file) {
   try {
@@ -46,17 +51,13 @@ test('root manifest declares the two private skill workspaces and shared develop
   for (const [name, version] of Object.entries(manifest.devDependencies)) {
     assert.match(version, /^\d+\.\d+\.\d+$/, `${name} must use an exact release version`);
   }
-  assert.deepEqual(
-    manifest.optionalDependencies,
-    { '@img/sharp-win32-x64': '0.35.3' },
-    'the cross-platform lock must retain Sharp’s Windows runtime package for CI'
-  );
 });
 
 test('workspace policy tests do not pin Dependabot-managed developer-tool revisions', async () => {
   const source = await fs.readFile(path.join(repositoryRoot, 'tests/workspace-boundary.test.mjs'), 'utf8');
-  for (const version of ['9.39.5', '1.61.1', '16.5.0', '3.9.6']) {
-    assert.doesNotMatch(source, new RegExp(`: '${version.replaceAll('.', '\\.')}'`));
+  const root = await readJsonOrNull(path.join(repositoryRoot, 'package.json'));
+  for (const version of Object.values(root.devDependencies)) {
+    assert.equal(source.includes(`'${version}'`), false, `${version} must remain Dependabot-managed`);
   }
 });
 
@@ -77,14 +78,55 @@ test('workspaces retain only their exact runtime dependencies and use the root l
   });
   assert.equal(Object.hasOwn(character, 'devDependencies'), false);
   assert.equal(Object.hasOwn(pixel, 'devDependencies'), false);
-  assert.equal(character.scripts.coverage, 'node --test --experimental-test-coverage --test-coverage-lines=50');
-  assert.equal(pixel.scripts.coverage, 'node --test --experimental-test-coverage --test-coverage-lines=50');
+  assert.equal(
+    character.scripts.coverage,
+    "node --test --experimental-test-coverage --test-coverage-include='scripts/**' --test-coverage-include='studio/**' --test-coverage-lines=89 --test-coverage-branches=71"
+  );
+  assert.equal(
+    pixel.scripts.coverage,
+    "node --test --experimental-test-coverage --test-coverage-include='scripts/**' --test-coverage-lines=94 --test-coverage-branches=77"
+  );
   assert.equal(character.files.includes('npm-shrinkwrap.json'), false);
   assert.equal(pixel.files.includes('npm-shrinkwrap.json'), false);
   await assert.rejects(fs.access(path.join(repositoryRoot, 'skills/game-character-pipeline/npm-shrinkwrap.json')));
   await assert.rejects(
     fs.access(path.join(repositoryRoot, 'skills/pixel-sprite-animation-pipeline/npm-shrinkwrap.json'))
   );
+});
+
+test('Sharp platform runtime pins stay in lockstep with workspace Sharp', async () => {
+  const [root, character, pixel] = await Promise.all(
+    manifestPaths.map((manifestPath) => readJsonOrNull(path.join(repositoryRoot, manifestPath)))
+  );
+  const sharpVersion = character.dependencies.sharp;
+
+  assert.equal(pixel.dependencies.sharp, sharpVersion);
+  const platformPins = Object.entries(root.optionalDependencies).filter(([name]) => name.startsWith('@img/sharp-'));
+  assert.ok(platformPins.length > 0, 'the root must retain the required Sharp platform runtime pin');
+  for (const [name, version] of platformPins) {
+    assert.equal(version, sharpVersion, `${name} must match the workspace sharp version`);
+  }
+});
+
+test('third-party ledger records every direct manifest dependency', async () => {
+  const ledger = await fs.readFile(path.join(repositoryRoot, 'LICENSES/THIRD_PARTY.md'), 'utf8');
+  const manifests = await Promise.all(
+    manifestPaths.map((manifestPath) => readJsonOrNull(path.join(repositoryRoot, manifestPath)))
+  );
+  const declared = new Set();
+
+  for (const manifest of manifests) {
+    for (const section of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+      for (const [name, version] of Object.entries(manifest[section] ?? {})) {
+        declared.add(`${name} ${version}`);
+      }
+    }
+  }
+
+  for (const dependency of declared) {
+    const escaped = dependency.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    assert.match(ledger, new RegExp(`^\\|\\s*${escaped}\\s*\\|`, 'm'), `${dependency} needs a ledger row`);
+  }
 });
 
 test('package-boundary tests use the Node 22-compatible module URL path API', async () => {

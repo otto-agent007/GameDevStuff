@@ -1,6 +1,6 @@
 ---
 name: pixel-sprite-animation-pipeline
-description: Use for deterministic pixel-sprite preparation, Pixel Snapper processing, and contract-validated runtime exports.
+description: Use for deterministic Pixel Snapper processing of approved pixel-art frames into contract-validated runtime PNG sequences, sprite sheets, animated WebP previews, pivots, and signed receipts.
 ---
 
 # Pixel Sprite Animation Pipeline

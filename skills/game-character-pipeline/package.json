@@ -33,7 +33,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "coverage": "node --test --experimental-test-coverage --test-coverage-lines=50",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-include='scripts/**' --test-coverage-include='studio/**' --test-coverage-lines=89 --test-coverage-branches=71",
     "test:browser": "playwright test tests/browser",
     "acceptance": "node --test tests/e2e.test.mjs tests/pose-board-e2e.test.mjs",
     "validate-skill": "node scripts/validate-skill.mjs"

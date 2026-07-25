@@ -78,19 +78,44 @@ test('root README directs readers to documentation and CI workflows without losi
   assert.match(readme, /\[Documentation index\]\(docs\/README\.md\)/);
   assert.match(readme, /Node\.js 22\.12\.0 or newer/);
   assert.match(readme, /install-by-copy/);
+  assert.match(readme, /@img\/sharp-win32-x64/);
+  assert.match(readme, /must match the workspace `sharp` version/);
   assert.match(readme, /## Exit classes/);
 });
 
 test('skill descriptions are concise, specific routing triggers', async () => {
   const character = await fs.readFile(path.join(repositoryRoot, 'skills/game-character-pipeline/SKILL.md'), 'utf8');
   const pixel = await fs.readFile(path.join(repositoryRoot, 'skills/pixel-sprite-animation-pipeline/SKILL.md'), 'utf8');
+  const descriptionFor = (source) => source.match(/^description:\s*(.+)$/m)?.[1] ?? '';
+  const characterDescription = descriptionFor(character);
+  const pixelDescription = descriptionFor(pixel);
 
-  assert.match(
-    character,
-    /^description: Use for auditable character-animation intake, Frame Studio review, and engine-neutral sprite exports\.$/m
-  );
-  assert.match(
-    pixel,
-    /^description: Use for deterministic pixel-sprite preparation, Pixel Snapper processing, and contract-validated runtime exports\.$/m
-  );
+  assert.ok(characterDescription.split(/\s+/).length <= 35, 'character routing description must stay concise');
+  assert.ok(pixelDescription.split(/\s+/).length <= 35, 'Pixel routing description must stay concise');
+  for (const term of [
+    /GIF/,
+    /APNG/,
+    /WebP/,
+    /video/i,
+    /PNG sequence/i,
+    /pose[- ]board/i,
+    /Frame Studio/,
+    /Pixel Snapper/,
+    /sprite[- ]sheet/i,
+    /pivots/i,
+    /sockets/i
+  ]) {
+    assert.match(characterDescription, term);
+  }
+  for (const term of [
+    /Pixel Snapper/,
+    /pixel-art frames/i,
+    /runtime PNG sequences/i,
+    /sprite sheets/i,
+    /animated WebP previews/i,
+    /pivots/i,
+    /signed receipts/i
+  ]) {
+    assert.match(pixelDescription, term);
+  }
 });
