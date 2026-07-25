@@ -182,6 +182,11 @@ test('formatted documentation and donor changes run quality without selecting pa
     }
   }
   assert.ok(workflow.jobs.quality.steps.some((step) => step.run === 'npm run format:check'));
+  assert.equal(
+    Object.hasOwn(workflow.jobs.quality, 'if'),
+    false,
+    'quality must be unconditional so event-path-only documentation changes run Prettier'
+  );
 });
 
 test('unified CI installs once from the root lock and uses root workspace commands', async () => {
