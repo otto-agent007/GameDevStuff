@@ -120,7 +120,7 @@ jobs:
           node release-tools/skills/pixel-sprite-animation-pipeline/scripts/release/normalize-compliance.mjs --input raw-pixel-snapper.spdx.json --output compliance/pixel-snapper.spdx.json --upstream-commit "$UPSTREAM_COMMIT" --cargo-lock-sha256 "$CARGO_LOCK_SHA256"
 
       - name: Upload single compliance source of truth
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: pixel-snapper-compliance
           path: compliance
@@ -258,7 +258,7 @@ jobs:
         run: node release-tools/skills/pixel-sprite-animation-pipeline/scripts/release/package-pixel-snapper.mjs --request package-request.json --output-dir "packaged/${RELEASE_TARGET}"
 
       - name: Upload isolated target package
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: pixel-snapper-build-${{ matrix.key }}
           path: packaged/${{ matrix.key }}
