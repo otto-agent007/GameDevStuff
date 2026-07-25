@@ -259,7 +259,7 @@ test('Pixel Snapper release attests only validated target archives before a prot
   const attestationStepIndex = build.steps.findIndex((step) => step.name === 'Attest validated target archive');
   assert.ok(attestationStepIndex > packageStepIndex, 'the archive must exist before it is attested');
   const attestation = build.steps[attestationStepIndex];
-  assert.equal(attestation.uses, 'actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26');
+  assert.equal(attestation.uses, 'actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6');
   assert.equal(attestation.with['subject-path'], 'packaged/${{ matrix.key }}/pixel-snapper-${{ matrix.key }}.*');
   assert.doesNotMatch(attestation.with['subject-path'], /target\//, 'only the final archive may be attested');
 
