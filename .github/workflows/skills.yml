@@ -1,0 +1,250 @@
+name: Skills
+
+on:
+  push:
+    paths:
+      - '.github/dependabot.yml'
+      - '.github/workflows/**'
+      - '.editorconfig'
+      - '.nvmrc'
+      - '.prettierignore'
+      - '.prettierrc.json'
+      - 'eslint.config.mjs'
+      - 'integration/fixtures/**'
+      - 'LICENSES/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'skills/game-character-pipeline/**'
+      - 'skills/pixel-sprite-animation-pipeline/**'
+      - 'tests/**'
+  pull_request:
+    paths:
+      - '.github/dependabot.yml'
+      - '.github/workflows/**'
+      - '.editorconfig'
+      - '.nvmrc'
+      - '.prettierignore'
+      - '.prettierrc.json'
+      - 'eslint.config.mjs'
+      - 'integration/fixtures/**'
+      - 'LICENSES/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'skills/game-character-pipeline/**'
+      - 'skills/pixel-sprite-animation-pipeline/**'
+      - 'tests/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skills-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      pixel: ${{ steps.filter.outputs.pixel }}
+      character: ${{ steps.filter.outputs.character }}
+      root: ${{ steps.filter.outputs.root }}
+      unit_matrix: ${{ steps.matrix.outputs.unit_matrix }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590
+        with:
+          filters: |
+            pixel:
+              - 'skills/pixel-sprite-animation-pipeline/**'
+            character:
+              - 'skills/game-character-pipeline/**'
+              - 'integration/fixtures/**'
+            root:
+              - '.github/dependabot.yml'
+              - '.github/workflows/**'
+              - '.editorconfig'
+              - '.nvmrc'
+              - '.prettierignore'
+              - '.prettierrc.json'
+              - 'eslint.config.mjs'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tests/**'
+              - 'LICENSES/**'
+
+      - name: Build package unit matrix
+        id: matrix
+        shell: bash
+        env:
+          PIXEL_CHANGED: ${{ steps.filter.outputs.pixel }}
+          CHARACTER_CHANGED: ${{ steps.filter.outputs.character }}
+          ROOT_CHANGED: ${{ steps.filter.outputs.root }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const selected = new Set();
+          if (process.env.ROOT_CHANGED === 'true') {
+            for (const workspace of ['pixel-sprite-animation-pipeline', 'game-character-pipeline']) {
+              selected.add(workspace);
+            }
+          } else {
+            if (process.env.PIXEL_CHANGED === 'true') selected.add('pixel-sprite-animation-pipeline');
+            if (process.env.CHARACTER_CHANGED === 'true') selected.add('game-character-pipeline');
+          }
+          const include = [...selected].flatMap((workspace) =>
+            ['ubuntu-latest', 'windows-latest'].flatMap((os) =>
+              [20, 24].map((node) => ({ workspace, os, node }))
+            )
+          );
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `unit_matrix=${JSON.stringify({ include })}\n`);
+          NODE
+
+  quality:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked workspace dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run root workspace policy tests
+        run: npm run test:workspace
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
+
+  unit:
+    needs: changes
+    if: needs.changes.outputs.unit_matrix != '{"include":[]}'
+    name: ${{ matrix.workspace }} / ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.changes.outputs.unit_matrix) }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked workspace dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run workspace unit tests
+        run: npm test --workspace=${{ matrix.workspace }}
+
+      - name: Verify installable package contents
+        run: npm pack --dry-run --workspace=${{ matrix.workspace }}
+
+      - name: Validate skill when the official validator is installed
+        if: runner.os == 'Linux' && matrix.node == 24
+        shell: python
+        env:
+          WORKSPACE: ${{ matrix.workspace }}
+        run: |
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          roots = [Path.home() / ".codex"]
+          if os.environ.get("CODEX_HOME"):
+              roots.insert(0, Path(os.environ["CODEX_HOME"]))
+          candidates = [
+              root / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py"
+              for root in roots
+          ]
+          validator = next((candidate for candidate in candidates if candidate.is_file()), None)
+          if validator is None:
+              print("Official quick_validate.py is not installed on this runner; skipping.")
+          else:
+              package = Path("skills") / os.environ["WORKSPACE"]
+              raise SystemExit(subprocess.call([sys.executable, str(validator), "."], cwd=package))
+
+  browser:
+    needs: changes
+    if: needs.changes.outputs.character == 'true' || needs.changes.outputs.root == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked workspace dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install Chromium
+        run: npm exec playwright install --with-deps chromium
+
+      - name: Test Frame Studio
+        run: npm run browser
+
+  acceptance:
+    needs: changes
+    if: needs.changes.outputs.pixel == 'true' || needs.changes.outputs.character == 'true' || needs.changes.outputs.root == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked workspace dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run character compatibility acceptance tests
+        run: npm run acceptance
+        env:
+          ACCEPTANCE_ARTIFACT_DIR: ${{ github.workspace }}/acceptance-artifacts
+
+      - name: Upload acceptance evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: clockwork-courier-public-evidence
+          path: acceptance-artifacts
+          if-no-files-found: error
