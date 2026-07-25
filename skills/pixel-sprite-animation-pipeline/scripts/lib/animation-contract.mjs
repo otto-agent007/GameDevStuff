@@ -106,10 +106,10 @@ function validateReview(review) {
   uniqueStrings(review.approvers, 'review approvers');
 }
 
-export function validateAnimationContractV1(document) {
+export function validateAnimationContractV1(document, { projectId = null } = {}) {
   exact(document, ['version', 'anchor', 'sizes', 'pivot', 'baseline', 'palette', 'clips', 'review'], 'document');
   if (document.version !== 1) throw new Error('animation contract version must be 1');
-  if (!same(document.sizes, SIZES)) throw new Error('animation contract sizes must fix Pop T canonical, generation, runtime, and pixelSize values');
+  if (!same(document.sizes, SIZES)) throw new Error(`animation contract sizes must fix${projectId ? ` ${projectId}` : ''} canonical, generation, runtime, and pixelSize values`);
   coordinate(document.pivot, 'pivot', true);
   if (document.baseline !== 111) throw new Error('animation contract baseline must be 111');
   validateAnchor(document.anchor);
@@ -253,8 +253,8 @@ export function validateAnimationContractV2(document) {
   return document;
 }
 
-export function validateAnimationContract(document) {
-  if (document?.version === 1) return validateAnimationContractV1(document);
+export function validateAnimationContract(document, options = {}) {
+  if (document?.version === 1) return validateAnimationContractV1(document, options);
   if (document?.version === 2) return validateAnimationContractV2(document);
   throw new Error('animation contract version must be 1 or 2');
 }
@@ -267,10 +267,8 @@ function deepFreeze(value) {
   return value;
 }
 
-export async function loadAnimationContract(file) {
+export async function loadAnimationContract(file, options = {}) {
   const document = JSON.parse(await fs.readFile(file, 'utf8'));
-  validateAnimationContract(document);
+  validateAnimationContract(document, options);
   return deepFreeze({ document, sha256: stableHash(document) });
 }
-
-export const POP_T_TARGET = TARGET;

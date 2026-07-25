@@ -38,7 +38,7 @@ Use `promote-profile` only after explicit approval. Use `propose-rule` to inspec
 
 ## References
 
-- Read [configuration.md](references/configuration.md) when changing sizes, pivots, palette, background, foreground retention, or retry limits.
+- Read [configuration.md](references/configuration.md) when changing sizes, pivots, palette, background, foreground retention, retry limits, or local integration privacy policy.
 - Read [generation-prompts.md](references/generation-prompts.md) before image generation or a targeted generative correction.
 - Read [pixel-snapper.md](references/pixel-snapper.md) for executable discovery and manual handoffs.
 - Read [corrections.md](references/corrections.md) for failure classification, deterministic gates, retry accounting, and stop rules.

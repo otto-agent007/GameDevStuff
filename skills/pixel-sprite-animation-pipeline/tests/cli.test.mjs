@@ -36,6 +36,26 @@ async function tempProject(label = 'sprite cli project ') {
   return fs.mkdtemp(path.join(os.tmpdir(), label));
 }
 
+test('CLI rejects an input under a configured forbidden integration root before processing it', async () => {
+  const workspace = await tempProject('sprite integration guard ');
+  const forbidden = path.join(workspace, 'forbidden');
+  const allowed = path.join(workspace, 'allowed');
+  await fs.mkdir(path.join(allowed, '.pixel-sprite-pipeline'), { recursive: true });
+  await fs.mkdir(forbidden);
+  const input = path.join(forbidden, 'anchor.png');
+  await makeAnchor(input);
+  await fs.writeFile(
+    path.join(allowed, '.pixel-sprite-pipeline', 'profile.yaml'),
+    `integration:\n  projectId: private-project\n  forbiddenIntegrationPaths:\n    - ${forbidden}\n`
+  );
+
+  const result = invoke([
+    'prepare', '--input', input, '--output', path.join(allowed, 'prepared'), '--cwd', allowed
+  ]);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /forbidden integration path/);
+});
+
 async function approvalCliFixture() {
   const projectDir = await tempProject('sprite approval cli project ');
   const runDir = path.join(projectDir, 'run');

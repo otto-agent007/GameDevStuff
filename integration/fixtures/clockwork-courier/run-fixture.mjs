@@ -1,20 +1,23 @@
 import fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
-import sharp from 'sharp';
 
-import { auditRun } from '../../scripts/lib/audit.mjs';
-import { publishExportRevision } from '../../scripts/lib/export-contract.mjs';
-import { loadProjectContract } from '../../scripts/lib/project-contract.mjs';
-import { sha256File, sha256Value } from '../../scripts/lib/schema.mjs';
-import { loadAnimationContract } from '../../../pixel-sprite-animation-pipeline/scripts/lib/animation-contract.mjs';
-import { DEFAULT_CONFIG, validateConfig } from '../../../pixel-sprite-animation-pipeline/scripts/lib/config.mjs';
-import { exportContractAnimation } from '../../../pixel-sprite-animation-pipeline/scripts/lib/export.mjs';
-import { writeFrameApproval } from '../../../pixel-sprite-animation-pipeline/scripts/lib/frame-approval.mjs';
-import { inspectImage } from '../../../pixel-sprite-animation-pipeline/scripts/lib/inspect.mjs';
-import { normalizeContractFrames } from '../../../pixel-sprite-animation-pipeline/scripts/lib/normalize.mjs';
-import { writeSnapReceipt } from '../../../pixel-sprite-animation-pipeline/scripts/lib/snap-receipt.mjs';
-import { stableHash } from '../../../pixel-sprite-animation-pipeline/scripts/lib/state-auth.mjs';
-import { validateRun } from '../../../pixel-sprite-animation-pipeline/scripts/lib/validate.mjs';
+const require = createRequire(new URL('../../../skills/game-character-pipeline/package.json', import.meta.url));
+const sharp = require('sharp');
+
+import { auditRun } from '../../../skills/game-character-pipeline/scripts/lib/audit.mjs';
+import { publishExportRevision } from '../../../skills/game-character-pipeline/scripts/lib/export-contract.mjs';
+import { loadProjectContract } from '../../../skills/game-character-pipeline/scripts/lib/project-contract.mjs';
+import { sha256File, sha256Value } from '../../../skills/game-character-pipeline/scripts/lib/schema.mjs';
+import { loadAnimationContract } from '../../../skills/pixel-sprite-animation-pipeline/scripts/lib/animation-contract.mjs';
+import { DEFAULT_CONFIG, validateConfig } from '../../../skills/pixel-sprite-animation-pipeline/scripts/lib/config.mjs';
+import { exportContractAnimation } from '../../../skills/pixel-sprite-animation-pipeline/scripts/lib/export.mjs';
+import { writeFrameApproval } from '../../../skills/pixel-sprite-animation-pipeline/scripts/lib/frame-approval.mjs';
+import { inspectImage } from '../../../skills/pixel-sprite-animation-pipeline/scripts/lib/inspect.mjs';
+import { normalizeContractFrames } from '../../../skills/pixel-sprite-animation-pipeline/scripts/lib/normalize.mjs';
+import { writeSnapReceipt } from '../../../skills/pixel-sprite-animation-pipeline/scripts/lib/snap-receipt.mjs';
+import { stableHash } from '../../../skills/pixel-sprite-animation-pipeline/scripts/lib/state-auth.mjs';
+import { validateRun } from '../../../skills/pixel-sprite-animation-pipeline/scripts/lib/validate.mjs';
 
 const fixtureRoot = path.resolve(import.meta.dirname);
 const HASH = (letter) => letter.repeat(64);

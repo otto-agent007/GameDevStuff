@@ -14,7 +14,7 @@ Run the auditable character-animation workflow from this package. Keep source by
 - Never scale poses independently. Per-frame translation is allowed only by the contract; scale and rotation remain shared across the clip unless the owner explicitly revises the contract.
 - Never treat pose-board grid geometry as authoritative. When foreground crosses nominal cells, recover complete four-neighbor foreground components from the full board, present numbered candidates, and require owner selection before Pixel Snapper.
 - Treat any export-time override of approved timing or playback semantics, including `once` or `hold-last` to `loop`, as an objective contract failure with exit class `3`. A later request to approve a revised contract is exit class `4`.
-- Never enter, edit, copy files into, build, test, or otherwise integrate with `/mnt/2TBHDD/CockpitEscapeRoom` while using this skill. That downstream repository requires a separate explicitly approved integration task, even when private output appears to exist there already.
+- Never enter, edit, copy files into, build, test, or otherwise integrate with a configured forbidden integration root while using this skill. A downstream repository requires a separately approved integration task, even when private output appears to exist there already.
 - Never publish private assets, paths, manifests, media, thumbnails, reports, or descriptive private evidence. Keep private work outside Git and npm package contents.
 
 ## Route the request
@@ -33,7 +33,7 @@ Use [references/workflow.md](references/workflow.md) for commands, state transit
 
 - For pose boards, PNG sequences, GIF, APNG, WebP, MP4, WebM, or generated stills, read [references/motion-sources.md](references/motion-sources.md).
 - For stable framing, edit revisions, pivots, sockets, contacts, root travel, timing, playback, and approvals, read [references/frame-studio.md](references/frame-studio.md).
-- For private Pop T or another private production audit, read [references/private-audit.md](references/private-audit.md) before touching any input. Stop at the audit handoff; do not integrate downstream.
+- For a private-project production audit, read [references/private-audit.md](references/private-audit.md) before touching any input. Stop at the audit handoff; do not integrate downstream.
 
 ## Stop rules
 

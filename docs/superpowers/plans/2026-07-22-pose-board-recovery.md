@@ -638,7 +638,7 @@ Expected: every suite passes with no warnings or diff errors.
 Run:
 
 ```bash
-rg -n -i "private-audit|private character|cockpitescaperoom|/tmp/|/mnt/" \
+rg -n -i "private-audit|private character|forbidden integration root|/tmp/|/mnt/" \
   skills/game-character-pipeline docs/superpowers/specs/2026-07-22-pose-board-recovery-design.md \
   docs/superpowers/plans/2026-07-22-pose-board-recovery.md
 git status --short

@@ -32,6 +32,9 @@ snapper:
 correction:
   generativeAttempts: 2
   skillProposalEvidence: 3
+integration:
+  projectId: null
+  forbiddenIntegrationPaths: []
 ```
 
 All three sizes use positive integer dimensions. Generation and runtime dimensions must be exact positive integer multiples of the corresponding canonical dimensions and use the same scale on both axes. The pivot is expressed in whole canonical pixels and must be inside the canonical cell. Runtime pivot coordinates are derived by the integer runtime scale; with the defaults they are `(128, 224)`.
@@ -41,6 +44,8 @@ All three sizes use positive integer dimensions. Generation and runtime dimensio
 `background.mode: border` requires `color: null` and derives the key from border pixels. `background.mode: configured` requires explicit byte-valued `r`, `g`, `b`, and `a` channels. The schema is closed: sections must contain every documented field, enums and arrays are type-checked, and unknown fields fail before a run is created or a profile is promoted.
 
 The Pixel Snapper executable may be overridden for a process with `PIXEL_SNAPPER_BIN`. Process environment selection affects invocation but is not learned as an installed-skill rule. Export columns, animation durations, and output names are delivery arguments rather than profile fields; WebP durations must be one integer per frame in the range 11–65535 milliseconds.
+
+`integration` is local privacy policy. Leave `projectId` as `null` for generic work; a private project may set one portable lowercase identifier. `forbiddenIntegrationPaths` is a unique list of normalized absolute roots. Before every CLI action, the tool resolves every supplied file and directory operand against those roots, including nonexistent output paths and symlinked parents, and rejects paths inside a forbidden root. Keep real values only in the ignored project profile; use [profile.example.yaml](profile.example.yaml) as the public template.
 
 ## Durable state
 

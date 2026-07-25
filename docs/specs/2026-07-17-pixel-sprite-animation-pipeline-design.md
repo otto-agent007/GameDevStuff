@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Create a reusable personal Codex skill named `pixel-sprite-animation-pipeline` that turns an approved pixel-art character anchor into consistent, game-ready animations. The skill must support both an end-to-end guided workflow and independently callable stages. Pop T is the first validation fixture, but no character-specific rules belong in the reusable workflow.
+Create a reusable personal Codex skill named `pixel-sprite-animation-pipeline` that turns an approved pixel-art character anchor into consistent, game-ready animations. The skill must support both an end-to-end guided workflow and independently callable stages. A private project is the first validation fixture, but no character-specific rules belong in the reusable workflow.
 
 The skill is intended for ChatGPT and Codex environments that support personal skills and file-processing tools. It is not initially a standalone Windows application. Its deterministic scripts may later serve as the foundation for a separate user-facing program.
 
@@ -187,7 +187,7 @@ The installed personal skill will contain:
 - UI metadata under `agents/openai.yaml`.
 - Deterministic scripts for inspection, anchor preparation, matrix generation, normalization, export, validation, and run reporting.
 - Focused references for generation prompting, Pixel Snapper integration, configuration, and correction taxonomy.
-- Minimal validation fixtures, including the approved Pop T anchor only where needed to test behavior.
+- Minimal validation fixtures, including an approved private-project anchor only where needed to test behavior.
 
 Bundled resources must remain general. Project-specific output assets and accumulated project profiles stay in their respective workspaces rather than inside the installed skill.
 
@@ -195,7 +195,7 @@ Bundled resources must remain general. Project-specific output assets and accumu
 
 The skill is complete when it can:
 
-1. Prepare the supplied Pop T snapped anchor without changing its native character pixels.
+1. Prepare the supplied private-project snapped anchor without changing its native character pixels.
 2. Produce exact 128 x 128 canonical, 1024 x 1024 generation, and 256 x 256 runtime assets using integer nearest-neighbor scaling.
 3. Produce a correct 1024 x 1024 pixel matrix for the default configuration.
 4. Detect Pixel Snapper and provide a reliable manual handoff when it is absent.
@@ -204,4 +204,4 @@ The skill is complete when it can:
 7. Detect intentionally introduced aspect, blur, palette, clipping, and anchoring failures.
 8. Correct safe deterministic failures, verify the corrected output, and record the successful lesson.
 9. Require user approval before changing installed skill-level defaults.
-10. Work with a non-Pop-T fixture without relying on game-specific assumptions.
+10. Work with a generic fixture without relying on game-specific assumptions.

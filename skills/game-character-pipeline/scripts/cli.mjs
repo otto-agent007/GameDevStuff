@@ -16,6 +16,7 @@ import { auditRun, compareRuns, loadAuditExpected, recordAuditReport, recordProd
 import { createGenerationHandoff, importGeneratedCandidate, loadGenerationHandoff } from './lib/generated-still.mjs';
 import { decodeAnimatedImage } from './lib/animated-image.mjs';
 import { createPixelProductionContract, publishExportRevision } from './lib/export-contract.mjs';
+import { resolvePixelPipelineCli } from './lib/pixel-pipeline-cli.mjs';
 import { runPixelProduction } from './lib/pixel-pipeline.mjs';
 import { decodePoseBoard } from './lib/pose-board.mjs';
 import { decodePngSequence } from './lib/png-sequence.mjs';
@@ -318,7 +319,14 @@ program
   .option('--snap-receipt <file>', 'signed Pixel Snapper receipt')
   .option('--frame-approval <file>', 'signed post-snap frame approval')
   .option('--output <directory>', 'new or resumable pixel-production directory')
+  .option('--pipeline-cli <file>', 'readable Pixel Sprite Pipeline CLI')
   .action(async (options) => {
+    const pipeline = await resolvePixelPipelineCli({ pipelineCli: options.pipelineCli });
+    if (pipeline.handoff) {
+      print(pipeline.handoff);
+      process.exitCode = 2;
+      return;
+    }
     const projectDir = path.resolve(options.projectDir);
     const project = await loadInitializedProject(projectDir);
     const run = await loadRun({ projectRoot: projectDir, id: options.run });
@@ -336,7 +344,7 @@ program
       project,
       selectionApproval,
       contract,
-      pipelineCli: fileURLToPath(new URL('../../pixel-sprite-animation-pipeline/scripts/cli.mjs', import.meta.url)),
+      pipelineCli: pipeline.pipelineCli,
       output,
       ...(options.snapReceipt ? { snapReceipt: { path: path.resolve(options.snapReceipt) } } : {}),
       ...(options.frameApproval ? { frameApproval: { path: path.resolve(options.frameApproval) } } : {})

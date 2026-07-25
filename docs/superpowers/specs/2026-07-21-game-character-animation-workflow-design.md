@@ -11,11 +11,11 @@ Extend GameDevStuff from a deterministic pixel-sprite finishing pipeline into an
 
 The existing `pixel-sprite-animation-pipeline` remains the deterministic production back end. A new `game-character-pipeline` skill will orchestrate the creative and approval stages above it rather than duplicating its snap, normalization, receipt, export, or validation responsibilities.
 
-Pop T is the first private production audit subject. Character-specific assets and rules do not belong in the reusable public skill.
+A private project is the first private production audit subject. Character-specific assets and rules do not belong in the reusable public skill.
 
 ## Repository Boundary
 
-All workflow implementation belongs in `/mnt/2TBHDD/GameDevStuff`, including:
+All workflow implementation belongs in this repository, including:
 
 - the `game-character-pipeline` skill and orchestration code;
 - GIF, APNG, animated WebP, PNG-sequence, MP4, and WebM intake;
@@ -25,7 +25,7 @@ All workflow implementation belongs in `/mnt/2TBHDD/GameDevStuff`, including:
 - deterministic tests, fixtures, contact sheets, previews, and audit reports;
 - the later optional ComfyUI adapter.
 
-`CockpitEscapeRoom` is a downstream consumer and is out of scope for this implementation. Its application code and runtime assets must not be modified while the GameDevStuff workflow is being built. A private copy of approved Pop T inputs may be used for an audit run. Generated assets may enter CockpitEscapeRoom only through a separate, explicitly approved integration task.
+A configured downstream integration root is out of scope for this implementation. Its application code and runtime assets must not be modified while the GameDevStuff workflow is being built. A private copy of approved inputs may be used for an audit run. Generated assets may enter that root only through a separately approved integration task.
 
 ## Goals
 
@@ -44,7 +44,7 @@ All workflow implementation belongs in `/mnt/2TBHDD/GameDevStuff`, including:
 - Replacing the existing `pixel-sprite-animation-pipeline`.
 - Making ComfyUI or Wan generation a prerequisite for initial completion.
 - Claiming that a 4 GB GPU is a supported Wan image-to-video environment before measured capability tests.
-- Shipping or modifying CockpitEscapeRoom production assets during this repository milestone.
+- Shipping or modifying downstream production assets during this repository milestone.
 - Copying an external donor repository wholesale.
 - Automatically approving artistic identity, readability, comedy timing, or motion appeal.
 - Adding an unreviewed production dependency or required hosted generation service.
@@ -148,7 +148,7 @@ Frame Studio edits are metadata. The immutable decoded source frames remain unch
 - Noncyclic actions default to `once` or `hold-last`; only genuinely cyclic motion defaults to `loop`.
 - Resampling uses nearest-neighbor only during pixel-art stages.
 
-These rules directly address Pop T size popping, unstable hand/key attachment, foot sliding, and background movement being used to conceal actor drift.
+These rules directly address private-project size popping, unstable hand/key attachment, foot sliding, and background movement being used to conceal actor drift.
 
 ## Run and Artifact Model
 
@@ -289,8 +289,8 @@ No ComfyUI installation, model download, Wan generation, or capability claim occ
 - Complete one public-fixture run from source through export.
 - Repeat it and compare all deterministic artifact hashes.
 - Review donor provenance, interpolation, timing, scale, pivots, sockets, contacts, cycle seams, and unsafe inherited behavior.
-- Complete one bounded private Pop T run proving stable height, planted-foot behavior, prop attachment, and nonrestarting playback.
-- Keep the Pop T assets and sensitive run evidence private.
+- Complete one bounded private-project run proving stable height, planted-foot behavior, prop attachment, and nonrestarting playback.
+- Keep the private-project assets and sensitive run evidence private.
 
 ### 6. ComfyUI capability audit
 
@@ -350,10 +350,10 @@ The new skill is tested as process documentation before deployment:
 
 1. **Foundation gate:** contracts, donor ledger, fixtures, and Frame Studio interaction proof.
 2. **Workflow gate:** uninterrupted fixture run, reproducibility evidence, browser proof, and audit report.
-3. **Private production gate:** Pop T contact sheets, animated previews, pivot/socket/contact evidence, and approved private output package.
+3. **Private production gate:** private-project contact sheets, animated previews, pivot/socket/contact evidence, and approved private output package.
 4. **Capability gate:** separately reviewed ComfyUI/Wan evidence after the deterministic workflow audit.
 
-The workflow does not publish generated Pop T assets to CockpitEscapeRoom at any GameDevStuff gate.
+The workflow does not publish generated private-project assets to a configured downstream integration root at any GameDevStuff gate.
 
 ## Acceptance Criteria
 
@@ -368,7 +368,7 @@ The initial GameDevStuff milestone is complete when it can:
 7. Export transparent frames, sheets, engine-neutral JSON, contact sheets, lossless previews, provenance, hashes, and validation reports.
 8. Reproduce deterministic derivatives from immutable sources and edit metadata.
 9. Reject tampering, interpolation, silent timing defaults, per-frame fitting, anchor drift, clipping, and invalid approval chains.
-10. Complete public-fixture and private Pop T audit runs without modifying CockpitEscapeRoom.
+10. Complete public-fixture and private-project audit runs without modifying a configured downstream integration root.
 
 ComfyUI generation is explicitly excluded from these initial acceptance criteria. Its later capability gate must report measured facts rather than assuming that the local 4 GB GPU can support Wan generation.
 

@@ -7,9 +7,29 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
+import { resolvePixelPipelineCli } from '../scripts/lib/pixel-pipeline-cli.mjs';
+
 const execFile = promisify(execFileCallback);
 const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repositoryRoot = path.resolve(packageDir, '..', '..');
+
+async function resolveNpmCli() {
+  const nodeDir = path.dirname(process.execPath);
+  const candidates = [
+    process.env.npm_execpath,
+    path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path.resolve(nodeDir, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')
+  ].filter(Boolean);
+  for (const candidate of new Set(candidates)) {
+    if (path.basename(candidate).toLowerCase() !== 'npm-cli.js') continue;
+    try {
+      if ((await fs.stat(candidate)).isFile()) return candidate;
+    } catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error;
+    }
+  }
+  throw new Error('could not locate npm-cli.js for shell-free package inspection');
+}
 
 test('CLI advertises the complete initial command surface', async () => {
   const result = await execFile(process.execPath, ['scripts/cli.mjs', '--help'], {
@@ -23,8 +43,120 @@ test('CLI advertises the complete initial command surface', async () => {
 
 test('produce command exposes authenticated delegation and resume inputs', async () => {
   const result = await execFile(process.execPath, ['scripts/cli.mjs', 'produce', '--help'], { cwd: packageDir });
-  for (const option of ['--project-dir', '--run', '--approval', '--snap-receipt', '--frame-approval', '--output']) {
+  for (const option of ['--project-dir', '--run', '--approval', '--snap-receipt', '--frame-approval', '--output', '--pipeline-cli']) {
     assert.match(result.stdout, new RegExp(option));
+  }
+});
+
+test('standalone produce returns a pixel pipeline configuration handoff before loading approvals', async (t) => {
+  const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'game-character-standalone-'));
+  t.after(() => fs.rm(projectDir, { recursive: true, force: true }));
+
+  await assert.rejects(
+    execFile(process.execPath, [
+      'scripts/cli.mjs', 'produce',
+      '--project-dir', projectDir,
+      '--run', 'missing-run',
+      '--approval', path.join(projectDir, 'missing-approval.json')
+    ], {
+      cwd: packageDir,
+      env: { ...process.env, PIXEL_SPRITE_PIPELINE_CLI: '' }
+    }),
+    (error) => {
+      assert.equal(error.code, 2);
+      const response = JSON.parse(error.stdout.trim());
+      assert.equal(response.status, 'awaiting-pixel-pipeline-cli');
+      assert.match(response.description, /--pipeline-cli|PIXEL_SPRITE_PIPELINE_CLI/);
+      assert.equal(error.stderr, '');
+      return true;
+    }
+  );
+});
+
+test('produce returns a pixel pipeline handoff for missing and non-regular configured CLIs', async (t) => {
+  const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'game-character-pipeline-config-'));
+  t.after(() => fs.rm(projectDir, { recursive: true, force: true }));
+
+  for (const pipelineCli of [path.join(projectDir, 'missing-cli.mjs'), projectDir]) {
+    await assert.rejects(
+      execFile(process.execPath, [
+        'scripts/cli.mjs', 'produce',
+        '--project-dir', projectDir,
+        '--run', 'missing-run',
+        '--approval', path.join(projectDir, 'missing-approval.json'),
+        '--pipeline-cli', pipelineCli
+      ], { cwd: packageDir }),
+      (error) => {
+        assert.equal(error.code, 2);
+        const response = JSON.parse(error.stdout.trim());
+        assert.equal(response.status, 'awaiting-pixel-pipeline-cli');
+        assert.match(response.description, /Pixel Sprite Pipeline CLI/);
+        assert.equal(error.stderr, '');
+        return true;
+      }
+    );
+  }
+});
+
+test('Pixel pipeline CLI configuration prefers an explicit option and otherwise uses the environment', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'game-character-pipeline-resolver-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const explicit = path.join(directory, 'explicit-cli.mjs');
+  const fallback = path.join(directory, 'fallback-cli.mjs');
+  await Promise.all([fs.writeFile(explicit, '// explicit'), fs.writeFile(fallback, '// fallback')]);
+
+  const preferred = await resolvePixelPipelineCli({
+    pipelineCli: explicit,
+    env: { PIXEL_SPRITE_PIPELINE_CLI: fallback }
+  });
+  assert.equal(preferred.pipelineCli, explicit);
+
+  const fromEnvironment = await resolvePixelPipelineCli({
+    env: { PIXEL_SPRITE_PIPELINE_CLI: fallback }
+  });
+  assert.equal(fromEnvironment.pipelineCli, fallback);
+});
+
+test('Pixel pipeline CLI configuration hands off when access is denied', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'game-character-pipeline-eacces-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const pipelineCli = path.join(directory, 'pipeline-cli.mjs');
+  await fs.writeFile(pipelineCli, '// CLI');
+
+  const result = await resolvePixelPipelineCli({
+    pipelineCli,
+    fileSystem: {
+      stat: async () => ({ isFile: () => true }),
+      access: async () => {
+        const error = new Error('permission denied');
+        error.code = 'EACCES';
+        throw error;
+      }
+    }
+  });
+
+  assert.equal(result.handoff.status, 'awaiting-pixel-pipeline-cli');
+  assert.match(result.handoff.description, /unreadable/);
+});
+
+test('packed character package excludes the root-only Clockwork Courier integration fixture', async () => {
+  const result = await execFile(process.execPath, [await resolveNpmCli(), 'pack', '--dry-run', '--json'], { cwd: packageDir });
+  const packed = JSON.parse(result.stdout);
+  assert.equal(packed.length, 1);
+  assert.equal(packed[0].files.some(({ path: file }) => file.startsWith('examples/clockwork-courier/')), false);
+});
+
+test('packed character runtime scripts do not import the sibling Pixel Sprite Pipeline', async () => {
+  const result = await execFile(process.execPath, [await resolveNpmCli(), 'pack', '--dry-run', '--json'], { cwd: packageDir });
+  const packed = JSON.parse(result.stdout);
+  const runtimeScripts = packed[0].files
+    .map(({ path: file }) => file)
+    .filter((file) => file.startsWith('scripts/') && file.endsWith('.mjs'));
+  assert.ok(runtimeScripts.length > 0);
+
+  for (const file of runtimeScripts) {
+    const source = await fs.readFile(path.join(packageDir, file), 'utf8');
+    assert.doesNotMatch(source, /pixel-sprite-animation-pipeline/, file);
   }
 });
 

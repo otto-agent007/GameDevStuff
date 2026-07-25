@@ -6,7 +6,7 @@
 
 ## Purpose
 
-Make Sprite Fusion Pixel Snapper a dependable, cross-platform stage of the Pixel Sprite Animation Pipeline without vendoring its Rust source or requiring every user to install Rust. This integration will let ChatGPT/Codex complete the Pop T animation workflow from generated poses through snapped, normalized, anchored, validated, and exported runtime assets.
+Make Sprite Fusion Pixel Snapper a dependable, cross-platform stage of the Pixel Sprite Animation Pipeline without vendoring its Rust source or requiring every user to install Rust. This integration will let ChatGPT/Codex complete a private-project animation workflow from generated poses through snapped, normalized, anchored, validated, and exported runtime assets.
 
 Pixel Snapper remains an external MIT-licensed tool. GameDevStuff builds approved upstream source into downloadable binaries, publishes immutable release assets, and verifies every downloaded binary before execution.
 
@@ -20,8 +20,8 @@ Pixel Snapper remains an external MIT-licensed tool. GameDevStuff builds approve
 - Preserve Pixel Snapper's MIT license and attribution in every binary release.
 - Keep the existing manual handoff available when setup cannot complete.
 - Bind every snap batch to an authenticated stage receipt without mutating the run manifest.
-- Require an approved animation contract and authored frame anchors before a Pop T batch can be accepted.
-- Make a complete Pop T animation run provenance-reproducible from its contract, receipts, hashes, and tool identity.
+- Require an approved animation contract and authored frame anchors before a private-project batch can be accepted.
+- Make a complete private-project animation run provenance-reproducible from its contract, receipts, hashes, and tool identity.
 
 ## Non-goals
 
@@ -187,11 +187,11 @@ On setup failure, the user can still:
 
 Checksum mismatch, archive safety failure, executable mismatch, and binary fixture failure are hard failures and never fall through to executing the downloaded file. A tampered managed cache is quarantined from resolution until `setup-snapper --force` restores the exact pinned installation.
 
-Manual resume has a distinct provenance path. After verifying the handoff manifest, exact expected filenames, and source/output hashes, it creates a signed `manual-handoff-receipt.json` whose origin is `manual-handoff`, whose `toolProvenanceVerified` field is `false`, and whose binary identity and arguments are explicitly `null` rather than inferred. This receipt permits ordinary normalization while preserving an honest audit trail, but it is ineligible for reproducible Pop T release acceptance. To promote a manual batch, the pipeline must actually rerun a verified binary with the approved arguments and produce byte-identical snapped output hashes under a standard snap receipt.
+Manual resume has a distinct provenance path. After verifying the handoff manifest, exact expected filenames, and source/output hashes, it creates a signed `manual-handoff-receipt.json` whose origin is `manual-handoff`, whose `toolProvenanceVerified` field is `false`, and whose binary identity and arguments are explicitly `null` rather than inferred. This receipt permits ordinary normalization while preserving an honest audit trail, but it is ineligible for reproducible private-project release acceptance. To promote a manual batch, the pipeline must actually rerun a verified binary with the approved arguments and produce byte-identical snapped output hashes under a standard snap receipt.
 
-## Pop T End-to-End Flow
+## Private-project end-to-end flow
 
-The integration does not invent artistic poses. Before generation, the private Pop T project must provide a signed or hash-bound, user-approved `animation-contract.json`. The public skill defines its closed schema; the private project supplies the creative values. A contract is invalid unless it contains:
+The integration does not invent artistic poses. Before generation, the private project must provide a signed or hash-bound, user-approved `animation-contract.json`. The public skill defines its closed schema; the private project supplies the creative values. A contract is invalid unless it contains:
 
 - approved anchor image hash and locked character-trait reference hashes;
 - canonical size `128×128`, generation size `1024×1024`, runtime size `256×256`;
@@ -207,9 +207,9 @@ The integration does not invent artistic poses. Before generation, the private P
 
 The CLI may not substitute default 100 ms durations or independently choose a palette per frame. Snapper arguments come from the contract: fixed color count, `--pixel-size 8`, and the same frozen opaque RGB `--palette` for the entire batch; transparency remains governed by the anchor/pipeline alpha rules. Missing clip, frame, duration, palette, or landmark semantic stops before generation/snap. Changing the contract hash starts a new run.
 
-After snapping, the signed frame-approval manifest supplies the actual coordinate for each contract-required landmark semantic. The landmark represents the stable character root/contact point, not the changing foreground bounding-box center. Normalization cannot begin without an authenticated approved manifest covering every expected output hash. It applies one global integer scale and translates each frame so its approved landmark maps to `(64,112)`. Foreground bounds remain clipping evidence only. This prevents an extended arm, leg, or prop from shifting Pop T's torso. The validator reports per-frame landmark drift and requires zero pixel drift after normalization; loop clips additionally require human review of the last-to-first root motion and silhouette transition.
+After snapping, the signed frame-approval manifest supplies the actual coordinate for each contract-required landmark semantic. The landmark represents the stable character root/contact point, not the changing foreground bounding-box center. Normalization cannot begin without an authenticated approved manifest covering every expected output hash. It applies one global integer scale and translates each frame so its approved landmark maps to `(64,112)`. Foreground bounds remain clipping evidence only. This prevents an extended arm, leg, or prop from shifting the private project's torso. The validator reports per-frame landmark drift and requires zero pixel drift after normalization; loop clips additionally require human review of the last-to-first root motion and silhouette transition.
 
-A complete Pop T run uses this sequence:
+A complete private-project run uses this sequence:
 
 1. Load and authenticate the approved animation contract and 128×128 anchor.
 2. Generate exactly the contract's ordered pose set at 1024×1024 using the separate pixel matrix reference.
@@ -221,7 +221,7 @@ A complete Pop T run uses this sequence:
 8. Validate pixels, frozen palette, frame order/count, durations, source hashes, clipping, background, landmark/pivot/baseline, sheet cells, preview fidelity, and loop-root continuity.
 9. Apply allowlisted deterministic corrections and revalidate; stop for human review on identity, pose readability, motion appeal, or loop quality.
 
-The real private Pop T batch is a release acceptance fixture, not a public repository fixture. Its acceptance report records the animation-contract hash, ordered private source/output hashes, selected frame-approval-manifest hash, landmark results, visual approval, and the authenticated verified-tool snap receipt. Manual-handoff receipts are rejected for this acceptance. The report may be retained privately while the public PR records only pass/fail and non-sensitive measurements.
+The real private-project batch is a release acceptance fixture, not a public repository fixture. Its acceptance report records the animation-contract hash, ordered private source/output hashes, selected frame-approval-manifest hash, landmark results, visual approval, and the authenticated verified-tool snap receipt. Manual-handoff receipts are rejected for this acceptance. The report may be retained privately while the public PR records only pass/fail and non-sensitive measurements.
 
 ## Security and Licensing
 
@@ -249,7 +249,7 @@ The real private Pop T batch is a release acceptance fixture, not a public repos
 - redirect limits, foreign hosts, protocol downgrade, streaming size limits, and interrupted downloads;
 - setup locking, stale-lock policy, concurrent setup, idempotence, atomic activation, and killed extraction cleanup;
 - signed snap-receipt creation, standalone receipt output, post-snap frame-approval chaining/version selection, tampering rejection, and manifest/contract/input/output binding;
-- honest manual-handoff receipt creation, null binary provenance, ordinary normalization eligibility, and Pop T acceptance rejection;
+- honest manual-handoff receipt creation, null binary provenance, ordinary normalization eligibility, and private-project acceptance rejection;
 - binary identity matching, truthful external-binary provenance, snap retry identity enforcement, and downstream receipt verification;
 - animation-contract schema, ordered clips/durations/loop modes, frozen palette, authored landmarks, and zero anchor drift.
 
@@ -283,7 +283,7 @@ Upgrades are manual and reviewable:
 3. Dispatch the binary release workflow for a new immutable tag.
 4. Verify native fixture pixels, licenses/notices, SBOM, provenance, and archive/executable hashes for all platform artifacts.
 5. Update the pinned tool manifest in a pull request.
-6. Run the full pipeline suite and a private Pop T contract acceptance run without changing that contract.
+6. Run the full pipeline suite and a private-project contract acceptance run without changing that contract.
 7. Merge only after platform CI and visual review pass.
 
 Existing releases are never overwritten. Rollback consists of restoring the prior pinned manifest entry.
@@ -292,4 +292,4 @@ Existing releases are never overwritten. Rollback consists of restoring the prio
 
 The binary integration is complete when each clean supported target can run `setup-snapper`, obtain and revalidate an archive- and executable-verified binary without Rust, and complete a snap batch through the existing CLI with an authenticated receipt. Tampering, unsafe archives, changed binary identity, contract drift, and interrupted/concurrent setup must fail closed without activating partial state.
 
-The Pop T pipeline is complete only when the real private, user-approved pre-generation animation contract contains exact clips, frame order/count, durations, loop modes, frozen palette, `pixelSize: 8`, and required landmark semantics; every expected pose is snapped with the same authenticated verified tool identity; a signed post-snap frame-approval manifest supplies an approved coordinate for every output hash; every selected landmark maps exactly to `(64,112)` without foreground-driven jitter; and the 256×256 runtime frames, per-clip sheets, metadata, and previews pass objective validation plus human identity/motion/loop review. Manual-handoff provenance cannot satisfy this gate. The final private report must bind the contract, run manifest, verified-tool snap receipt, selected frame-approval manifest, source/output hashes, tool provenance, and approval evidence while proving the original source files remain unchanged.
+The private-project pipeline is complete only when the real private, user-approved pre-generation animation contract contains exact clips, frame order/count, durations, loop modes, frozen palette, `pixelSize: 8`, and required landmark semantics; every expected pose is snapped with the same authenticated verified tool identity; a signed post-snap frame-approval manifest supplies an approved coordinate for every output hash; every selected landmark maps exactly to `(64,112)` without foreground-driven jitter; and the 256×256 runtime frames, per-clip sheets, metadata, and previews pass objective validation plus human identity/motion/loop review. Manual-handoff provenance cannot satisfy this gate. The final private report must bind the contract, run manifest, verified-tool snap receipt, selected frame-approval manifest, source/output hashes, tool provenance, and approval evidence while proving the original source files remain unchanged.

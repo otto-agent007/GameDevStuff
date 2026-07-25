@@ -29,6 +29,32 @@ test('defaults preserve the approved 128 to 1024 to 256 workflow', async () => {
   assert.deepEqual(DEFAULT_CONFIG.runtime, { width: 256, height: 256 });
   assert.deepEqual(DEFAULT_CONFIG.pivot, { x: 64, y: 112 });
   assert.deepEqual(DEFAULT_CONFIG.foreground, { retentionPolicy: 'all', minimumComponentPixels: 1 });
+  assert.deepEqual(DEFAULT_CONFIG.integration, { projectId: null, forbiddenIntegrationPaths: [] });
+});
+
+test('integration policy accepts a local project ID and absolute forbidden roots', () => {
+  const forbidden = path.join(path.parse(process.cwd()).root, 'private', 'downstream');
+  const configured = validateConfig({
+    ...structuredClone(DEFAULT_CONFIG),
+    integration: {
+      projectId: 'private-project',
+      forbiddenIntegrationPaths: [forbidden]
+    }
+  });
+  assert.deepEqual(configured.integration, {
+    projectId: 'private-project',
+    forbiddenIntegrationPaths: [forbidden]
+  });
+
+  for (const [projectId, forbiddenIntegrationPaths] of [
+    ['Private Project', []],
+    [null, ['relative/path']],
+    ['private-project', ['/private/downstream', '/private/downstream']]
+  ]) {
+    const invalid = structuredClone(DEFAULT_CONFIG);
+    invalid.integration = { projectId, forbiddenIntegrationPaths };
+    assert.throws(() => validateConfig(invalid), /integration/);
+  }
 });
 
 test('foreground recovery settings are configurable and validated', async () => {

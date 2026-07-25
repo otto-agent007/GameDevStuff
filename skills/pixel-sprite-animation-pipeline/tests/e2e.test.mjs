@@ -221,7 +221,7 @@ test('contracted guided animation waits for an explicitly selected signed frame 
   assert.equal(finished.report.snapReceiptSha256, approvalHandoff.snapReceiptSha256);
   assert.equal(finished.report.frameApprovalSha256, approval.sha256);
   assert.equal(finished.report.toolProvenanceVerified, false);
-  assert.equal(finished.report.popTAcceptance.eligible, false);
+  assert.equal(finished.report.projectAcceptance.eligible, false);
   assert.equal(finished.report.profilePromotion.eligible, false);
   const index = JSON.parse(await fs.readFile(path.join(runDir, 'runtime', 'animation-contract-export.json'), 'utf8'));
   assert.deepEqual(index.clips[0].frames.map(({ duration }) => duration), [137]);
@@ -469,6 +469,7 @@ test('installable package excludes tests and generated or private working data',
   assert.ok(files.includes('SKILL.md'));
   assert.ok(files.includes('scripts/cli.mjs'));
   assert.ok(files.includes('agents/openai.yaml'));
+  assert.ok(files.includes('LICENSE'));
   assert.ok(files.includes('npm-shrinkwrap.json'));
   assert.ok(files.some((file) => file.startsWith('references/')));
   assert.equal(files.some((file) => file.startsWith('tests/')), false);

@@ -12,8 +12,8 @@
 
 ## Global Constraints
 
-- All implementation and public fixtures stay in `/mnt/2TBHDD/GameDevStuff`; do not modify `CockpitEscapeRoom`.
-- Keep private Pop T media, manifests, reports, previews, and exports outside Git and outside npm package contents.
+- All implementation and public fixtures stay in this repository; do not modify a configured downstream integration root.
+- Keep private-project media, manifests, reports, previews, and exports outside Git and outside npm package contents.
 - Preserve immutable source bytes, source hashes, original timing, decoder identity, and every approved revision.
 - Animated GIF, APNG, and WebP frames must be fully composited using their disposal and blend rules before they become working RGBA frames.
 - PNG sequences require explicit order and one duration per frame; video uses decoded presentation timestamps and never assumes constant frame rate.
@@ -74,7 +74,7 @@
 
 ### Existing deterministic package changes
 
-- `skills/pixel-sprite-animation-pipeline/scripts/lib/animation-contract.mjs` — preserve Pop T v1 and add generic v2 parsing.
+- `skills/pixel-sprite-animation-pipeline/scripts/lib/animation-contract.mjs` — preserve private-project v1 and add generic v2 parsing.
 - `skills/pixel-sprite-animation-pipeline/scripts/lib/frame-approval.mjs` — accept v2 named landmarks and sockets while preserving signed v1 behavior.
 - `skills/pixel-sprite-animation-pipeline/scripts/lib/normalize.mjs` — apply one scale plus authored translations to actor/prop/effect tracks.
 - `skills/pixel-sprite-animation-pipeline/scripts/lib/export.mjs` — emit stable semantic IDs, nonuniform timing, tracks, pivots, sockets, contacts, and loop mode.
@@ -748,7 +748,7 @@ git commit -m "feat: bind animation owner approvals"
 - Modify: `skills/pixel-sprite-animation-pipeline/tests/frame-approval.test.mjs`
 
 **Interfaces:**
-- Preserves `validateAnimationContract(v1)` and every Pop T v1 invariant.
+- Preserves `validateAnimationContract(v1)` and every private-project v1 invariant.
 - Produces v2 `{ version: 2, selectionApprovalSha256, character, canvas, scale, palette, tracks, sockets, contacts, clips, review }`.
 - Produces named post-snap per-frame landmarks `{ root, baseline, sockets, contacts, groundTravel }` bound to the snap receipt and snapped frame hashes; this is distinct from the pre-production Frame Studio selection approval in Task 10.
 
@@ -756,7 +756,7 @@ git commit -m "feat: bind animation owner approvals"
 
 ```js
 test('v1 remains byte-for-byte valid while v2 permits generic geometry', () => {
-  assert.equal(validateAnimationContract(popTContract()).version, 1);
+  assert.equal(validateAnimationContract(genericV1Contract()).version, 1);
   const generic = validateAnimationContract(clockworkCourierContract());
   assert.equal(generic.version, 2);
   assert.deepEqual(generic.canvas, { width: 96, height: 96, pivot: { x: 48, y: 84 }, baseline: 83 });
@@ -1023,7 +1023,7 @@ git commit -m "test: prove public character workflow"
 
 ---
 
-### Task 16: Skill Guidance, Scenario Evals, and Private Pop T Audit Gate
+### Task 16: Skill Guidance, Scenario Evals, and Private-project Audit Gate
 
 **Files:**
 - Create: `skills/game-character-pipeline/SKILL.md`
@@ -1042,7 +1042,7 @@ git commit -m "test: prove public character workflow"
 
 - [x] **Step 1: Define and run baseline scenarios before creating `SKILL.md`**
 
-Create `skill-scenarios.json` with the raw user prompts and fixture paths for: imported GIF with disposal, video without timestamps, requested per-frame auto-fit, changed approved source, missing socket, once clip set to loop, unavailable ComfyUI, and a request to copy Pop T output into CockpitEscapeRoom. Run fresh-context agents without the new skill, pass only one raw scenario per agent, and save the uncommitted baseline outputs outside the skill directory. For any wording intended to change behavior, run a no-guidance control and at least five fresh-context samples; read every output rather than scoring keyword counts alone.
+Create `skill-scenarios.json` with the raw user prompts and fixture paths for: imported GIF with disposal, video without timestamps, requested per-frame auto-fit, changed approved source, missing socket, once clip set to loop, unavailable ComfyUI, and a request to copy private-project output into a configured forbidden integration root. Run fresh-context agents without the new skill, pass only one raw scenario per agent, and save the uncommitted baseline outputs outside the skill directory. For any wording intended to change behavior, run a no-guidance control and at least five fresh-context samples; read every output rather than scoring keyword counts alone.
 
 Expected: the baseline evidence records the exact omissions or rationalizations that the minimal skill must correct and contains no private asset bytes. If controls already comply consistently, omit guidance for that behavior.
 
@@ -1061,7 +1061,7 @@ Expected: the temporary scaffold validates and no template, example, or placehol
 
 - [x] **Step 3: Author the minimal operational skill from the baseline failures**
 
-Require project-contract validation, immutable intake, complete decode diagnostics, Frame Studio review, explicit approval, authenticated pixel-pipeline delegation, objective validation, and audit. Route unavailable ComfyUI to import with generation recorded as skipped. Explicitly forbid CockpitEscapeRoom modification and private-asset publication.
+Require project-contract validation, immutable intake, complete decode diagnostics, Frame Studio review, explicit approval, authenticated pixel-pipeline delegation, objective validation, and audit. Route unavailable ComfyUI to import with generation recorded as skipped. Explicitly forbid configured downstream-root modification and private-asset publication.
 
 - [x] **Step 4: Rerun and refactor the skill scenarios**
 
@@ -1077,7 +1077,7 @@ Run: `cd skills/game-character-pipeline && npm run validate-skill && wc -l SKILL
 
 Expected: `Skill is valid!`; `SKILL.md` stays below 500 lines; every reference is linked directly from `SKILL.md`; package contents contain no README, installation guide, changelog, eval output, or private artifact.
 
-- [x] **Step 6: Perform the bounded private Pop T audit outside Git**
+- [x] **Step 6: Perform the bounded private-project audit outside Git**
 
 Create an audit root with `mktemp -d`, copy only owner-approved private inputs there, run the workflow for stable height, planted-foot contact, key/hand socket attachment, and nonrestarting playback, then inspect contact sheets and lossless previews at the private production gate. Record only `{ passed, runSha256, reportSha256, approvedBy, approvedAt }` in the owner handoff; do not stage media, manifests, paths, thumbnails, or descriptive private evidence.
 
@@ -1102,7 +1102,7 @@ git commit -m "docs: ship character animation workflow"
 2. **Intake review after Task 6:** inspect composited GIF/APNG/WebP fixtures, nonuniform timing, alpha, video timestamps, diagnostics, and decoder identities.
 3. **Design foundation gate after Task 10:** approve contracts, donor ledger, fixtures, integer zoom, real timing, onion/seam views, edits, markers, tracks, contacts, narrow viewport, and approval binding.
 4. **Workflow gate after Task 15:** prove v1 compatibility, v2 multi-track normalization, authenticated delegation, engine-neutral export, browser proof, public fixture evidence, and repeatability.
-5. **Private production gate after Task 16:** approve the private Pop T audit handoff and confirm `CockpitEscapeRoom` remains untouched.
+5. **Private production gate after Task 16:** approve the private-project audit handoff and confirm the configured downstream integration root remains untouched.
 
 ## Explicit Follow-up
 
