@@ -29,7 +29,9 @@ export default [
       'no-control-regex': 'off',
       'no-empty': 'off',
       'no-unsafe-finally': 'off',
-      'no-unused-vars': 'off'
+      'no-unused-vars': 'off',
+      // ESLint 10 newly enables this recommended rule; preserving error messages needs a dedicated refactor.
+      'preserve-caught-error': 'off'
     }
   }
 ];
