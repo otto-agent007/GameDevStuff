@@ -1,11 +1,11 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="dark">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
     <title>Frame Studio</title>
-    <link rel="stylesheet" href="/studio/styles.css">
+    <link rel="stylesheet" href="/studio/styles.css" />
     <script type="module" src="/studio/app.mjs"></script>
   </head>
   <body>
@@ -44,7 +44,7 @@
             </div>
             <label class="compact-field" for="zoom">
               <span>Zoom</span>
-              <input id="zoom" type="number" min="1" max="12" step="1" value="4">
+              <input id="zoom" type="number" min="1" max="12" step="1" value="4" />
               <span aria-hidden="true">×</span>
             </label>
           </div>
@@ -109,39 +109,50 @@
             <button id="review-side-by-side" type="button" aria-pressed="false">Side by side</button>
           </div>
           <dl class="review-state-list">
-            <div><dt>A</dt><dd id="review-a-state">Source defaults</dd></div>
-            <div><dt>B</dt><dd id="review-b-state">Working copy</dd></div>
+            <div>
+              <dt>A</dt>
+              <dd id="review-a-state">Source defaults</dd>
+            </div>
+            <div>
+              <dt>B</dt>
+              <dd id="review-b-state">Working copy</dd>
+            </div>
           </dl>
         </section>
 
         <fieldset class="control-group">
           <legend>Onion skin</legend>
-          <label><input id="overlay-previous" type="checkbox"> Previous</label>
-          <label><input id="overlay-next" type="checkbox"> Next</label>
+          <label><input id="overlay-previous" type="checkbox" /> Previous</label>
+          <label><input id="overlay-next" type="checkbox" /> Next</label>
           <label class="range-field">
             <span>Opacity</span>
-            <input id="onion-opacity" type="range" min="0" max="0.8" step="0.05" value="0.28">
+            <input id="onion-opacity" type="range" min="0" max="0.8" step="0.05" value="0.28" />
           </label>
         </fieldset>
 
         <fieldset class="control-group">
           <legend>Cycle review</legend>
-          <label><input id="overlay-seam" type="checkbox"> First / last seam</label>
+          <label><input id="overlay-seam" type="checkbox" /> First / last seam</label>
         </fieldset>
 
         <fieldset class="control-group diagnostic-grid">
           <legend>Diagnostics</legend>
-          <label><input id="overlay-clipping" type="checkbox"> Clipping</label>
-          <label><input id="overlay-duplicates" type="checkbox"> Duplicates</label>
-          <label><input id="overlay-palette" type="checkbox"> Palette</label>
-          <label><input id="overlay-drift" type="checkbox"> Drift</label>
+          <label><input id="overlay-clipping" type="checkbox" /> Clipping</label>
+          <label><input id="overlay-duplicates" type="checkbox" /> Duplicates</label>
+          <label><input id="overlay-palette" type="checkbox" /> Palette</label>
+          <label><input id="overlay-drift" type="checkbox" /> Drift</label>
         </fieldset>
 
         <section id="motion-diagnostics" class="motion-card" aria-labelledby="motion-heading">
           <span class="eyebrow">Authored paths</span>
           <h3 id="motion-heading">Motion &amp; grounding</h3>
           <p id="motion-summary">0 active frames · 0 warnings</p>
-          <svg id="motion-path-plot" viewBox="0 0 100 100" role="img" aria-label="Root and planted-foot motion paths"></svg>
+          <svg
+            id="motion-path-plot"
+            viewBox="0 0 100 100"
+            role="img"
+            aria-label="Root and planted-foot motion paths"
+          ></svg>
           <div class="motion-legend" aria-label="Motion path legend">
             <span data-path="root">Root</span>
             <span data-path="left-foot">Left foot</span>
@@ -154,11 +165,22 @@
           <span class="eyebrow">Current</span>
           <h3 id="selection-heading">Frame details</h3>
           <dl>
-            <div><dt>Frame</dt><dd id="selection-frame">—</dd></div>
-            <div><dt>Duration</dt><dd id="selection-duration">—</dd></div>
-            <div><dt>Source</dt><dd>Lossless PNG</dd></div>
+            <div>
+              <dt>Frame</dt>
+              <dd id="selection-frame">—</dd>
+            </div>
+            <div>
+              <dt>Duration</dt>
+              <dd id="selection-duration">—</dd>
+            </div>
+            <div>
+              <dt>Source</dt>
+              <dd>Lossless PNG</dd>
+            </div>
           </dl>
-          <button id="toggle-frame-inclusion" class="selection-inclusion-button" type="button">Exclude from action</button>
+          <button id="toggle-frame-inclusion" class="selection-inclusion-button" type="button">
+            Exclude from action
+          </button>
         </section>
 
         <section class="authoring-card" aria-labelledby="authoring-heading">
@@ -177,9 +199,18 @@
           <span class="eyebrow">Owner decision</span>
           <h3 id="approval-heading">Approval gate</h3>
           <dl class="hash-list">
-            <div><dt>Source hash</dt><dd><code id="approval-source-hash" aria-label="Source hash">—</code></dd></div>
-            <div><dt>Edit hash</dt><dd><code id="approval-edit-hash" aria-label="Edit hash">—</code></dd></div>
-            <div><dt>Render hash</dt><dd><code id="approval-render-hash" aria-label="Render hash">Not rendered</code></dd></div>
+            <div>
+              <dt>Source hash</dt>
+              <dd><code id="approval-source-hash" aria-label="Source hash">—</code></dd>
+            </div>
+            <div>
+              <dt>Edit hash</dt>
+              <dd><code id="approval-edit-hash" aria-label="Edit hash">—</code></dd>
+            </div>
+            <div>
+              <dt>Render hash</dt>
+              <dd><code id="approval-render-hash" aria-label="Render hash">Not rendered</code></dd>
+            </div>
           </dl>
           <label class="approval-field">
             <span>Approver identity</span>

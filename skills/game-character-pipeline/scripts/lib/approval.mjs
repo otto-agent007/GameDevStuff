@@ -4,7 +4,15 @@ import sharp from 'sharp';
 
 import { writeImmutableBytes, writeImmutableJson, writeRevision } from './artifacts.mjs';
 import { renderEditRevision, validateEditManifest } from './edits.mjs';
-import { deepFreeze, exactObject, isoDate, portableId, portableRelativePath, sha256File, sha256Value } from './schema.mjs';
+import {
+  deepFreeze,
+  exactObject,
+  isoDate,
+  portableId,
+  portableRelativePath,
+  sha256File,
+  sha256Value
+} from './schema.mjs';
 
 const HASH = /^[a-f0-9]{64}$/;
 
@@ -21,7 +29,8 @@ function projectContext(project) {
 
 function contained(root, target, label) {
   const relative = path.relative(root, target);
-  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error(`${label} escaped the run root`);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative))
+    throw new Error(`${label} escaped the run root`);
 }
 
 async function readCanonicalJson(file, runRoot, label) {
@@ -29,7 +38,8 @@ async function readCanonicalJson(file, runRoot, label) {
   const selected = path.resolve(file);
   contained(root, selected, label);
   const stat = await fs.lstat(selected);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new Error(`${label} must be a regular single-link file`);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1)
+    throw new Error(`${label} must be a regular single-link file`);
   const physical = await fs.realpath(selected);
   contained(root, physical, label);
   const document = JSON.parse(await fs.readFile(physical, 'utf8'));
@@ -45,10 +55,11 @@ async function readVerifiedArtifact(runRoot, relative, expectedSha256, label) {
   const selected = path.join(root, ...relative.split('/'));
   contained(root, selected, label);
   const stat = await fs.lstat(selected);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new Error(`${label} must be a regular single-link file`);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1)
+    throw new Error(`${label} must be a regular single-link file`);
   const physical = await fs.realpath(selected);
   contained(root, physical, label);
-  if (await sha256File(physical) !== expectedSha256) throw new Error(`${label} hash mismatch`);
+  if ((await sha256File(physical)) !== expectedSha256) throw new Error(`${label} hash mismatch`);
   return physical;
 }
 
@@ -57,14 +68,25 @@ export async function loadSourceReport(run) {
 }
 
 export async function loadEditRevision({ run, sourceSha256, revision }) {
-  if (!Number.isInteger(revision) || revision < 1 || revision > 999999) throw new Error('edit revision must be a positive integer');
-  const rootSha256 = sha256Value({ schemaVersion: 1, kind: 'studio-edit-root', runId: run.id, stage: 'selection', sourceSha256 });
+  if (!Number.isInteger(revision) || revision < 1 || revision > 999999)
+    throw new Error('edit revision must be a positive integer');
+  const rootSha256 = sha256Value({
+    schemaVersion: 1,
+    kind: 'studio-edit-root',
+    runId: run.id,
+    stage: 'selection',
+    sourceSha256
+  });
   let previousSha256 = rootSha256;
   let selected;
   for (let current = 1; current <= revision; current += 1) {
     const file = path.join(run.root, 'edits', `studio-edit-${String(current).padStart(4, '0')}.json`);
     const loaded = await readCanonicalJson(file, run.root, 'studio edit revision');
-    exactObject(loaded.document, ['schemaVersion', 'kind', 'runId', 'stage', 'sourceSha256', 'previousSha256', 'edit'], 'studio edit revision');
+    exactObject(
+      loaded.document,
+      ['schemaVersion', 'kind', 'runId', 'stage', 'sourceSha256', 'previousSha256', 'edit'],
+      'studio edit revision'
+    );
     if (
       loaded.document.schemaVersion !== 1 ||
       loaded.document.kind !== 'studio-edit' ||
@@ -72,7 +94,8 @@ export async function loadEditRevision({ run, sourceSha256, revision }) {
       loaded.document.stage !== 'selection' ||
       loaded.document.sourceSha256 !== sourceSha256 ||
       loaded.document.previousSha256 !== previousSha256
-    ) throw new Error('studio edit revision chain is invalid');
+    )
+      throw new Error('studio edit revision chain is invalid');
     previousSha256 = loaded.sha256;
     selected = { revision: current, revisionSha256: loaded.sha256, edit: loaded.document.edit, path: loaded.path };
   }
@@ -95,7 +118,10 @@ async function createContactSheet({ run, rendered, canvas }) {
   }
   const bytes = await sharp({
     create: { width, height, channels: 4, background: { r: 17, g: 25, b: 29, alpha: 1 } }
-  }).composite(inputs).png({ compressionLevel: 9, adaptiveFiltering: false, palette: false }).toBuffer();
+  })
+    .composite(inputs)
+    .png({ compressionLevel: 9, adaptiveFiltering: false, palette: false })
+    .toBuffer();
   const relative = `work/revisions/${rendered.editSha256}/contact-sheet.png`;
   return writeImmutableBytes({ root: run.root, relative, bytes, reuse: true });
 }
@@ -105,7 +131,13 @@ export async function renderReviewRevision({ run, project, editRevision, allowGl
   const sourceSha256 = sourceRecord.sha256;
   const revision = await loadEditRevision({ run, sourceSha256, revision: editRevision });
   const edit = validateEditManifest(revision.edit, { project, source: sourceRecord.document, allowGlobalTransform });
-  const rendered = await renderEditRevision({ run, project, source: sourceRecord.document, edit, allowGlobalTransform });
+  const rendered = await renderEditRevision({
+    run,
+    project,
+    source: sourceRecord.document,
+    edit,
+    allowGlobalTransform
+  });
   if (rendered.frames.length === 0) throw new Error('approval render requires at least one included frame');
   const contactSheet = await createContactSheet({ run, rendered, canvas: sourceRecord.document.canvas });
   const review = {
@@ -117,7 +149,12 @@ export async function renderReviewRevision({ run, project, editRevision, allowGl
     sourceSha256,
     renderedManifest: { path: rendered.path, sha256: rendered.sha256 },
     contactSheet: { path: contactSheet.relative, sha256: contactSheet.sha256 },
-    frames: rendered.frames.map(({ frameId, path: framePath, sha256, durationMs }) => ({ frameId, path: framePath, sha256, durationMs }))
+    frames: rendered.frames.map(({ frameId, path: framePath, sha256, durationMs }) => ({
+      frameId,
+      path: framePath,
+      sha256,
+      durationMs
+    }))
   };
   const written = await writeImmutableJson({
     root: run.root,
@@ -130,9 +167,12 @@ export async function renderReviewRevision({ run, project, editRevision, allowGl
 
 function validateDecision({ project, approver, decision, notes }) {
   portableId(approver, 'approval identity');
-  if (!project.approvals.identities.includes(approver)) throw new Error('approver must be a configured approval identity');
-  if (decision !== 'approved' && decision !== 'rejected') throw new Error('approval decision must be approved or rejected');
-  if (typeof notes !== 'string' || notes.length > 4096) throw new Error('approval notes must be a string of at most 4096 characters');
+  if (!project.approvals.identities.includes(approver))
+    throw new Error('approver must be a configured approval identity');
+  if (decision !== 'approved' && decision !== 'rejected')
+    throw new Error('approval decision must be approved or rejected');
+  if (typeof notes !== 'string' || notes.length > 4096)
+    throw new Error('approval notes must be a string of at most 4096 characters');
   if (decision === 'rejected' && notes.trim() === '') throw new Error('rejection notes are required');
 }
 
@@ -150,7 +190,8 @@ export async function writeApproval({
   const projectRecord = projectContext(project);
   validateDecision({ project: projectRecord.document, approver, decision, notes });
   const decided = clock();
-  if (!(decided instanceof Date) || Number.isNaN(decided.valueOf())) throw new Error('approval clock must return a valid Date');
+  if (!(decided instanceof Date) || Number.isNaN(decided.valueOf()))
+    throw new Error('approval clock must return a valid Date');
   const decidedAt = isoDate(decided.toISOString(), 'approval decidedAt');
   const rendered = await renderReviewRevision({ run, project, editRevision, allowGlobalTransform });
   const source = (await loadSourceReport(run)).document;
@@ -179,14 +220,22 @@ export async function writeApproval({
     notes,
     decidedAt
   };
-  const written = await writeRevision({ root: run.root, area: 'approved', stem: 'selection-approval', value: document });
+  const written = await writeRevision({
+    root: run.root,
+    area: 'approved',
+    stem: 'selection-approval',
+    value: document
+  });
   return deepFreeze({
     path: written.path,
     relative: written.relative,
     sha256: written.sha256,
     revision: written.revision,
     document,
-    derivatives: document.derivatives.map((derivative) => ({ ...derivative, path: path.join(run.root, ...derivative.path.split('/')) })),
+    derivatives: document.derivatives.map((derivative) => ({
+      ...derivative,
+      path: path.join(run.root, ...derivative.path.split('/'))
+    })),
     contactSheet: { ...document.contactSheet, path: path.join(run.root, ...document.contactSheet.path.split('/')) }
   });
 }
@@ -194,11 +243,31 @@ export async function writeApproval({
 function validateApprovalShape(document) {
   exactObject(
     document,
-    ['schemaVersion', 'kind', 'runId', 'projectSha256', 'sourceSha256', 'editRevision', 'editRevisionSha256', 'editSha256', 'renderedReview', 'renderedManifest', 'selectedFrames', 'derivatives', 'contactSheet', 'approver', 'decision', 'notes', 'decidedAt'],
+    [
+      'schemaVersion',
+      'kind',
+      'runId',
+      'projectSha256',
+      'sourceSha256',
+      'editRevision',
+      'editRevisionSha256',
+      'editSha256',
+      'renderedReview',
+      'renderedManifest',
+      'selectedFrames',
+      'derivatives',
+      'contactSheet',
+      'approver',
+      'decision',
+      'notes',
+      'decidedAt'
+    ],
     'selection approval'
   );
-  if (document.schemaVersion !== 1 || document.kind !== 'selection-approval') throw new Error('selection approval identity is invalid');
-  if (!Number.isInteger(document.editRevision) || document.editRevision < 1) throw new Error('selection approval edit revision is invalid');
+  if (document.schemaVersion !== 1 || document.kind !== 'selection-approval')
+    throw new Error('selection approval identity is invalid');
+  if (!Number.isInteger(document.editRevision) || document.editRevision < 1)
+    throw new Error('selection approval edit revision is invalid');
   for (const [label, record] of [
     ['rendered review', document.renderedReview],
     ['rendered manifest', document.renderedManifest],
@@ -208,15 +277,22 @@ function validateApprovalShape(document) {
     portableRelativePath(record.path, `selection approval ${label} path`);
     hash(record.sha256, `selection approval ${label} hash`);
   }
-  if (!Array.isArray(document.selectedFrames) || document.selectedFrames.length === 0) throw new Error('selection approval selected frames must not be empty');
+  if (!Array.isArray(document.selectedFrames) || document.selectedFrames.length === 0)
+    throw new Error('selection approval selected frames must not be empty');
   for (const selected of document.selectedFrames) {
-    exactObject(selected, ['frameId', 'sourceFrameSha256', 'derivativeSha256', 'durationMs'], 'selection approval selected frame');
+    exactObject(
+      selected,
+      ['frameId', 'sourceFrameSha256', 'derivativeSha256', 'durationMs'],
+      'selection approval selected frame'
+    );
     portableId(selected.frameId, 'selection approval selected frame ID');
     hash(selected.sourceFrameSha256, 'selection approval source frame hash');
     hash(selected.derivativeSha256, 'selection approval derivative hash');
-    if (!Number.isInteger(selected.durationMs) || selected.durationMs < 1 || selected.durationMs > 65535) throw new Error('selection approval frame duration is invalid');
+    if (!Number.isInteger(selected.durationMs) || selected.durationMs < 1 || selected.durationMs > 65535)
+      throw new Error('selection approval frame duration is invalid');
   }
-  if (!Array.isArray(document.derivatives) || document.derivatives.length === 0) throw new Error('selection approval derivatives must not be empty');
+  if (!Array.isArray(document.derivatives) || document.derivatives.length === 0)
+    throw new Error('selection approval derivatives must not be empty');
   for (const derivative of document.derivatives) {
     exactObject(derivative, ['frameId', 'path', 'sha256'], 'selection approval derivative');
     portableId(derivative.frameId, 'selection approval derivative frame ID');
@@ -236,15 +312,25 @@ export async function verifyApproval({ run, file, project, source, edit }) {
   const sourceDocument = source ?? (await loadSourceReport(run)).document;
   if (document.sourceSha256 !== sha256Value(sourceDocument)) throw new Error('approval source hash mismatch');
   if (document.editSha256 !== sha256Value(edit)) throw new Error('approval edit hash mismatch');
-  const revision = await loadEditRevision({ run, sourceSha256: document.sourceSha256, revision: document.editRevision });
+  const revision = await loadEditRevision({
+    run,
+    sourceSha256: document.sourceSha256,
+    revision: document.editRevision
+  });
   if (revision.revisionSha256 !== document.editRevisionSha256 || sha256Value(revision.edit) !== document.editSha256) {
     throw new Error('approval edit revision hash mismatch');
   }
-  validateDecision({ project: projectRecord.document, approver: document.approver, decision: document.decision, notes: document.notes });
+  validateDecision({
+    project: projectRecord.document,
+    approver: document.approver,
+    decision: document.decision,
+    notes: document.notes
+  });
   isoDate(document.decidedAt, 'approval decidedAt');
 
   const selected = edit.frames.filter(({ included }) => included);
-  if (selected.length !== document.selectedFrames.length || selected.length !== document.derivatives.length) throw new Error('approval selected frame set mismatch');
+  if (selected.length !== document.selectedFrames.length || selected.length !== document.derivatives.length)
+    throw new Error('approval selected frame set mismatch');
   for (const [index, frameEdit] of selected.entries()) {
     const sourceFrame = sourceDocument.frames.find(({ id }) => id === frameEdit.frameId);
     const selectedFrame = document.selectedFrames[index];
@@ -256,11 +342,17 @@ export async function verifyApproval({ run, file, project, source, edit }) {
       selectedFrame.durationMs !== frameEdit.durationMs ||
       derivative.frameId !== frameEdit.frameId ||
       selectedFrame.derivativeSha256 !== derivative.sha256
-    ) throw new Error('approval selected frame set mismatch');
+    )
+      throw new Error('approval selected frame set mismatch');
     await readVerifiedArtifact(run.root, derivative.path, derivative.sha256, 'derivative');
   }
   await readVerifiedArtifact(run.root, document.contactSheet.path, document.contactSheet.sha256, 'contact sheet');
-  await readVerifiedArtifact(run.root, document.renderedManifest.path, document.renderedManifest.sha256, 'rendered manifest');
+  await readVerifiedArtifact(
+    run.root,
+    document.renderedManifest.path,
+    document.renderedManifest.sha256,
+    'rendered manifest'
+  );
   await readVerifiedArtifact(run.root, document.renderedReview.path, document.renderedReview.sha256, 'rendered review');
   hash(document.editRevisionSha256, 'approval edit revision hash');
   hash(document.editSha256, 'approval edit hash');
@@ -269,7 +361,12 @@ export async function verifyApproval({ run, file, project, source, edit }) {
 
 export function requireProductionApproval(value) {
   const document = value?.document ?? value;
-  if (!document || value?.verified !== true || document.kind !== 'selection-approval' || document.decision !== 'approved') {
+  if (
+    !document ||
+    value?.verified !== true ||
+    document.kind !== 'selection-approval' ||
+    document.decision !== 'approved'
+  ) {
     throw new Error('owner approval required before production');
   }
   return value;

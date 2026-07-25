@@ -10,7 +10,10 @@ const fixtureDir = process.cwd();
 test('config records whether snapper executable was explicitly selected', async () => {
   const plain = await loadConfigWithProvenance({ cwd: fixtureDir });
   assert.equal(plain.provenance.snapperExecutable, 'default');
-  const explicit = await loadConfigWithProvenance({ cwd: fixtureDir, overrides: { snapper: { executable: '/trusted/snapper' } } });
+  const explicit = await loadConfigWithProvenance({
+    cwd: fixtureDir,
+    overrides: { snapper: { executable: '/trusted/snapper' } }
+  });
   assert.equal(explicit.provenance.snapperExecutable, 'override');
 });
 
@@ -65,17 +68,19 @@ test('foreground recovery settings are configurable and validated', async () => 
   assert.deepEqual(config.foreground, { retentionPolicy: 'reject-multiple', minimumComponentPixels: 3 });
 
   assert.throws(
-    () => validateConfig({
-      ...structuredClone(DEFAULT_CONFIG),
-      foreground: { retentionPolicy: 'discard-small', minimumComponentPixels: 1 }
-    }),
+    () =>
+      validateConfig({
+        ...structuredClone(DEFAULT_CONFIG),
+        foreground: { retentionPolicy: 'discard-small', minimumComponentPixels: 1 }
+      }),
     /foreground retentionPolicy must be one of/
   );
   assert.throws(
-    () => validateConfig({
-      ...structuredClone(DEFAULT_CONFIG),
-      foreground: { retentionPolicy: 'all', minimumComponentPixels: 0 }
-    }),
+    () =>
+      validateConfig({
+        ...structuredClone(DEFAULT_CONFIG),
+        foreground: { retentionPolicy: 'all', minimumComponentPixels: 0 }
+      }),
     /foreground minimumComponentPixels must be a positive integer/
   );
 });
@@ -99,10 +104,7 @@ for (const [section, dimension, value] of [
     const config = structuredClone(DEFAULT_CONFIG);
     config[section][dimension] = value;
 
-    assert.throws(
-      () => validateConfig(config),
-      new RegExp(`${section} ${dimension} must be a positive integer`)
-    );
+    assert.throws(() => validateConfig(config), new RegExp(`${section} ${dimension} must be a positive integer`));
   });
 }
 
@@ -113,15 +115,25 @@ test('validated configurations are deeply frozen', async () => {
   assert.ok(Object.isFrozen(config.canonical));
   assert.ok(Object.isFrozen(config.snapper));
   assert.ok(Object.isFrozen(config.snapper.args));
-  assert.throws(() => { config.canonical.width = 64; }, TypeError);
-  assert.throws(() => { config.snapper.args.push('32'); }, TypeError);
+  assert.throws(() => {
+    config.canonical.width = 64;
+  }, TypeError);
+  assert.throws(() => {
+    config.snapper.args.push('32');
+  }, TypeError);
 });
 
 test('configuration is a closed schema with complete nested sections', () => {
   for (const mutate of [
-    (c) => { c.surprise = true; },
-    (c) => { c.background.surprise = true; },
-    (c) => { delete c.snapper.args; }
+    (c) => {
+      c.surprise = true;
+    },
+    (c) => {
+      c.background.surprise = true;
+    },
+    (c) => {
+      delete c.snapper.args;
+    }
   ]) {
     const config = structuredClone(DEFAULT_CONFIG);
     mutate(config);
@@ -131,18 +143,91 @@ test('configuration is a closed schema with complete nested sections', () => {
 
 test('configuration rejects malformed pivots, scales, enums, colors, and limits', () => {
   const probes = [
-    ['fractional pivot', (c) => { c.pivot.x = 63.5; }, /pivot coordinates must be integers/],
-    ['nonuniform generation scale', (c) => { c.generation.height = 512; }, /uniform scale/],
-    ['palette enum', (c) => { c.palette.mode = 'adaptive'; }, /palette mode/],
-    ['background enum', (c) => { c.background.mode = 'corner'; }, /background mode/],
-    ['configured missing color', (c) => { c.background.mode = 'configured'; }, /requires a valid RGBA/],
-    ['border has color', (c) => { c.background.color = { r: 0, g: 0, b: 0, a: 255 }; }, /border background color must be null/],
-    ['malformed rgba', (c) => { c.background.mode = 'configured'; c.background.color = { r: 0, g: 0, b: 0, a: 256 }; }, /valid RGBA/],
-    ['fractional tolerance', (c) => { c.background.tolerance = 1.5; }, /tolerance must be an integer/],
-    ['empty snapper', (c) => { c.snapper.executable = ''; }, /executable must be a nonempty string/],
-    ['bad snapper args', (c) => { c.snapper.args = [16]; }, /args must be an array of strings/],
-    ['fractional retries', (c) => { c.correction.generativeAttempts = 1.5; }, /generativeAttempts must be a nonnegative integer/],
-    ['zero evidence', (c) => { c.correction.skillProposalEvidence = 0; }, /skillProposalEvidence must be a positive integer/]
+    [
+      'fractional pivot',
+      (c) => {
+        c.pivot.x = 63.5;
+      },
+      /pivot coordinates must be integers/
+    ],
+    [
+      'nonuniform generation scale',
+      (c) => {
+        c.generation.height = 512;
+      },
+      /uniform scale/
+    ],
+    [
+      'palette enum',
+      (c) => {
+        c.palette.mode = 'adaptive';
+      },
+      /palette mode/
+    ],
+    [
+      'background enum',
+      (c) => {
+        c.background.mode = 'corner';
+      },
+      /background mode/
+    ],
+    [
+      'configured missing color',
+      (c) => {
+        c.background.mode = 'configured';
+      },
+      /requires a valid RGBA/
+    ],
+    [
+      'border has color',
+      (c) => {
+        c.background.color = { r: 0, g: 0, b: 0, a: 255 };
+      },
+      /border background color must be null/
+    ],
+    [
+      'malformed rgba',
+      (c) => {
+        c.background.mode = 'configured';
+        c.background.color = { r: 0, g: 0, b: 0, a: 256 };
+      },
+      /valid RGBA/
+    ],
+    [
+      'fractional tolerance',
+      (c) => {
+        c.background.tolerance = 1.5;
+      },
+      /tolerance must be an integer/
+    ],
+    [
+      'empty snapper',
+      (c) => {
+        c.snapper.executable = '';
+      },
+      /executable must be a nonempty string/
+    ],
+    [
+      'bad snapper args',
+      (c) => {
+        c.snapper.args = [16];
+      },
+      /args must be an array of strings/
+    ],
+    [
+      'fractional retries',
+      (c) => {
+        c.correction.generativeAttempts = 1.5;
+      },
+      /generativeAttempts must be a nonnegative integer/
+    ],
+    [
+      'zero evidence',
+      (c) => {
+        c.correction.skillProposalEvidence = 0;
+      },
+      /skillProposalEvidence must be a positive integer/
+    ]
   ];
   for (const [name, mutate, expected] of probes) {
     const config = structuredClone(DEFAULT_CONFIG);

@@ -93,6 +93,7 @@
 ### Task 1: Package Boundary and Donor Ledger
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/package.json`
 - Create: `skills/game-character-pipeline/scripts/cli.mjs`
 - Create: `skills/game-character-pipeline/scripts/validate-skill.mjs`
@@ -102,6 +103,7 @@
 - Modify: `.gitignore`
 
 **Interfaces:**
+
 - Produces CLI process contract: JSON on stdout, actionable errors on stderr, exit `0` success, `1` usage/runtime error, `2` resumable external handoff, `3` objective validation failure, `4` owner review required.
 - Produces donor record fields `{ repository, commit, license, contribution, rejected, mode, files }`.
 
@@ -189,12 +191,14 @@ git commit -m "chore: scaffold game character pipeline"
 ### Task 2: Closed Project and Animation Contracts
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/scripts/lib/schema.mjs`
 - Create: `skills/game-character-pipeline/scripts/lib/project-contract.mjs`
 - Create: `skills/game-character-pipeline/tests/project-contract.test.mjs`
 - Create: `skills/game-character-pipeline/tests/fixtures/project.valid.json`
 
 **Interfaces:**
+
 - Produces `validateProjectContract(document) -> Readonly<ProjectContract>`.
 - Produces `loadProjectContract(file) -> Promise<{ document, sha256 }>`.
 - `ProjectContract` fixes `schemaVersion: 1`, character anchors, canvas, global integer scale, palette, actions, tracks, sockets, contacts, engine targets, sources, and approval identities.
@@ -205,11 +209,20 @@ git commit -m "chore: scaffold game character pipeline"
 test('project contract binds one global scale and explicit action behavior', () => {
   const project = validateProjectContract(validProject());
   assert.equal(project.scale.integer, 2);
-  assert.deepEqual(project.actions.map(({ id, loopMode }) => [id, loopMode]), [['idle', 'loop'], ['unlock', 'hold-last']]);
+  assert.deepEqual(
+    project.actions.map(({ id, loopMode }) => [id, loopMode]),
+    [
+      ['idle', 'loop'],
+      ['unlock', 'hold-last']
+    ]
+  );
 });
 
 test('project contract rejects unknown fields and per-action scale', () => {
-  assert.throws(() => validateProjectContract({ ...validProject(), surprise: true }), /unknown project field: surprise/);
+  assert.throws(
+    () => validateProjectContract({ ...validProject(), surprise: true }),
+    /unknown project field: surprise/
+  );
   const changed = validProject();
   changed.actions[0].scale = 3;
   assert.throws(() => validateProjectContract(changed), /unknown action field: scale/);
@@ -233,7 +246,8 @@ export function exactObject(value, keys, label) {
 }
 
 export function portableId(value, label) {
-  if (typeof value !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(value)) throw new Error(`${label} must be a portable ID`);
+  if (typeof value !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(value))
+    throw new Error(`${label} must be a portable ID`);
   return value;
 }
 ```
@@ -260,6 +274,7 @@ git commit -m "feat: define character project contracts"
 ### Task 3: Immutable Run and Artifact Store
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/scripts/lib/artifacts.mjs`
 - Create: `skills/game-character-pipeline/scripts/lib/run-contract.mjs`
 - Create: `skills/game-character-pipeline/tests/artifacts.test.mjs`
@@ -267,6 +282,7 @@ git commit -m "feat: define character project contracts"
 - Modify: `skills/game-character-pipeline/scripts/cli.mjs`
 
 **Interfaces:**
+
 - Produces `createProject({ root, contractFile })`, `createRun({ projectRoot, project, sourceRequest })`, `copyImmutable({ source, root, relative })`, and `writeRevision({ root, area, stem, value })`.
 - Run layout is exactly `source/`, `work/`, `edits/`, `approved/`, `exports/`, `reports/`, and `run.json`.
 - Produces append-only `run.json` with `{ schemaVersion, id, projectSha256, createdAt, sourceRequest, state, artifacts, decoder }`.
@@ -276,7 +292,15 @@ git commit -m "feat: define character project contracts"
 ```js
 test('createRun allocates a complete append-only run', async () => {
   const created = await createRun({ projectRoot, project, sourceRequest: request });
-  assert.deepEqual((await fs.readdir(created.root)).sort(), ['approved', 'edits', 'exports', 'reports', 'run.json', 'source', 'work']);
+  assert.deepEqual((await fs.readdir(created.root)).sort(), [
+    'approved',
+    'edits',
+    'exports',
+    'reports',
+    'run.json',
+    'source',
+    'work'
+  ]);
   await assert.rejects(createRun({ projectRoot, project, sourceRequest: request, id: created.id }), /already exists/);
 });
 
@@ -316,6 +340,7 @@ git commit -m "feat: add immutable character runs"
 ### Task 4: Motion-Source Interface, Generated Stills, and PNG-Sequence Intake
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/scripts/lib/source-adapter.mjs`
 - Create: `skills/game-character-pipeline/scripts/lib/generated-still.mjs`
 - Create: `skills/game-character-pipeline/scripts/lib/png-sequence.mjs`
@@ -327,6 +352,7 @@ git commit -m "feat: add immutable character runs"
 - Modify: `skills/game-character-pipeline/scripts/cli.mjs`
 
 **Interfaces:**
+
 - Produces `registerSourceAdapter(kind, decode)` and `decodeMotionSource({ kind, source, run, options })`.
 - Every adapter returns `{ kind, sourceSha256, decoder, canvas, alpha, timeBase, frames, diagnostics, approval: null }` until a later approval revision binds it.
 - Every frame is `{ index, id, path, sha256, width, height, timestampMs, durationMs, sourceRect, duplicateOf }`.
@@ -337,8 +363,14 @@ git commit -m "feat: add immutable character runs"
 ```js
 test('PNG intake preserves explicit order and nonuniform durations', async () => {
   const result = await decodePngSequence({ manifest: fixture('png-sequence/manifest.json'), run });
-  assert.deepEqual(result.frames.map((frame) => frame.durationMs), [80, 120, 200]);
-  assert.deepEqual(result.frames.map((frame) => frame.id), ['step-contact', 'step-pass', 'step-contact-2']);
+  assert.deepEqual(
+    result.frames.map((frame) => frame.durationMs),
+    [80, 120, 200]
+  );
+  assert.deepEqual(
+    result.frames.map((frame) => frame.id),
+    ['step-contact', 'step-pass', 'step-contact-2']
+  );
 });
 
 test('PNG intake rejects lexical guessing and omitted timing', async () => {
@@ -388,6 +420,7 @@ git commit -m "feat: import timed PNG sequences"
 ### Task 5: GIF, APNG, and Animated WebP Intake
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/scripts/lib/gif-container.mjs`
 - Create: `skills/game-character-pipeline/scripts/lib/apng-container.mjs`
 - Create: `skills/game-character-pipeline/scripts/lib/webp-container.mjs`
@@ -399,6 +432,7 @@ git commit -m "feat: import timed PNG sequences"
 - Modify: `skills/game-character-pipeline/tests/fixtures/project.valid.json`
 
 **Interfaces:**
+
 - Produces `inspectGif(bytes)`, `inspectApng(bytes)`, and `inspectAnimatedWebp(bytes)` returning ordered `{ rect, durationMs, dispose, blend, hasAlpha }` records.
 - Produces `decodeAnimatedImage({ source, run }) -> MotionSourceResult` using Sharp/libvips for full composited RGBA pages and container parsers for auditable metadata.
 
@@ -407,16 +441,25 @@ git commit -m "feat: import timed PNG sequences"
 ```js
 test('GIF disposal restores the prior composited pixels and keeps delays', async () => {
   const result = await decodeAnimatedImage({ source: fixture('animated/disposal-previous.gif'), run });
-  assert.deepEqual(result.frames.map((frame) => frame.durationMs), [70, 130, 90]);
+  assert.deepEqual(
+    result.frames.map((frame) => frame.durationMs),
+    [70, 130, 90]
+  );
   assert.equal(await pixel(result.frames[2].path, 3, 3), '00000000');
-  assert.equal(result.diagnostics.some(({ code }) => code === 'PARTIAL_SOURCE_RECT'), true);
+  assert.equal(
+    result.diagnostics.some(({ code }) => code === 'PARTIAL_SOURCE_RECT'),
+    true
+  );
 });
 
 test('APNG and WebP retain alpha and blend metadata', async () => {
   for (const name of ['alpha.apng.png', 'alpha.webp']) {
     const result = await decodeAnimatedImage({ source: fixture(`animated/${name}`), run: freshRun() });
     assert.equal(result.alpha, true);
-    assert.equal(result.frames.every((frame) => frame.width === result.canvas.width), true);
+    assert.equal(
+      result.frames.every((frame) => frame.width === result.canvas.width),
+      true
+    );
   }
 });
 ```
@@ -455,6 +498,7 @@ git commit -m "feat: decode animated motion sources"
 ### Task 6: Timestamp-Aware Video Intake
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/scripts/lib/video.mjs`
 - Create: `skills/game-character-pipeline/tests/video.test.mjs`
 - Create: `skills/game-character-pipeline/tests/fixtures/video/variable-rate.webm`
@@ -462,6 +506,7 @@ git commit -m "feat: decode animated motion sources"
 - Create: `skills/game-character-pipeline/tests/fixtures/video/fake-ffmpeg.mjs`
 
 **Interfaces:**
+
 - Produces `inspectMediaTool(file, expectedName)` and `decodeVideo({ source, run, ffmpegPath })`.
 - Tool identity is `{ path, sha256, size, version }`; frame timestamps and durations come from FFmpeg `framehash` output using its declared stream time base. Tests use an injected executable fixture because the workstation has no reviewed FFmpeg binary; production intake always requires the separately selected, hash-bound executable.
 
@@ -470,8 +515,14 @@ git commit -m "feat: decode animated motion sources"
 ```js
 test('video intake derives nonuniform durations from presentation timestamps', async () => {
   const result = await decodeVideo({ source: fixture('video/variable-rate.webm'), run, ffmpegPath });
-  assert.deepEqual(result.frames.map((frame) => frame.timestampMs), [0, 40, 140, 180]);
-  assert.deepEqual(result.frames.map((frame) => frame.durationMs), [40, 100, 40, 80]);
+  assert.deepEqual(
+    result.frames.map((frame) => frame.timestampMs),
+    [0, 40, 140, 180]
+  );
+  assert.deepEqual(
+    result.frames.map((frame) => frame.durationMs),
+    [40, 100, 40, 80]
+  );
 });
 
 test('video intake rejects missing timestamps and changed tool bytes', async () => {
@@ -510,11 +561,13 @@ git commit -m "feat: import timestamped video motion"
 ### Task 7: Frame Studio Loopback Server and Edit Revision API
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/scripts/studio/server.mjs`
 - Create: `skills/game-character-pipeline/tests/studio-server.test.mjs`
 - Modify: `skills/game-character-pipeline/scripts/cli.mjs`
 
 **Interfaces:**
+
 - Produces `startStudioServer({ projectDir, runId, stage: 'selection'|'post-snap', reviewManifest, host: '127.0.0.1', port: 0 }) -> { origin, close }`; the default selection manifest is the immutable decoded-source manifest, while Task 13 supplies a verified snap-receipt manifest for post-snap landmark approval.
 - API: `GET /api/session`, `GET /api/frame/:sha256`, `PUT /api/edits`, and `POST /api/approval`.
 - Mutations require `If-Match: <current-edit-sha256>` and return the new immutable revision/hash.
@@ -561,6 +614,7 @@ git commit -m "feat: serve local Frame Studio state"
 ### Task 8: Frame Studio Playback, Selection, Onion Skin, and Cycle Seam
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/studio/index.html`
 - Create: `skills/game-character-pipeline/studio/app.mjs`
 - Create: `skills/game-character-pipeline/studio/frame-canvas.mjs`
@@ -571,6 +625,7 @@ git commit -m "feat: serve local Frame Studio state"
 - Modify: `skills/game-character-pipeline/scripts/studio/server.mjs`
 
 **Interfaces:**
+
 - Defines `<frame-canvas>` attributes `frame`, `previous`, `next`, `first`, `last`, `zoom`, `onion-opacity`, and `seam`.
 - Defines `<frame-timeline>` property `frames` and events `frame-select`, `frame-include`, `frame-duplicate`, `frame-replace`, and `frame-label`.
 
@@ -624,6 +679,7 @@ git commit -m "feat: add Frame Studio playback"
 ### Task 9: Markers, Tracks, Contacts, Timing, and Non-Destructive Edits
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/studio/markers.mjs`
 - Create: `skills/game-character-pipeline/scripts/lib/edits.mjs`
 - Create: `skills/game-character-pipeline/tests/edits.test.mjs`
@@ -631,6 +687,7 @@ git commit -m "feat: add Frame Studio playback"
 - Modify: `skills/game-character-pipeline/tests/browser/frame-studio.spec.mjs`
 
 **Interfaces:**
+
 - Produces `validateEditManifest(document, context)` and `renderEditRevision({ run, source, edit })`.
 - Edit frame record is `{ frameId, included, label, durationMs, translation, transform, markers, contacts, groundTravel, tracks }`.
 - `transform` is `null` unless explicit owner opt-in supplies integer `rotationQuarterTurns` and integer `scale` for the entire clip revision.
@@ -687,6 +744,7 @@ git commit -m "feat: author animation alignment metadata"
 ### Task 10: Approval Gate and Versioned Derivative Rendering
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/scripts/lib/approval.mjs`
 - Create: `skills/game-character-pipeline/tests/approval.test.mjs`
 - Modify: `skills/game-character-pipeline/scripts/cli.mjs`
@@ -694,6 +752,7 @@ git commit -m "feat: author animation alignment metadata"
 - Modify: `skills/game-character-pipeline/studio/app.mjs`
 
 **Interfaces:**
+
 - Produces `writeApproval({ run, project, editRevision, approver, decision, notes })` and `verifyApproval({ run, file, project, source, edit })`.
 - Approval binds project, source report, complete selected-frame set, edit manifest, rendered derivatives, approver, decision, notes, and timestamp hashes.
 
@@ -707,7 +766,11 @@ test('approval rejects changed membership, source, edit, or rendered bytes', asy
 });
 
 test('rejection records notes but cannot enter production', async () => {
-  const rejected = await writeApproval({ ...validApprovalRequest(), decision: 'rejected', notes: 'foot contact unreadable' });
+  const rejected = await writeApproval({
+    ...validApprovalRequest(),
+    decision: 'rejected',
+    notes: 'foot contact unreadable'
+  });
   await assert.rejects(requireProductionApproval(rejected), /owner approval required/);
 });
 ```
@@ -742,12 +805,14 @@ git commit -m "feat: bind animation owner approvals"
 ### Task 11: Generic Version-2 Pixel Production Contract
 
 **Files:**
+
 - Modify: `skills/pixel-sprite-animation-pipeline/scripts/lib/animation-contract.mjs`
 - Modify: `skills/pixel-sprite-animation-pipeline/tests/animation-contract.test.mjs`
 - Modify: `skills/pixel-sprite-animation-pipeline/scripts/lib/frame-approval.mjs`
 - Modify: `skills/pixel-sprite-animation-pipeline/tests/frame-approval.test.mjs`
 
 **Interfaces:**
+
 - Preserves `validateAnimationContract(v1)` and every private-project v1 invariant.
 - Produces v2 `{ version: 2, selectionApprovalSha256, character, canvas, scale, palette, tracks, sockets, contacts, clips, review }`.
 - Produces named post-snap per-frame landmarks `{ root, baseline, sockets, contacts, groundTravel }` bound to the snap receipt and snapped frame hashes; this is distinct from the pre-production Frame Studio selection approval in Task 10.
@@ -798,6 +863,7 @@ git commit -m "feat: add generic animation contract v2"
 ### Task 12: Multi-Track Normalization, Export, and Validation
 
 **Files:**
+
 - Modify: `skills/pixel-sprite-animation-pipeline/scripts/lib/normalize.mjs`
 - Modify: `skills/pixel-sprite-animation-pipeline/tests/normalize.test.mjs`
 - Modify: `skills/pixel-sprite-animation-pipeline/scripts/lib/export.mjs`
@@ -806,6 +872,7 @@ git commit -m "feat: add generic animation contract v2"
 - Modify: `skills/pixel-sprite-animation-pipeline/tests/validate.test.mjs`
 
 **Interfaces:**
+
 - Produces normalized actor/prop/effect PNGs using one integer scale and approved per-frame translations.
 - Produces engine-neutral JSON with semantic frame IDs, durations, loop mode, pivot, sockets, contacts, ground travel, track membership, source hashes, approval hash, snap receipt hash, and output hashes.
 
@@ -815,7 +882,10 @@ git commit -m "feat: add generic animation contract v2"
 test('normalization keeps scale fixed and maps sockets exactly', async () => {
   const result = await normalizeContractFrames(v2Fixture());
   assert.equal(new Set(result.frames.map((frame) => frame.scale)).size, 1);
-  assert.equal(result.frames.every((frame) => frame.sockets.hand.x === 52), true);
+  assert.equal(
+    result.frames.every((frame) => frame.sockets.hand.x === 52),
+    true
+  );
 });
 
 test('validation rejects foot travel outside contact windows and noncyclic restart', async () => {
@@ -854,6 +924,7 @@ git commit -m "feat: produce stable multi-track animations"
 ### Task 13: Authenticated Orchestrator Delegation and Engine-Neutral Package
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/scripts/lib/pixel-pipeline.mjs`
 - Create: `skills/game-character-pipeline/scripts/lib/export-contract.mjs`
 - Create: `skills/game-character-pipeline/tests/pixel-pipeline.test.mjs`
@@ -863,6 +934,7 @@ git commit -m "feat: produce stable multi-track animations"
 - Modify: `skills/pixel-sprite-animation-pipeline/tests/cli.test.mjs`
 
 **Interfaces:**
+
 - Existing CLI produces `produce-contract --contract <v2.json> --project-dir <dir> --output <new-dir> [--snap-receipt <signed.json> --frame-approval <signed-v2.json>]`.
 - Orchestrator produces `runPixelProduction({ run, project, selectionApproval, pipelineCli, node, snapReceipt, frameApproval }) -> { exitCode, next, receipt, exports, report }`.
 - The v2 contract binds `selectionApprovalSha256`; the optional post-snap `frameApproval` binds the existing pixel pipeline's authenticated snap receipt.
@@ -919,11 +991,13 @@ git commit -m "feat: orchestrate authenticated pixel production"
 ### Task 14: Audit Reports and Reproducibility Gate
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/scripts/lib/audit.mjs`
 - Create: `skills/game-character-pipeline/tests/audit.test.mjs`
 - Modify: `skills/game-character-pipeline/scripts/cli.mjs`
 
 **Interfaces:**
+
 - Produces `auditRun({ run, project, expected }) -> { passed, deterministicHashes, evidence, failures, reviews }`.
 - Produces `compareRuns(left, right)` that compares only deterministic derivatives while separately reporting timestamps, run IDs, and approval identities.
 
@@ -971,6 +1045,7 @@ git commit -m "feat: audit reproducible animation runs"
 ### Task 15: Clockwork Courier Public Acceptance Fixture and Full CI
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/examples/clockwork-courier/project.json`
 - Create: `skills/game-character-pipeline/examples/clockwork-courier/source/`
 - Create: `skills/game-character-pipeline/examples/clockwork-courier/expected-audit.json`
@@ -979,6 +1054,7 @@ git commit -m "feat: audit reproducible animation runs"
 - Create: `.github/workflows/game-character-pipeline.yml`
 
 **Interfaces:**
+
 - Public fixture is an original right-facing brass courier with cap and satchel, actor/prop/effect tracks, `idle` loop, `walk` loop, and `unlock` hold-last action.
 - `npm run acceptance` executes the committed fixture twice and compares deterministic hashes.
 
@@ -990,7 +1066,14 @@ test('Clockwork Courier completes the public workflow reproducibly', async () =>
   const second = await runClockworkCourier(tempRoot('courier-b-'));
   assert.equal(first.audit.passed, true);
   assert.deepEqual(compareRuns(first, second).changedDeterministicArtifacts, []);
-  assert.deepEqual(first.exports.clips.map(({ id, loopMode }) => [id, loopMode]), [['idle', 'loop'], ['walk', 'loop'], ['unlock', 'hold-last']]);
+  assert.deepEqual(
+    first.exports.clips.map(({ id, loopMode }) => [id, loopMode]),
+    [
+      ['idle', 'loop'],
+      ['walk', 'loop'],
+      ['unlock', 'hold-last']
+    ]
+  );
 });
 ```
 
@@ -1026,6 +1109,7 @@ git commit -m "test: prove public character workflow"
 ### Task 16: Skill Guidance, Scenario Evals, and Private-project Audit Gate
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/SKILL.md`
 - Create: `skills/game-character-pipeline/agents/openai.yaml`
 - Create: `skills/game-character-pipeline/references/workflow.md`
@@ -1037,6 +1121,7 @@ git commit -m "test: prove public character workflow"
 - Modify: `.gitignore`
 
 **Interfaces:**
+
 - Skill route covers approved character anchor, character brief, sprite animation, GIF/APNG/WebP/video/PNG intake, Frame Studio, pivots, sockets, contacts, Pixel Snapper delegation, and engine export.
 - Private audit command accepts paths outside the repository and writes under an ignored operator-selected audit root.
 

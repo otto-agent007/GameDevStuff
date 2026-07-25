@@ -32,7 +32,14 @@ export function analyzeMotion(frames, canvas) {
     const edit = frame.edit ?? {};
     const root = markerFor(edit, ({ id, kind }) => id === 'root' && kind === 'root-pivot');
     if (!root) {
-      issues.push(issue('missing-root', frameIndex, frame.id, `${frame.id} uses the project pivot because no root marker is authored.`));
+      issues.push(
+        issue(
+          'missing-root',
+          frameIndex,
+          frame.id,
+          `${frame.id} uses the project pivot because no root marker is authored.`
+        )
+      );
     }
     rootPath.push({ frameIndex, frameId: frame.id, ...pointFor(root, edit, pivot) });
 
@@ -40,13 +47,15 @@ export function analyzeMotion(frames, canvas) {
     for (const contactId of contacts) {
       const marker = markerFor(edit, ({ id, kind }) => id === contactId && kind === 'planted-foot');
       if (!marker) {
-        issues.push(issue(
-          'missing-contact-marker',
-          frameIndex,
-          frame.id,
-          `${frame.id} marks ${contactId} planted without a matching foot marker.`,
-          contactId
-        ));
+        issues.push(
+          issue(
+            'missing-contact-marker',
+            frameIndex,
+            frame.id,
+            `${frame.id} marks ${contactId} planted without a matching foot marker.`,
+            contactId
+          )
+        );
         priorContacts.delete(contactId);
         continue;
       }
@@ -54,13 +63,15 @@ export function analyzeMotion(frames, canvas) {
       (footPaths[contactId] ??= []).push(point);
       const prior = priorContacts.get(contactId);
       if (prior && (prior.x !== point.x || prior.y !== point.y)) {
-        issues.push(issue(
-          'foot-slide',
-          frameIndex,
-          frame.id,
-          `${contactId} moves from ${prior.x},${prior.y} to ${point.x},${point.y} while planted.`,
-          contactId
-        ));
+        issues.push(
+          issue(
+            'foot-slide',
+            frameIndex,
+            frame.id,
+            `${contactId} moves from ${prior.x},${prior.y} to ${point.x},${point.y} while planted.`,
+            contactId
+          )
+        );
       }
       priorContacts.set(contactId, point);
     }
@@ -94,32 +105,38 @@ function svgElement(name, attributes = {}) {
 }
 
 function pointsAttribute(points, canvas) {
-  return points.map(({ x, y }) => {
-    const plotX = Math.max(0, Math.min(100, (x / canvas.width) * 100));
-    const plotY = Math.max(0, Math.min(100, (y / canvas.height) * 100));
-    return `${plotX},${plotY}`;
-  }).join(' ');
+  return points
+    .map(({ x, y }) => {
+      const plotX = Math.max(0, Math.min(100, (x / canvas.width) * 100));
+      const plotY = Math.max(0, Math.min(100, (y / canvas.height) * 100));
+      return `${plotX},${plotY}`;
+    })
+    .join(' ');
 }
 
 function appendPath(plot, id, points, canvas) {
   if (!points.length) return;
-  plot.append(svgElement('polyline', {
-    points: pointsAttribute(points, canvas),
-    fill: 'none',
-    stroke: PATH_COLORS[id] ?? '#c4ccd0',
-    'stroke-width': 2,
-    'stroke-linecap': 'round',
-    'stroke-linejoin': 'round',
-    'data-path': id
-  }));
+  plot.append(
+    svgElement('polyline', {
+      points: pointsAttribute(points, canvas),
+      fill: 'none',
+      stroke: PATH_COLORS[id] ?? '#c4ccd0',
+      'stroke-width': 2,
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round',
+      'data-path': id
+    })
+  );
   for (const point of points) {
-    plot.append(svgElement('circle', {
-      cx: Math.max(0, Math.min(100, (point.x / canvas.width) * 100)),
-      cy: Math.max(0, Math.min(100, (point.y / canvas.height) * 100)),
-      r: 2.2,
-      fill: PATH_COLORS[id] ?? '#c4ccd0',
-      'data-frame-index': point.frameIndex
-    }));
+    plot.append(
+      svgElement('circle', {
+        cx: Math.max(0, Math.min(100, (point.x / canvas.width) * 100)),
+        cy: Math.max(0, Math.min(100, (point.y / canvas.height) * 100)),
+        r: 2.2,
+        fill: PATH_COLORS[id] ?? '#c4ccd0',
+        'data-frame-index': point.frameIndex
+      })
+    );
   }
 }
 

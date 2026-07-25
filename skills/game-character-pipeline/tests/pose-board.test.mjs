@@ -7,11 +7,7 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
 import { decodePoseBoard, recoverPoseBoard } from '../scripts/lib/pose-board.mjs';
-import {
-  approvePoseSelection,
-  loadApprovedPoseSelection,
-  writePoseSelection
-} from '../scripts/lib/pose-selection.mjs';
+import { approvePoseSelection, loadApprovedPoseSelection, writePoseSelection } from '../scripts/lib/pose-selection.mjs';
 import { createProject, createRun } from '../scripts/lib/run-contract.mjs';
 import { sha256File, sha256Value } from '../scripts/lib/schema.mjs';
 
@@ -20,7 +16,7 @@ const projectFixture = path.join(packageDir, 'tests', 'fixtures', 'project.valid
 const BACKGROUND = [0, 255, 0, 255];
 
 function writePixel(pixels, width, x, y, rgba) {
-  pixels.set(rgba, ((y * width) + x) * 4);
+  pixels.set(rgba, (y * width + x) * 4);
 }
 
 async function writeSyntheticBoard(file) {
@@ -28,13 +24,30 @@ async function writeSyntheticBoard(file) {
   const height = 8;
   const pixels = Buffer.alloc(width * height * 4);
   for (let offset = 0; offset < pixels.length; offset += 4) pixels.set(BACKGROUND, offset);
-  for (const [x, y] of [[4, 1], [5, 1], [6, 1], [7, 1], [5, 2], [6, 2]]) {
+  for (const [x, y] of [
+    [4, 1],
+    [5, 1],
+    [6, 1],
+    [7, 1],
+    [5, 2],
+    [6, 2]
+  ]) {
     writePixel(pixels, width, x, y, [214, 30, 42, 255]);
   }
-  for (const [x, y] of [[0, 4], [1, 4], [2, 4], [1, 5]]) {
+  for (const [x, y] of [
+    [0, 4],
+    [1, 4],
+    [2, 4],
+    [1, 5]
+  ]) {
     writePixel(pixels, width, x, y, [44, 77, 221, 255]);
   }
-  for (const [x, y] of [[9, 5], [10, 5], [9, 6], [10, 6]]) {
+  for (const [x, y] of [
+    [9, 5],
+    [10, 5],
+    [9, 6],
+    [10, 6]
+  ]) {
     writePixel(pixels, width, x, y, [248, 198, 34, 255]);
   }
   writePixel(pixels, width, 0, 0, [255, 0, 255, 255]);
@@ -64,10 +77,7 @@ async function poseBoardFixture(t, contractOverrides = {}) {
   const source = path.join(parent, 'pose-board.png');
   const recoveryContractFile = path.join(parent, 'pose-board-recovery.json');
   await writeSyntheticBoard(source);
-  await fs.writeFile(
-    recoveryContractFile,
-    JSON.stringify({ ...recoveryContract(), ...contractOverrides })
-  );
+  await fs.writeFile(recoveryContractFile, JSON.stringify({ ...recoveryContract(), ...contractOverrides }));
 
   const projectRoot = path.join(parent, 'project');
   const project = await createProject({ root: projectRoot, contractFile: projectFixture });
@@ -108,18 +118,15 @@ test('pose-board recovery publishes complete immutable evidence before handoff',
   assert.equal(recovery.document.runId, fixture.run.id);
   assert.equal(recovery.document.actionId, 'idle');
   assert.equal(recovery.document.source.sha256, await sha256File(fixture.source));
+  assert.equal(recovery.document.contract.documentSha256, sha256Value(recovery.document.contract.document));
   assert.equal(
-    recovery.document.contract.documentSha256,
-    sha256Value(recovery.document.contract.document)
+    recovery.document.mask.sha256,
+    await sha256File(path.join(fixture.run.root, recovery.document.mask.path))
   );
-  assert.equal(recovery.document.mask.sha256, await sha256File(path.join(
-    fixture.run.root,
-    recovery.document.mask.path
-  )));
-  assert.equal(recovery.document.overlay.sha256, await sha256File(path.join(
-    fixture.run.root,
-    recovery.document.overlay.path
-  )));
+  assert.equal(
+    recovery.document.overlay.sha256,
+    await sha256File(path.join(fixture.run.root, recovery.document.overlay.path))
+  );
   assert.equal(recovery.document.components.length, 3);
   assert.equal(recovery.document.candidates.length, 3);
   for (const candidate of recovery.document.candidates) {
@@ -192,12 +199,14 @@ function validSelection({ fixture, recovery, frames } = {}) {
     runId: fixture.run.id,
     actionId: 'idle',
     recoverySha256: recovery.sha256,
-    frames: frames ?? recovery.document.candidates.map((candidate, index) => ({
-      id: `stride-${String(index + 1).padStart(2, '0')}`,
-      candidateId: candidate.id,
-      durationMs: 80 + (index * 20),
-      tracks: [{ role: 'actor', componentIds: candidate.componentIds }]
-    }))
+    frames:
+      frames ??
+      recovery.document.candidates.map((candidate, index) => ({
+        id: `stride-${String(index + 1).padStart(2, '0')}`,
+        candidateId: candidate.id,
+        durationMs: 80 + index * 20,
+        tracks: [{ role: 'actor', componentIds: candidate.componentIds }]
+      }))
   };
 }
 
@@ -223,9 +232,7 @@ test('pose selection validates complete whole-component disposition', async (t) 
   );
 
   const duplicateComponent = validSelection({ fixture, recovery });
-  duplicateComponent.frames[1].tracks[0].componentIds = [
-    duplicateComponent.frames[0].tracks[0].componentIds[0]
-  ];
+  duplicateComponent.frames[1].tracks[0].componentIds = [duplicateComponent.frames[0].tracks[0].componentIds[0]];
   await assert.rejects(
     writePoseSelection({
       run: fixture.run,
@@ -345,15 +352,10 @@ test('pose-board intake hands off for approval then resumes to centered motion f
       assert.equal(error.handoff.status, 'awaiting-pose-selection');
       assert.equal(error.handoff.runId, fixture.run.id);
       assert.match(error.handoff.recovery.sha256, /^[a-f0-9]{64}$/);
-      assert.deepEqual(error.handoff.next.argv.slice(-6), [
-        'studio',
-        '--stage',
-        'recovery',
-        '--project-dir',
-        fixture.project.root,
-        '--run',
-        fixture.run.id
-      ].slice(-6));
+      assert.deepEqual(
+        error.handoff.next.argv.slice(-6),
+        ['studio', '--stage', 'recovery', '--project-dir', fixture.project.root, '--run', fixture.run.id].slice(-6)
+      );
       return true;
     }
   );
@@ -364,10 +366,7 @@ test('pose-board intake hands off for approval then resumes to centered motion f
     run: fixture.run,
     project: fixture.project
   });
-  const selectedCandidates = [
-    recovery.document.candidates[0],
-    recovery.document.candidates[2]
-  ];
+  const selectedCandidates = [recovery.document.candidates[0], recovery.document.candidates[2]];
   const selection = await writePoseSelection({
     run: fixture.run,
     project: fixture.project,
@@ -402,39 +401,37 @@ test('pose-board intake hands off for approval then resumes to centered motion f
   });
 
   assert.equal(result.kind, 'pose-board');
-  assert.deepEqual(result.frames.map(({ id }) => id), ['stride-01', 'stride-02']);
-  assert.deepEqual(result.frames.map(({ durationMs }) => durationMs), [80, 120]);
-  assert.deepEqual(result.frames.map(({ timestampMs }) => timestampMs), [0, 80]);
+  assert.deepEqual(
+    result.frames.map(({ id }) => id),
+    ['stride-01', 'stride-02']
+  );
+  assert.deepEqual(
+    result.frames.map(({ durationMs }) => durationMs),
+    [80, 120]
+  );
+  assert.deepEqual(
+    result.frames.map(({ timestampMs }) => timestampMs),
+    [0, 80]
+  );
   assert.equal(new Set(result.frames.map(({ width }) => width)).size, 1);
   assert.equal(new Set(result.frames.map(({ height }) => height)).size, 1);
 
   for (const [index, frame] of result.frames.entries()) {
     const candidate = selectedCandidates[index];
-    const candidatePixels = await sharp(path.join(fixture.run.root, candidate.path))
-      .ensureAlpha()
-      .raw()
-      .toBuffer();
-    const outputPixels = await sharp(path.join(fixture.run.root, frame.path))
-      .ensureAlpha()
-      .raw()
-      .toBuffer();
+    const candidatePixels = await sharp(path.join(fixture.run.root, candidate.path)).ensureAlpha().raw().toBuffer();
+    const outputPixels = await sharp(path.join(fixture.run.root, frame.path)).ensureAlpha().raw().toBuffer();
     const offsetX = Math.floor((result.canvas.width - candidate.width) / 2);
     const offsetY = Math.floor((result.canvas.height - candidate.height) / 2);
     for (let y = 0; y < result.canvas.height; y += 1) {
       for (let x = 0; x < result.canvas.width; x += 1) {
-        const outputOffset = ((y * result.canvas.width) + x) * 4;
+        const outputOffset = (y * result.canvas.width + x) * 4;
         const candidateX = x - offsetX;
         const candidateY = y - offsetY;
-        if (
-          candidateX < 0 ||
-          candidateX >= candidate.width ||
-          candidateY < 0 ||
-          candidateY >= candidate.height
-        ) {
+        if (candidateX < 0 || candidateX >= candidate.width || candidateY < 0 || candidateY >= candidate.height) {
           assert.deepEqual([...outputPixels.subarray(outputOffset, outputOffset + 4)], [0, 0, 0, 0]);
           continue;
         }
-        const candidateOffset = ((candidateY * candidate.width) + candidateX) * 4;
+        const candidateOffset = (candidateY * candidate.width + candidateX) * 4;
         assert.deepEqual(
           [...outputPixels.subarray(outputOffset, outputOffset + 4)],
           [...candidatePixels.subarray(candidateOffset, candidateOffset + 4)]

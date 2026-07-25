@@ -51,12 +51,15 @@ export async function canonicalRelativePath(root, candidate, options = {}) {
 }
 
 export async function assertPathsOutsideForbiddenRoots({ candidates, forbiddenRoots, ...options }) {
-  if (!Array.isArray(candidates) || candidates.some((candidate) => typeof candidate !== 'string' || candidate === '')) throw new Error('integration candidates must be nonempty path strings');
-  if (!Array.isArray(forbiddenRoots) || forbiddenRoots.some((root) => typeof root !== 'string' || root === '')) throw new Error('integration forbidden roots must be path strings');
+  if (!Array.isArray(candidates) || candidates.some((candidate) => typeof candidate !== 'string' || candidate === ''))
+    throw new Error('integration candidates must be nonempty path strings');
+  if (!Array.isArray(forbiddenRoots) || forbiddenRoots.some((root) => typeof root !== 'string' || root === ''))
+    throw new Error('integration forbidden roots must be path strings');
   const pathApi = options.pathApi ?? path;
   const roots = await Promise.all(forbiddenRoots.map((root) => canonicalPathForCreation(root, options)));
   for (const candidate of candidates) {
     const canonicalCandidate = await canonicalPathForCreation(candidate, options);
-    if (roots.some((root) => isPathContained(root, canonicalCandidate, pathApi))) throw new Error(`forbidden integration path: ${candidate}`);
+    if (roots.some((root) => isPathContained(root, canonicalCandidate, pathApi)))
+      throw new Error(`forbidden integration path: ${candidate}`);
   }
 }

@@ -1,4 +1,17 @@
-const observed = ['frame', 'previous', 'next', 'first', 'last', 'zoom', 'onion-opacity', 'seam', 'clipping', 'duplicates', 'palette', 'drift'];
+const observed = [
+  'frame',
+  'previous',
+  'next',
+  'first',
+  'last',
+  'zoom',
+  'onion-opacity',
+  'seam',
+  'clipping',
+  'duplicates',
+  'palette',
+  'drift'
+];
 
 function loadImage(source) {
   if (!source) return Promise.resolve(null);
@@ -11,7 +24,9 @@ function loadImage(source) {
 }
 
 export class FrameCanvas extends HTMLElement {
-  static get observedAttributes() { return observed; }
+  static get observedAttributes() {
+    return observed;
+  }
 
   #canvas;
   #renderToken = 0;
@@ -24,8 +39,12 @@ export class FrameCanvas extends HTMLElement {
     this.append(this.#canvas);
   }
 
-  connectedCallback() { this.#render(); }
-  attributeChangedCallback() { if (this.isConnected) this.#render(); }
+  connectedCallback() {
+    this.#render();
+  }
+  attributeChangedCallback() {
+    if (this.isConnected) this.#render();
+  }
 
   set markerState(value) {
     this.#markerState = structuredClone(value ?? { markers: [], canvas: null });

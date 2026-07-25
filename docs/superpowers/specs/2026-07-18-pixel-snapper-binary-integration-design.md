@@ -58,13 +58,13 @@ A manually triggered GitHub Actions workflow accepts an approved upstream tag an
 
 The initial build matrix is native on every target:
 
-| Asset | GitHub runner | Rust target | Archive |
-|---|---|---|---|
-| Windows x64 | `windows-2025` | `x86_64-pc-windows-msvc` | ZIP |
-| macOS Intel | `macos-15-intel` | `x86_64-apple-darwin` | TAR.GZ |
-| macOS Apple Silicon | `macos-15` | `aarch64-apple-darwin` | TAR.GZ |
-| Linux x64 | `ubuntu-24.04` | `x86_64-unknown-linux-musl` | TAR.GZ |
-| Linux ARM64 | `ubuntu-24.04-arm` | `aarch64-unknown-linux-musl` | TAR.GZ |
+| Asset               | GitHub runner      | Rust target                  | Archive |
+| ------------------- | ------------------ | ---------------------------- | ------- |
+| Windows x64         | `windows-2025`     | `x86_64-pc-windows-msvc`     | ZIP     |
+| macOS Intel         | `macos-15-intel`   | `x86_64-apple-darwin`        | TAR.GZ  |
+| macOS Apple Silicon | `macos-15`         | `aarch64-apple-darwin`       | TAR.GZ  |
+| Linux x64           | `ubuntu-24.04`     | `x86_64-unknown-linux-musl`  | TAR.GZ  |
+| Linux ARM64         | `ubuntu-24.04-arm` | `aarch64-unknown-linux-musl` | TAR.GZ  |
 
 The Linux policy is static musl rather than an undocumented minimum glibc version. The workflow pins Rust `1.88.0`, runs `cargo build --locked --release --target <target>`, and pins every GitHub Action by a reviewed full commit SHA rather than a mutable tag. Before the workflow is merged, a matrix-only probe must prove that all five runner labels are enabled for this public repository. No release may claim a target that did not execute its fixture natively on that target.
 

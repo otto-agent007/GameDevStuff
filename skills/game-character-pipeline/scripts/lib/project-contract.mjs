@@ -64,7 +64,8 @@ function validateCanvas(canvas, character) {
   integer(canvas.height, 'canvas height', { min: 1, max: 16384 });
   exactCoordinate(canvas.pivot, 'canvas pivot');
   integer(canvas.baseline, 'canvas baseline', { min: 0, max: canvas.height - 1 });
-  if (canvas.pivot.x >= canvas.width || canvas.pivot.y >= canvas.height) throw new Error('canvas pivot must be inside the canvas');
+  if (canvas.pivot.x >= canvas.width || canvas.pivot.y >= canvas.height)
+    throw new Error('canvas pivot must be inside the canvas');
   if (character.logicalHeight > canvas.height) throw new Error('character logicalHeight must fit the canvas');
 }
 
@@ -85,7 +86,11 @@ function validatePalette(palette) {
     throw new Error('palette must contain transparent plus 1 to 16 opaque colors');
   }
   const colors = palette.rgba.map((color, index) => {
-    if (!Array.isArray(color) || color.length !== 4 || color.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    if (
+      !Array.isArray(color) ||
+      color.length !== 4 ||
+      color.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
+    ) {
       throw new Error(`palette color ${index} must be RGBA bytes`);
     }
     return color.join(',');
@@ -106,9 +111,11 @@ function validateTracks(tracks) {
     if (!TRACK_KINDS.has(track.kind)) throw new Error(`track kind is invalid: ${track.kind}`);
     boolean(track.required, 'track required');
     if (track.kind === 'actor' && track.attachTo !== null) throw new Error('actor track cannot attach to a socket');
-    if (track.kind !== 'actor' && typeof track.attachTo !== 'string') throw new Error('prop and effect tracks require an attachment socket');
+    if (track.kind !== 'actor' && typeof track.attachTo !== 'string')
+      throw new Error('prop and effect tracks require an attachment socket');
   }
-  if (tracks.filter(({ kind }) => kind === 'actor').length !== 1) throw new Error('project requires exactly one actor track');
+  if (tracks.filter(({ kind }) => kind === 'actor').length !== 1)
+    throw new Error('project requires exactly one actor track');
 }
 
 function validateSockets(sockets, tracks) {
@@ -174,14 +181,17 @@ function validateActions(actions, { tracks, sockets, contacts, sources }) {
     action.poses.forEach((pose) => string(pose, 'action pose'));
     uniqueList(action.tracks, 'action tracks');
     for (const id of action.tracks) if (!trackById.has(id)) throw new Error(`action references unknown track: ${id}`);
-    if (!action.tracks.some((id) => trackById.get(id).kind === 'actor')) throw new Error('action must include the actor track');
+    if (!action.tracks.some((id) => trackById.get(id).kind === 'actor'))
+      throw new Error('action must include the actor track');
     uniqueList(action.sockets, 'action sockets', { min: 0 });
     for (const id of action.sockets) if (!socketIds.has(id)) throw new Error(`action references unknown socket: ${id}`);
     uniqueList(action.contacts, 'action contacts', { min: 0 });
-    for (const id of action.contacts) if (!contactIds.has(id)) throw new Error(`action references unknown contact: ${id}`);
+    for (const id of action.contacts)
+      if (!contactIds.has(id)) throw new Error(`action references unknown contact: ${id}`);
     for (const trackId of action.tracks) {
       const attachment = trackById.get(trackId).attachTo;
-      if (attachment && !action.sockets.includes(attachment)) throw new Error(`action omits attachment socket: ${attachment}`);
+      if (attachment && !action.sockets.includes(attachment))
+        throw new Error(`action omits attachment socket: ${attachment}`);
     }
     exactObject(action.sources, ['preferred', 'fallbacks'], 'action sources');
     const selected = [action.sources.preferred, ...uniqueList(action.sources.fallbacks, 'action source fallbacks')];
@@ -198,7 +208,8 @@ function validateEngineTargets(engineTargets) {
     exactObject(target, ['id', 'kind', 'version'], 'engine target');
     portableId(target.id, 'engine target ID');
     if (!ENGINE_KINDS.has(target.kind)) throw new Error(`engine target kind is invalid: ${target.kind}`);
-    if (target.kind === 'generic' && target.version !== null) throw new Error('generic engine target version must be null');
+    if (target.kind === 'generic' && target.version !== null)
+      throw new Error('generic engine target version must be null');
     if (target.kind !== 'generic') string(target.version, 'engine target version');
   }
 }
@@ -209,7 +220,9 @@ function validateApprovals(approvals) {
   uniqueList(approvals.identities, 'approval identities');
   approvals.identities.forEach((identity) => portableId(identity, 'approval identity'));
   if (JSON.stringify(approvals.requiredGates) !== JSON.stringify(REQUIRED_GATES)) {
-    throw new Error('required approval gates must be canonical-anchor, annotated-animation, and final-preview in order');
+    throw new Error(
+      'required approval gates must be canonical-anchor, annotated-animation, and final-preview in order'
+    );
   }
 }
 
@@ -222,7 +235,21 @@ export function validateProjectContract(document) {
   }
   exactObject(
     project,
-    ['schemaVersion', 'id', 'character', 'canvas', 'scale', 'palette', 'tracks', 'sockets', 'contacts', 'sources', 'actions', 'engineTargets', 'approvals'],
+    [
+      'schemaVersion',
+      'id',
+      'character',
+      'canvas',
+      'scale',
+      'palette',
+      'tracks',
+      'sockets',
+      'contacts',
+      'sources',
+      'actions',
+      'engineTargets',
+      'approvals'
+    ],
     'project'
   );
   if (project.schemaVersion !== 1) throw new Error('project schemaVersion must be 1');

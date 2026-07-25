@@ -27,7 +27,7 @@ function chromaSpillChannel(backgroundRgba, spill) {
   if (!spill) return null;
   const rgb = backgroundRgba.slice(0, 3);
   const maximum = Math.max(...rgb);
-  const channels = rgb.flatMap((value, index) => value === maximum ? [index] : []);
+  const channels = rgb.flatMap((value, index) => (value === maximum ? [index] : []));
   if (channels.length !== 1) {
     throw new Error('pose-board chroma spill requires one uniquely dominant background channel');
   }
@@ -42,11 +42,8 @@ function isBackgroundPixel(pixel, backgroundRgba, selected, spillChannel) {
   if (Math.abs(pixel[3] - backgroundRgba[3]) > selected.background.tolerance) {
     return false;
   }
-  const competing = pixel
-    .slice(0, 3)
-    .filter((_, index) => index !== spillChannel);
-  return pixel[spillChannel] - Math.max(...competing) >=
-    selected.background.spill.minimumDominance;
+  const competing = pixel.slice(0, 3).filter((_, index) => index !== spillChannel);
+  return pixel[spillChannel] - Math.max(...competing) >= selected.background.spill.minimumDominance;
 }
 
 function dominantBorder(data, width, height) {
@@ -54,7 +51,7 @@ function dominantBorder(data, width, height) {
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       if (x !== 0 && x !== width - 1 && y !== 0 && y !== height - 1) continue;
-      const offset = ((y * width) + x) * 4;
+      const offset = (y * width + x) * 4;
       const rgba = byteTuple(data, offset);
       const key = rgba.join(',');
       const existing = counts.get(key);
@@ -62,9 +59,7 @@ function dominantBorder(data, width, height) {
       else counts.set(key, { count: 1, rgba });
     }
   }
-  return [...counts.values()].reduce((best, item) => (
-    !best || item.count > best.count ? item : best
-  )).rgba;
+  return [...counts.values()].reduce((best, item) => (!best || item.count > best.count ? item : best)).rgba;
 }
 
 function boundsForPixels(pixels) {
@@ -89,12 +84,9 @@ function boundsForPixels(pixels) {
 }
 
 function componentDocument(id, pixels) {
-  const ordered = pixels.sort((left, right) => (left.y - right.y) || (left.x - right.x));
+  const ordered = pixels.sort((left, right) => left.y - right.y || left.x - right.x);
   const bounds = boundsForPixels(ordered);
-  const sum = ordered.reduce(
-    (result, pixel) => ({ x: result.x + pixel.x, y: result.y + pixel.y }),
-    { x: 0, y: 0 }
-  );
+  const sum = ordered.reduce((result, pixel) => ({ x: result.x + pixel.x, y: result.y + pixel.y }), { x: 0, y: 0 });
   const document = {
     id,
     pixelCount: ordered.length,
@@ -134,7 +126,7 @@ function connectedComponents(mask, data, width, height) {
         const nextX = x + dx;
         const nextY = y + dy;
         if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height) continue;
-        const next = (nextY * width) + nextX;
+        const next = nextY * width + nextX;
         if (mask[next] === 0 || visited[next] === 1) continue;
         visited[next] = 1;
         queue.push(next);
@@ -151,8 +143,8 @@ function combinedCandidate(id, components) {
   const pixelCount = components.reduce((sum, component) => sum + component.pixelCount, 0);
   const centroid = components.reduce(
     (sum, component) => ({
-      x: sum.x + (component.centroid.x * component.pixelCount),
-      y: sum.y + (component.centroid.y * component.pixelCount)
+      x: sum.x + component.centroid.x * component.pixelCount,
+      y: sum.y + component.centroid.y * component.pixelCount
     }),
     { x: 0, y: 0 }
   );
@@ -169,17 +161,14 @@ function combinedCandidate(id, components) {
 }
 
 function rowMajorCandidates(candidates) {
-  const pending = [...candidates].sort((left, right) => (
-    (left.bounds.top - right.bounds.top) ||
-    (left.centroid.y - right.centroid.y) ||
-    left.id.localeCompare(right.id)
-  ));
+  const pending = [...candidates].sort(
+    (left, right) =>
+      left.bounds.top - right.bounds.top || left.centroid.y - right.centroid.y || left.id.localeCompare(right.id)
+  );
   const rows = [];
 
   for (const candidate of pending) {
-    const row = rows.find((item) => (
-      candidate.bounds.top <= item.bottom && candidate.bounds.bottom >= item.top
-    ));
+    const row = rows.find((item) => candidate.bounds.top <= item.bottom && candidate.bounds.bottom >= item.top);
     if (row) {
       row.candidates.push(candidate);
       row.top = Math.min(row.top, candidate.bounds.top);
@@ -193,11 +182,12 @@ function rowMajorCandidates(candidates) {
     }
   }
 
-  return rows.flatMap((row) => row.candidates.sort((left, right) => (
-    (left.centroid.x - right.centroid.x) ||
-    (left.centroid.y - right.centroid.y) ||
-    left.id.localeCompare(right.id)
-  )));
+  return rows.flatMap((row) =>
+    row.candidates.sort(
+      (left, right) =>
+        left.centroid.x - right.centroid.x || left.centroid.y - right.centroid.y || left.id.localeCompare(right.id)
+    )
+  );
 }
 
 function buildCandidates(components, groups) {
@@ -244,41 +234,31 @@ export async function analyzePoseBoard({ bytes, contract }) {
     throw new Error('pose-board decoded RGBA exceeds the configured byte limit');
   }
 
-  const backgroundRgba = selected.background.mode === 'color'
-    ? [...selected.background.rgba]
-    : dominantBorder(data, info.width, info.height);
-  const spillChannel = chromaSpillChannel(
-    backgroundRgba,
-    selected.background.spill
-  );
+  const backgroundRgba =
+    selected.background.mode === 'color'
+      ? [...selected.background.rgba]
+      : dominantBorder(data, info.width, info.height);
+  const spillChannel = chromaSpillChannel(backgroundRgba, selected.background.spill);
   const mask = Buffer.alloc(info.width * info.height);
   for (let index = 0; index < mask.length; index += 1) {
     const pixel = byteTuple(data, index * 4);
-    mask[index] = isBackgroundPixel(
-      pixel,
-      backgroundRgba,
-      selected,
-      spillChannel
-    ) ? 0 : 1;
+    mask[index] = isBackgroundPixel(pixel, backgroundRgba, selected, spillChannel) ? 0 : 1;
   }
 
   const found = connectedComponents(mask, data, info.width, info.height);
   const eligiblePixels = found.filter((pixels) => pixels.length >= selected.minimumComponentPixels);
   const noisePixels = found.filter((pixels) => pixels.length < selected.minimumComponentPixels);
-  const components = eligiblePixels.map((pixels, index) => (
+  const components = eligiblePixels.map((pixels, index) =>
     componentDocument(`component-${String(index + 1).padStart(4, '0')}`, pixels)
-  ));
-  const ignoredNoise = noisePixels.map((pixels, index) => (
+  );
+  const ignoredNoise = noisePixels.map((pixels, index) =>
     componentDocument(`noise-${String(index + 1).padStart(4, '0')}`, pixels)
-  ));
+  );
   const candidates = buildCandidates(components, selected.groups);
-  if (
-    candidates.length < selected.expectedCandidates.min ||
-    candidates.length > selected.expectedCandidates.max
-  ) {
+  if (candidates.length < selected.expectedCandidates.min || candidates.length > selected.expectedCandidates.max) {
     throw new Error(
       `pose-board candidate count ${candidates.length} is outside configured range ` +
-      `${selected.expectedCandidates.min}-${selected.expectedCandidates.max}`
+        `${selected.expectedCandidates.min}-${selected.expectedCandidates.max}`
     );
   }
 
@@ -292,12 +272,13 @@ export async function analyzePoseBoard({ bytes, contract }) {
       mode: selected.background.mode,
       rgba: backgroundRgba,
       tolerance: selected.background.tolerance,
-      spill: spillChannel === null
-        ? null
-        : {
-          channel: ['red', 'green', 'blue'][spillChannel],
-          minimumDominance: selected.background.spill.minimumDominance
-        }
+      spill:
+        spillChannel === null
+          ? null
+          : {
+              channel: ['red', 'green', 'blue'][spillChannel],
+              minimumDominance: selected.background.spill.minimumDominance
+            }
     },
     connectivity: selected.connectivity,
     minimumComponentPixels: selected.minimumComponentPixels,
@@ -349,15 +330,15 @@ export async function renderRecoveredCandidate({ analysis, componentIds }) {
   const pixels = selected.flatMap((component) => component.pixels);
   const sourceBounds = boundsForPixels(pixels);
   const padding = analysis.contract.padding;
-  const width = sourceBounds.width + (padding * 2);
-  const height = sourceBounds.height + (padding * 2);
+  const width = sourceBounds.width + padding * 2;
+  const height = sourceBounds.height + padding * 2;
   const output = Buffer.alloc(width * height * 4);
 
   for (const { x, y } of pixels) {
-    const sourceOffset = ((y * analysis.width) + x) * 4;
+    const sourceOffset = (y * analysis.width + x) * 4;
     const outputX = x - sourceBounds.left + padding;
     const outputY = y - sourceBounds.top + padding;
-    const outputOffset = ((outputY * width) + outputX) * 4;
+    const outputOffset = (outputY * width + outputX) * 4;
     analysis.sourceRgba.copy(output, outputOffset, sourceOffset, sourceOffset + 4);
   }
 

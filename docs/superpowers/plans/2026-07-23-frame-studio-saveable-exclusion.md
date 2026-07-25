@@ -34,6 +34,7 @@
 ### Task 1: Saveable active-frame exclusion
 
 **Files:**
+
 - Modify: `skills/game-character-pipeline/tests/browser/frame-studio.spec.mjs`
 - Modify: `skills/game-character-pipeline/studio/app.mjs`
 - Modify: `skills/game-character-pipeline/studio/index.html`
@@ -41,6 +42,7 @@
 - Modify: `skills/game-character-pipeline/studio/styles.css`
 
 **Interfaces:**
+
 - Consumes: existing `frames`, `selectedIndex`, `selectFrame(index)`, `stopPlayback()`, `scheduleNext()`, `setDirty(value)`, and `edit.frames[].included`.
 - Produces: `activeFrameIndices(): number[]`, `adjacentActiveIndex(index: number, direction: 1 | -1): number | null`, `setFrameInclusion(index: number, included: boolean): boolean`, and the native `#toggle-frame-inclusion` button.
 
@@ -55,7 +57,9 @@ test('skips excluded frames in playback and transport', async ({ page }) => {
   await expect(page.locator('[data-frame-id="step-pass"]')).toContainText('Excluded');
 
   await page.getByRole('button', { name: 'Play', exact: true }).click();
-  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', { timeout: 180 });
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', {
+    timeout: 180
+  });
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
 
   await page.locator('[data-frame-id="step-pass"]').click();
@@ -74,7 +78,9 @@ test('skips excluded frames in playback and transport', async ({ page }) => {
     return document.querySelector('[aria-current="true"]')?.dataset.frameId;
   });
   expect(replayedFrame).toBe('step-contact');
-  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', { timeout: 180 });
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', {
+    timeout: 180
+  });
 });
 
 test('uses active neighbors for onion skin and cycle seams', async ({ page }) => {
@@ -134,7 +140,7 @@ Expected: the tests fail because playback still visits excluded frames, no selec
 In `studio/app.mjs`, add these helpers after `includedFrames`:
 
 ```js
-const activeFrameIndices = () => frames.flatMap((frame, index) => frame.included !== false ? [index] : []);
+const activeFrameIndices = () => frames.flatMap((frame, index) => (frame.included !== false ? [index] : []));
 const firstActiveIndex = () => activeFrameIndices()[0] ?? null;
 const lastActiveIndex = () => activeFrameIndices().at(-1) ?? null;
 
@@ -231,8 +237,12 @@ document.querySelector('#toggle-frame-inclusion').addEventListener('click', () =
   const frame = frames[selectedIndex];
   if (frame) setFrameInclusion(selectedIndex, frame.included === false);
 });
-document.querySelector('#previous-frame').addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, -1), { manual: true }));
-document.querySelector('#next-frame').addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, 1), { manual: true }));
+document
+  .querySelector('#previous-frame')
+  .addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, -1), { manual: true }));
+document
+  .querySelector('#next-frame')
+  .addEventListener('click', () => selectFrame(adjacentActiveIndex(selectedIndex, 1), { manual: true }));
 ```
 
 Update document-level keyboard actions:
@@ -318,7 +328,7 @@ In `studio/styles.css`, add:
   color: var(--danger);
   font-size: 8px;
   font-weight: 800;
-  letter-spacing: .08em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 .selection-inclusion-button {
@@ -327,7 +337,7 @@ In `studio/styles.css`, add:
   border-color: var(--danger);
   color: #ff93a8;
 }
-.selection-inclusion-button[data-included="false"] {
+.selection-inclusion-button[data-included='false'] {
   border-color: var(--cyan);
   color: var(--cyan);
 }

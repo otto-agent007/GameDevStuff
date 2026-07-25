@@ -25,15 +25,33 @@ async function fixture() {
   const run = await createRun({ projectRoot, project, sourceRequest: { actionId: 'idle', kind: 'png-sequence' } });
   const png = await sharp({
     create: { width: 8, height: 8, channels: 4, background: { r: 245, g: 158, b: 11, alpha: 0.8 } }
-  }).png().toBuffer();
+  })
+    .png()
+    .toBuffer();
   const frame = await writeImmutableBytes({ root: run.root, relative: 'work/decoded/approval-frame.png', bytes: png });
   const source = {
-    kind: 'png-sequence', sourceSha256: 'c'.repeat(64),
+    kind: 'png-sequence',
+    sourceSha256: 'c'.repeat(64),
     decoder: { name: 'approval-fixture', version: '1', arguments: [] },
-    canvas: { width: 8, height: 8 }, alpha: true,
+    canvas: { width: 8, height: 8 },
+    alpha: true,
     timeBase: { numerator: 1, denominator: 1000 },
-    frames: [{ index: 0, id: 'idle-1', path: frame.relative, sha256: frame.sha256, width: 8, height: 8, timestampMs: 0, durationMs: 100, sourceRect: { x: 0, y: 0, width: 8, height: 8 }, duplicateOf: null }],
-    diagnostics: [], approval: null
+    frames: [
+      {
+        index: 0,
+        id: 'idle-1',
+        path: frame.relative,
+        sha256: frame.sha256,
+        width: 8,
+        height: 8,
+        timestampMs: 0,
+        durationMs: 100,
+        sourceRect: { x: 0, y: 0, width: 8, height: 8 },
+        duplicateOf: null
+      }
+    ],
+    diagnostics: [],
+    approval: null
   };
   await writeImmutableJson({ root: run.root, relative: 'reports/source.json', value: source });
   const edit = {
@@ -42,16 +60,24 @@ async function fixture() {
     projectSha256: project.sha256,
     sourceSha256: sha256Value(source),
     actionId: 'idle',
-    frames: [{
-      frameId: 'idle-1', included: true, label: 'settle', durationMs: 100,
-      translation: { x: 0, y: 0 }, transform: null,
-      markers: [
-        { id: 'root', kind: 'root-pivot', x: 48, y: 84 },
-        { id: 'hand', kind: 'socket', x: 60, y: 48 },
-        { id: 'left-foot', kind: 'planted-foot', x: 43, y: 83 }
-      ],
-      contacts: ['left-foot'], groundTravel: { x: 0, y: 0 }, tracks: ['actor', 'satchel']
-    }]
+    frames: [
+      {
+        frameId: 'idle-1',
+        included: true,
+        label: 'settle',
+        durationMs: 100,
+        translation: { x: 0, y: 0 },
+        transform: null,
+        markers: [
+          { id: 'root', kind: 'root-pivot', x: 48, y: 84 },
+          { id: 'hand', kind: 'socket', x: 60, y: 48 },
+          { id: 'left-foot', kind: 'planted-foot', x: 43, y: 83 }
+        ],
+        contacts: ['left-foot'],
+        groundTravel: { x: 0, y: 0 },
+        tracks: ['actor', 'satchel']
+      }
+    ]
   };
   await writeRevision({
     root: run.root,
@@ -63,7 +89,13 @@ async function fixture() {
       runId: run.id,
       stage: 'selection',
       sourceSha256: sha256Value(source),
-      previousSha256: sha256Value({ schemaVersion: 1, kind: 'studio-edit-root', runId: run.id, stage: 'selection', sourceSha256: sha256Value(source) }),
+      previousSha256: sha256Value({
+        schemaVersion: 1,
+        kind: 'studio-edit-root',
+        runId: run.id,
+        stage: 'selection',
+        sourceSha256: sha256Value(source)
+      }),
       edit
     }
   });
@@ -89,7 +121,10 @@ test('approval rejects changed membership, source, edit, or rendered bytes', asy
 
   const changedEdit = structuredClone(data.edit);
   changedEdit.frames[0].included = false;
-  await assert.rejects(verifyApproval({ ...data, edit: changedEdit, file: approved.path }), /edit hash mismatch|selected frame set mismatch/);
+  await assert.rejects(
+    verifyApproval({ ...data, edit: changedEdit, file: approved.path }),
+    /edit hash mismatch|selected frame set mismatch/
+  );
 });
 
 test('rejection records notes but cannot enter production', async (t) => {
@@ -105,27 +140,67 @@ test('rejection records notes but cannot enter production', async (t) => {
   });
   assert.equal(rejected.document.notes, 'foot contact unreadable');
   assert.throws(() => requireProductionApproval(rejected), /owner approval required/);
-  await assert.rejects(writeApproval({ ...data, editRevision: 1, approver: 'intruder', decision: 'approved', notes: '' }), /configured approval identity/);
-  await assert.rejects(writeApproval({ ...data, editRevision: 1, approver: 'owner', decision: 'rejected', notes: '' }), /rejection notes are required/);
+  await assert.rejects(
+    writeApproval({ ...data, editRevision: 1, approver: 'intruder', decision: 'approved', notes: '' }),
+    /configured approval identity/
+  );
+  await assert.rejects(
+    writeApproval({ ...data, editRevision: 1, approver: 'owner', decision: 'rejected', notes: '' }),
+    /rejection notes are required/
+  );
 });
 
 test('render and approve CLI commands publish verified status and rejection exit 4', async (t) => {
   const data = await fixture();
   t.after(() => fs.rm(data.temporary, { recursive: true, force: true }));
-  const rendered = await execFile(process.execPath, [
-    cliPath, 'render', '--project-dir', data.projectRoot, '--run', data.run.id, '--edit', '1'
-  ], { cwd: packageDir });
+  const rendered = await execFile(
+    process.execPath,
+    [cliPath, 'render', '--project-dir', data.projectRoot, '--run', data.run.id, '--edit', '1'],
+    { cwd: packageDir }
+  );
   assert.equal(JSON.parse(rendered.stdout).status, 'rendered');
-  const approved = await execFile(process.execPath, [
-    cliPath, 'approve', '--project-dir', data.projectRoot, '--run', data.run.id, '--edit', '1',
-    '--approver', 'owner', '--decision', 'approved', '--notes', 'owner reviewed'
-  ], { cwd: packageDir });
+  const approved = await execFile(
+    process.execPath,
+    [
+      cliPath,
+      'approve',
+      '--project-dir',
+      data.projectRoot,
+      '--run',
+      data.run.id,
+      '--edit',
+      '1',
+      '--approver',
+      'owner',
+      '--decision',
+      'approved',
+      '--notes',
+      'owner reviewed'
+    ],
+    { cwd: packageDir }
+  );
   assert.equal(JSON.parse(approved.stdout).status, 'approved');
   await assert.rejects(
-    execFile(process.execPath, [
-      cliPath, 'approve', '--project-dir', data.projectRoot, '--run', data.run.id, '--edit', '1',
-      '--approver', 'owner', '--decision', 'rejected', '--notes', 'needs repair'
-    ], { cwd: packageDir }),
+    execFile(
+      process.execPath,
+      [
+        cliPath,
+        'approve',
+        '--project-dir',
+        data.projectRoot,
+        '--run',
+        data.run.id,
+        '--edit',
+        '1',
+        '--approver',
+        'owner',
+        '--decision',
+        'rejected',
+        '--notes',
+        'needs repair'
+      ],
+      { cwd: packageDir }
+    ),
     (error) => {
       assert.equal(error.code, 4);
       assert.equal(JSON.parse(error.stdout).status, 'rejected');

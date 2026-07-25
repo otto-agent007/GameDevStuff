@@ -21,14 +21,20 @@ function spriteFrame(index) {
   const width = 16;
   const height = 16;
   const pixels = Buffer.alloc(width * height * 4);
-  const colors = [[245, 158, 11], [70, 180, 220], [149, 204, 92]];
+  const colors = [
+    [245, 158, 11],
+    [70, 180, 220],
+    [149, 204, 92]
+  ];
   for (let y = 3; y < 13; y += 1) {
     for (let x = 4 + index; x < 11 + index; x += 1) {
       const offset = (y * width + x) * 4;
       pixels.set([...colors[index], 255], offset);
     }
   }
-  return sharp(pixels, { raw: { width, height, channels: 4 } }).png().toBuffer();
+  return sharp(pixels, { raw: { width, height, channels: 4 } })
+    .png()
+    .toBuffer();
 }
 
 async function startFixture(actionId = 'idle', { comparison = false } = {}) {
@@ -96,7 +102,12 @@ async function startFixture(actionId = 'idle', { comparison = false } = {}) {
         }))
       }
     : undefined;
-  studio = await startStudioServer({ projectDir: projectRoot, runId: run.id, stage: 'selection', comparisonWorkingEdit });
+  studio = await startStudioServer({
+    projectDir: projectRoot,
+    runId: run.id,
+    stage: 'selection',
+    comparisonWorkingEdit
+  });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -183,7 +194,9 @@ test('skips excluded frames in playback and transport', async ({ page }) => {
   await expect(page.locator('[data-frame-id="step-pass"]')).toContainText('Excluded');
 
   await page.getByRole('button', { name: 'Play', exact: true }).click();
-  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', { timeout: 180 });
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', {
+    timeout: 180
+  });
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
 
   await page.locator('[data-frame-id="step-pass"] .frame-thumb').click();
@@ -202,7 +215,9 @@ test('skips excluded frames in playback and transport', async ({ page }) => {
     return document.querySelector('[aria-current="true"]')?.dataset.frameId;
   });
   expect(replayedFrame).toBe('step-contact');
-  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', { timeout: 180 });
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', {
+    timeout: 180
+  });
 });
 
 test('uses active neighbors for onion skin and cycle seams', async ({ page }) => {
@@ -301,8 +316,8 @@ test('side-by-side preview is accessible and responsive', async ({ page }, testI
   if (testInfo.project.name === 'narrow') expect(aBox.y).toBeLessThan(bBox.y);
   else expect(aBox.x).toBeLessThan(bBox.x);
 
-  const overflow = await page.evaluate(() =>
-    document.documentElement.scrollWidth - document.documentElement.clientWidth
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth
   );
   expect(overflow).toBe(0);
 });
@@ -376,7 +391,9 @@ test('temporary inclusive loop range wraps a hold-last action', async ({ page })
 
   await page.getByRole('button', { name: 'Replay', exact: true }).click();
   await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-pass');
-  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', { timeout: 180 });
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', {
+    timeout: 180
+  });
   await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-pass', { timeout: 260 });
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();
 
@@ -385,9 +402,9 @@ test('temporary inclusive loop range wraps a hold-last action', async ({ page })
 });
 
 test('timing bars scale proportionally and edit authored duration accessibly', async ({ page }) => {
-  const widths = await page.locator('[data-frame-id] .timing-bar-fill').evaluateAll((bars) =>
-    bars.map((bar) => Number.parseFloat(getComputedStyle(bar).width))
-  );
+  const widths = await page
+    .locator('[data-frame-id] .timing-bar-fill')
+    .evaluateAll((bars) => bars.map((bar) => Number.parseFloat(getComputedStyle(bar).width)));
   expect(widths[0]).toBeLessThan(widths[1]);
   expect(widths[1]).toBeLessThan(widths[2]);
 
@@ -397,9 +414,9 @@ test('timing bars scale proportionally and edit authored duration accessibly', a
 
   await expect(page.getByText('560 ms total', { exact: true })).toBeVisible();
   await expect(page.locator('#review-b-state')).toContainText('Unsaved working copy');
-  const updatedWidths = await page.locator('[data-frame-id] .timing-bar-fill').evaluateAll((bars) =>
-    bars.map((bar) => Number.parseFloat(getComputedStyle(bar).width))
-  );
+  const updatedWidths = await page
+    .locator('[data-frame-id] .timing-bar-fill')
+    .evaluateAll((bars) => bars.map((bar) => Number.parseFloat(getComputedStyle(bar).width)));
   expect(updatedWidths[0]).toBeGreaterThan(updatedWidths[2]);
 
   for (const invalid of ['0', '65536', '1.5']) {
@@ -442,7 +459,9 @@ test('hold-last playback stops on the final authored frame', async ({ page }) =>
   await startFixture('unlock');
   await page.goto(studio.origin);
   await page.getByRole('button', { name: 'Play', exact: true }).click();
-  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', { timeout: 500 });
+  await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2', {
+    timeout: 500
+  });
   await page.waitForTimeout(250);
   await expect(page.locator('[aria-current="true"]')).toHaveAttribute('data-frame-id', 'step-contact-2');
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toHaveText('Play');
@@ -518,7 +537,9 @@ test('renders hashes and binds configured owner approval only to saved edits', a
   await expect(page.getByRole('status')).toContainText(/Approved selection revision \d+/);
   if (process.env.FRAME_STUDIO_SCREENSHOT_DIR) {
     await fs.mkdir(process.env.FRAME_STUDIO_SCREENSHOT_DIR, { recursive: true });
-    await page.locator('.inspector').evaluate((element) => { element.scrollTop = element.scrollHeight; });
+    await page.locator('.inspector').evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
     await page.screenshot({
       path: path.join(process.env.FRAME_STUDIO_SCREENSHOT_DIR, `approval-${testInfo.project.name}.png`),
       fullPage: true
@@ -529,11 +550,17 @@ test('renders hashes and binds configured owner approval only to saved edits', a
 test('fits desktop and narrow viewports with visible focus and reduced motion', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.reload();
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+  );
   expect(overflow).toBe(0);
   await page.getByRole('button', { name: 'Play', exact: true }).focus();
-  const outline = await page.getByRole('button', { name: 'Play', exact: true }).evaluate((element) => getComputedStyle(element).outlineStyle);
+  const outline = await page
+    .getByRole('button', { name: 'Play', exact: true })
+    .evaluate((element) => getComputedStyle(element).outlineStyle);
   expect(outline).not.toBe('none');
-  const transitions = await page.locator('.app-shell').evaluate((element) => getComputedStyle(element).transitionDuration);
+  const transitions = await page
+    .locator('.app-shell')
+    .evaluate((element) => getComputedStyle(element).transitionDuration);
   expect(transitions).toBe('0s');
 });

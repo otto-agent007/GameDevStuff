@@ -11,8 +11,10 @@ import { inspectAnimatedWebp } from './webp-container.mjs';
 const MAX_DECODED_RGBA = 512 * 1024 * 1024;
 
 function identify(bytes) {
-  if (bytes.subarray(0, 6).toString('ascii').startsWith('GIF8')) return { kind: 'gif', extension: 'gif', inspect: inspectGif };
-  if (bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) return { kind: 'apng', extension: 'png', inspect: inspectApng };
+  if (bytes.subarray(0, 6).toString('ascii').startsWith('GIF8'))
+    return { kind: 'gif', extension: 'gif', inspect: inspectGif };
+  if (bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')))
+    return { kind: 'apng', extension: 'png', inspect: inspectApng };
   if (bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP') {
     return { kind: 'webp', extension: 'webp', inspect: inspectAnimatedWebp };
   }
@@ -43,9 +45,12 @@ async function decodeSharpPages(bytes, inspection) {
     info.height !== inspection.canvas.height * inspection.frames.length ||
     info.channels !== 4 ||
     data.length !== inspection.canvas.width * inspection.canvas.height * 4 * inspection.frames.length
-  ) throw new Error('animated image decoder page-count or canvas mismatch');
+  )
+    throw new Error('animated image decoder page-count or canvas mismatch');
   const pageBytes = inspection.canvas.width * inspection.canvas.height * 4;
-  return Array.from({ length: inspection.frames.length }, (_, index) => Buffer.from(data.subarray(index * pageBytes, (index + 1) * pageBytes)));
+  return Array.from({ length: inspection.frames.length }, (_, index) =>
+    Buffer.from(data.subarray(index * pageBytes, (index + 1) * pageBytes))
+  );
 }
 
 function alphaOver(destination, destinationOffset, source, sourceOffset) {
@@ -60,7 +65,8 @@ function alphaOver(destination, destinationOffset, source, sourceOffset) {
   const outputAlphaNumerator = sourceAlpha * 255 + destinationAlpha * inverseSource;
   const outputAlpha = Math.round(outputAlphaNumerator / 255);
   for (let channel = 0; channel < 3; channel += 1) {
-    const premultiplied = source[sourceOffset + channel] * sourceAlpha * 255 +
+    const premultiplied =
+      source[sourceOffset + channel] * sourceAlpha * 255 +
       destination[destinationOffset + channel] * destinationAlpha * inverseSource;
     destination[destinationOffset + channel] = Math.round(premultiplied / outputAlphaNumerator);
   }
@@ -69,7 +75,8 @@ function alphaOver(destination, destinationOffset, source, sourceOffset) {
 
 async function decodeApngPages(bytes, inspection) {
   const extracted = extractApngSubframes(bytes);
-  if (JSON.stringify(extracted.inspection) !== JSON.stringify(inspection)) throw new Error('APNG parser result changed during decode');
+  if (JSON.stringify(extracted.inspection) !== JSON.stringify(inspection))
+    throw new Error('APNG parser result changed during decode');
   const { width, height } = inspection.canvas;
   let canvas = Buffer.alloc(width * height * 4);
   const pages = [];
@@ -122,12 +129,12 @@ export async function decodeAnimatedImage({ source, run }) {
   });
   const bytes = await fs.readFile(copied.path);
   const selected = identify(bytes);
-  if (run?.document?.sourceRequest?.kind !== selected.kind) throw new Error('animated image format does not match the immutable run request');
+  if (run?.document?.sourceRequest?.kind !== selected.kind)
+    throw new Error('animated image format does not match the immutable run request');
   const inspection = selected.inspect(bytes);
   assertDecodeBound(inspection);
-  const pages = selected.kind === 'apng'
-    ? await decodeApngPages(bytes, inspection)
-    : await decodeSharpPages(bytes, inspection);
+  const pages =
+    selected.kind === 'apng' ? await decodeApngPages(bytes, inspection) : await decodeSharpPages(bytes, inspection);
 
   const diagnostics = [];
   const firstByHash = new Map();
@@ -144,7 +151,12 @@ export async function decodeAnimatedImage({ source, run }) {
     if (duplicateOf === null) firstByHash.set(hash, id);
     else diagnostics.push({ code: 'DUPLICATE_FRAME', frameId: id });
     if (state.empty) diagnostics.push({ code: 'EMPTY_FRAME', frameId: id });
-    if (metadata.rect.x !== 0 || metadata.rect.y !== 0 || metadata.rect.width !== inspection.canvas.width || metadata.rect.height !== inspection.canvas.height) {
+    if (
+      metadata.rect.x !== 0 ||
+      metadata.rect.y !== 0 ||
+      metadata.rect.width !== inspection.canvas.width ||
+      metadata.rect.height !== inspection.canvas.height
+    ) {
       diagnostics.push({ code: 'PARTIAL_SOURCE_RECT', frameId: id });
     }
     if (metadata.dispose === 'background') diagnostics.push({ code: 'DISPOSAL_RESTORE_BACKGROUND', frameId: id });
@@ -179,9 +191,10 @@ export async function decodeAnimatedImage({ source, run }) {
     decoder: {
       name: `${selected.kind}-container-v${inspection.parserVersion}+sharp-rgba`,
       version: `sharp=${sharp.versions.sharp};vips=${sharp.versions.vips}`,
-      arguments: selected.kind === 'apng'
-        ? ['crc-and-sequence-validated-subframes', 'rgba-source-over-composite']
-        : ['animated=true', 'pages=-1', 'ensureAlpha', 'raw']
+      arguments:
+        selected.kind === 'apng'
+          ? ['crc-and-sequence-validated-subframes', 'rgba-source-over-composite']
+          : ['animated=true', 'pages=-1', 'ensureAlpha', 'raw']
     },
     canvas: inspection.canvas,
     alpha,

@@ -1,11 +1,4 @@
-import {
-  deepFreeze,
-  exactObject,
-  integer,
-  portableId,
-  sha256Value,
-  uniqueList
-} from './schema.mjs';
+import { deepFreeze, exactObject, integer, portableId, sha256Value, uniqueList } from './schema.mjs';
 
 const CONTRACT_FIELDS = [
   'schemaVersion',
@@ -39,9 +32,7 @@ function validateBackground(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('pose-board background must be an object');
   }
-  const fields = value.mode === 'color'
-    ? ['mode', 'rgba', 'tolerance']
-    : ['mode', 'tolerance'];
+  const fields = value.mode === 'color' ? ['mode', 'rgba', 'tolerance'] : ['mode', 'tolerance'];
   if (Object.hasOwn(value, 'spill')) fields.push('spill');
   if (value.mode === 'color') {
     exactObject(value, fields, 'pose-board background');
@@ -54,11 +45,7 @@ function validateBackground(value) {
   integer(value.tolerance, 'pose-board background tolerance', { min: 0, max: 255 });
   if (Object.hasOwn(value, 'spill')) {
     exactObject(value.spill, ['minimumDominance'], 'pose-board chroma spill');
-    integer(
-      value.spill.minimumDominance,
-      'pose-board chroma spill minimumDominance',
-      { min: 1, max: 255 }
-    );
+    integer(value.spill.minimumDominance, 'pose-board chroma spill minimumDominance', { min: 1, max: 255 });
   }
 }
 

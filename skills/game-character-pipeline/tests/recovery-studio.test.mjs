@@ -15,7 +15,7 @@ const projectFixture = path.join(packageDir, 'tests', 'fixtures', 'project.valid
 const BACKGROUND = [0, 255, 0, 255];
 
 function writePixel(pixels, width, x, y, rgba) {
-  pixels.set(rgba, ((y * width) + x) * 4);
+  pixels.set(rgba, (y * width + x) * 4);
 }
 
 async function writeBoard(file) {
@@ -24,13 +24,41 @@ async function writeBoard(file) {
   const pixels = Buffer.alloc(width * height * 4);
   for (let offset = 0; offset < pixels.length; offset += 4) pixels.set(BACKGROUND, offset);
   for (const [color, points] of [
-    [[214, 30, 42, 255], [[4, 1], [5, 1], [6, 1], [7, 1], [5, 2], [6, 2]]],
-    [[44, 77, 221, 255], [[0, 4], [1, 4], [2, 4], [1, 5]]],
-    [[248, 198, 34, 255], [[9, 5], [10, 5], [9, 6], [10, 6]]]
+    [
+      [214, 30, 42, 255],
+      [
+        [4, 1],
+        [5, 1],
+        [6, 1],
+        [7, 1],
+        [5, 2],
+        [6, 2]
+      ]
+    ],
+    [
+      [44, 77, 221, 255],
+      [
+        [0, 4],
+        [1, 4],
+        [2, 4],
+        [1, 5]
+      ]
+    ],
+    [
+      [248, 198, 34, 255],
+      [
+        [9, 5],
+        [10, 5],
+        [9, 6],
+        [10, 6]
+      ]
+    ]
   ]) {
     for (const [x, y] of points) writePixel(pixels, width, x, y, color);
   }
-  await sharp(pixels, { raw: { width, height, channels: 4 } }).png().toFile(file);
+  await sharp(pixels, { raw: { width, height, channels: 4 } })
+    .png()
+    .toFile(file);
 }
 
 async function recoveryFixture(t) {
@@ -39,17 +67,20 @@ async function recoveryFixture(t) {
   const source = path.join(root, 'board.png');
   const contract = path.join(root, 'recovery.json');
   await writeBoard(source);
-  await fs.writeFile(contract, JSON.stringify({
-    schemaVersion: 1,
-    background: { mode: 'color', rgba: BACKGROUND, tolerance: 8 },
-    connectivity: 4,
-    minimumComponentPixels: 4,
-    maxDecodedRgbaBytes: 1024 * 1024,
-    padding: 2,
-    expectedCandidates: { min: 3, max: 3 },
-    allowUnassigned: false,
-    groups: []
-  }));
+  await fs.writeFile(
+    contract,
+    JSON.stringify({
+      schemaVersion: 1,
+      background: { mode: 'color', rgba: BACKGROUND, tolerance: 8 },
+      connectivity: 4,
+      minimumComponentPixels: 4,
+      maxDecodedRgbaBytes: 1024 * 1024,
+      padding: 2,
+      expectedCandidates: { min: 3, max: 3 },
+      allowUnassigned: false,
+      groups: []
+    })
+  );
   const projectRoot = path.join(root, 'project');
   const project = await createProject({ root: projectRoot, contractFile: projectFixture });
   const run = await createRun({
@@ -90,7 +121,7 @@ function selectionValue(fixture) {
     frames: fixture.recovery.document.candidates.map((candidate, index) => ({
       id: `stride-${String(index + 1).padStart(2, '0')}`,
       candidateId: candidate.id,
-      durationMs: 80 + (index * 20),
+      durationMs: 80 + index * 20,
       tracks: [{ role: 'actor', componentIds: candidate.componentIds }]
     }))
   };
@@ -141,15 +172,10 @@ test('recovery Studio only serves hash-allowlisted immutable images', async (t) 
     Buffer.from(await image.arrayBuffer()),
     await fs.readFile(path.join(fixture.run.root, candidate.path))
   );
-  const overlay = await fetch(
-    `${studio.origin}/api/overlay/${fixture.recovery.document.overlay.sha256}`
-  );
+  const overlay = await fetch(`${studio.origin}/api/overlay/${fixture.recovery.document.overlay.sha256}`);
   assert.equal(overlay.status, 200);
   assert.equal((await fetch(`${studio.origin}/api/candidate/${'f'.repeat(64)}`)).status, 404);
-  assert.equal(
-    (await fetch(`${studio.origin}/api/candidate/%2e%2e%2freports%2fpose-board-recovery.json`)).status,
-    404
-  );
+  assert.equal((await fetch(`${studio.origin}/api/candidate/%2e%2e%2freports%2fpose-board-recovery.json`)).status, 404);
 
   await fs.appendFile(path.join(fixture.run.root, candidate.path), Buffer.from([0]));
   const changed = await responseJson(`${studio.origin}/api/candidate/${candidate.sha256}`);
@@ -167,43 +193,50 @@ test('recovery Studio rejects unsafe mutations and serializes selection revision
   const session = (await responseJson(`${studio.origin}/api/recovery-session`)).body;
   const selection = selectionValue(fixture);
 
+  assert.equal((await fetch(`${studio.origin}/api/recovery-session`, { method: 'POST' })).status, 405);
   assert.equal(
-    (await fetch(`${studio.origin}/api/recovery-session`, { method: 'POST' })).status,
-    405
+    (
+      await fetch(`${studio.origin}/api/pose-selections`, {
+        method: 'PUT',
+        headers: { Origin: studio.origin, 'If-Match': session.selectionSha256 },
+        body: '{}'
+      })
+    ).status,
+    415
   );
-  assert.equal((await fetch(`${studio.origin}/api/pose-selections`, {
-    method: 'PUT',
-    headers: { Origin: studio.origin, 'If-Match': session.selectionSha256 },
-    body: '{}'
-  })).status, 415);
-  assert.equal((await fetch(`${studio.origin}/api/pose-selections`, {
-    method: 'PUT',
-    headers: mutationHeaders('https://attacker.invalid', session.selectionSha256),
-    body: JSON.stringify(selection)
-  })).status, 403);
-  assert.equal((await fetch(`${studio.origin}/api/pose-selections`, {
-    method: 'PUT',
-    headers: mutationHeaders(studio.origin, session.selectionSha256),
-    body: JSON.stringify({ payload: 'x'.repeat(1024 * 1024) })
-  })).status, 413);
+  assert.equal(
+    (
+      await fetch(`${studio.origin}/api/pose-selections`, {
+        method: 'PUT',
+        headers: mutationHeaders('https://attacker.invalid', session.selectionSha256),
+        body: JSON.stringify(selection)
+      })
+    ).status,
+    403
+  );
+  assert.equal(
+    (
+      await fetch(`${studio.origin}/api/pose-selections`, {
+        method: 'PUT',
+        headers: mutationHeaders(studio.origin, session.selectionSha256),
+        body: JSON.stringify({ payload: 'x'.repeat(1024 * 1024) })
+      })
+    ).status,
+    413
+  );
 
-  const request = () => responseJson(`${studio.origin}/api/pose-selections`, {
-    method: 'PUT',
-    headers: mutationHeaders(studio.origin, session.selectionSha256),
-    body: JSON.stringify(selection)
-  });
+  const request = () =>
+    responseJson(`${studio.origin}/api/pose-selections`, {
+      method: 'PUT',
+      headers: mutationHeaders(studio.origin, session.selectionSha256),
+      body: JSON.stringify(selection)
+    });
   const concurrent = await Promise.all([request(), request()]);
-  assert.deepEqual(
-    concurrent.map(({ response }) => response.status).sort(),
-    [200, 409]
-  );
+  assert.deepEqual(concurrent.map(({ response }) => response.status).sort(), [200, 409]);
   const saved = concurrent.find(({ response }) => response.status === 200).body;
   assert.equal(saved.revision, 1);
   assert.match(saved.sha256, /^[a-f0-9]{64}$/);
-  assert.deepEqual(
-    await fs.readdir(path.join(fixture.run.root, 'edits')),
-    ['pose-selection-0001.json']
-  );
+  assert.deepEqual(await fs.readdir(path.join(fixture.run.root, 'edits')), ['pose-selection-0001.json']);
 
   const approval = await responseJson(`${studio.origin}/api/pose-selection-approval`, {
     method: 'POST',
@@ -217,11 +250,7 @@ test('recovery Studio rejects unsafe mutations and serializes selection revision
   assert.equal(approval.response.status, 200);
   assert.equal(approval.body.decision, 'approved');
   assert.equal(
-    (await fs.lstat(path.join(
-      fixture.run.root,
-      'approved',
-      'pose-selection-approval-0001.json'
-    ))).isFile(),
+    (await fs.lstat(path.join(fixture.run.root, 'approved', 'pose-selection-approval-0001.json'))).isFile(),
     true
   );
 });

@@ -49,16 +49,19 @@ function validateMarker(marker, { project, action }) {
   validatePoint({ x: marker.x, y: marker.y }, 'edit marker logical canvas point', project.canvas);
   if (marker.kind === 'root-pivot' && marker.id !== 'root') throw new Error('root pivot marker ID must be root');
   if (marker.kind === 'baseline' && marker.id !== 'baseline') throw new Error('baseline marker ID must be baseline');
-  if (marker.kind === 'prop-grip' && marker.id !== 'prop-grip') throw new Error('prop grip marker ID must be prop-grip');
+  if (marker.kind === 'prop-grip' && marker.id !== 'prop-grip')
+    throw new Error('prop grip marker ID must be prop-grip');
   if (marker.kind === 'socket') {
     const known = project.sockets.some(({ id }) => id === marker.id);
     if (!known) throw new Error(`edit marker references an unknown socket: ${marker.id}`);
-    if (!action.sockets.includes(marker.id)) throw new Error(`edit marker socket is not used by the action: ${marker.id}`);
+    if (!action.sockets.includes(marker.id))
+      throw new Error(`edit marker socket is not used by the action: ${marker.id}`);
   }
   if (marker.kind === 'planted-foot') {
     const known = project.contacts.some(({ id }) => id === marker.id);
     if (!known) throw new Error(`edit marker references an unknown contact: ${marker.id}`);
-    if (!action.contacts.includes(marker.id)) throw new Error(`edit marker contact is not used by the action: ${marker.id}`);
+    if (!action.contacts.includes(marker.id))
+      throw new Error(`edit marker contact is not used by the action: ${marker.id}`);
   }
   return marker;
 }
@@ -78,7 +81,8 @@ export function validateEditManifest(value, context = {}) {
   if (!source || !Array.isArray(source.frames)) throw new Error('edit validation requires a motion source');
   const sourceSha256 = sha256Value(source);
   exactObject(edit, ['schemaVersion', 'kind', 'projectSha256', 'sourceSha256', 'actionId', 'frames'], 'edit manifest');
-  if (edit.schemaVersion !== 1 || edit.kind !== 'frame-studio-edit') throw new Error('edit manifest identity is invalid');
+  if (edit.schemaVersion !== 1 || edit.kind !== 'frame-studio-edit')
+    throw new Error('edit manifest identity is invalid');
   if (hash(edit.projectSha256, 'edit project hash') !== projectSha256) throw new Error('edit project hash mismatch');
   if (hash(edit.sourceSha256, 'edit source hash') !== sourceSha256) throw new Error('edit source hash mismatch');
   portableId(edit.actionId, 'edit action ID');
@@ -92,10 +96,22 @@ export function validateEditManifest(value, context = {}) {
   for (const [index, frame] of edit.frames.entries()) {
     exactObject(
       frame,
-      ['frameId', 'included', 'label', 'durationMs', 'translation', 'transform', 'markers', 'contacts', 'groundTravel', 'tracks'],
+      [
+        'frameId',
+        'included',
+        'label',
+        'durationMs',
+        'translation',
+        'transform',
+        'markers',
+        'contacts',
+        'groundTravel',
+        'tracks'
+      ],
       'edit frame'
     );
-    if (frame.frameId !== source.frames[index].id) throw new Error('edit frames must provide exact source coverage in exact source order');
+    if (frame.frameId !== source.frames[index].id)
+      throw new Error('edit frames must provide exact source coverage in exact source order');
     portableId(frame.frameId, 'edit frame ID');
     if (typeof frame.included !== 'boolean') throw new Error('edit frame included must be a boolean');
     text(frame.label, 'edit frame label', { empty: true });
@@ -106,14 +122,16 @@ export function validateEditManifest(value, context = {}) {
     validateTransform(frame.transform);
     const serializedTransform = JSON.stringify(frame.transform);
     if (clipTransform === undefined) clipTransform = serializedTransform;
-    else if (clipTransform !== serializedTransform) throw new Error('edit frame transform must be one integer global transform for the entire clip');
+    else if (clipTransform !== serializedTransform)
+      throw new Error('edit frame transform must be one integer global transform for the entire clip');
 
     uniqueList(frame.markers, 'edit frame markers', { min: 0, key: ({ kind, id }) => `${kind}:${id}` });
     for (const marker of frame.markers) validateMarker(marker, { project, action });
     uniqueList(frame.contacts, 'edit frame contacts', { min: 0 });
     for (const contact of frame.contacts) {
       portableId(contact, 'edit frame contact ID');
-      if (!action.contacts.includes(contact)) throw new Error(`edit frame references an unknown action contact: ${contact}`);
+      if (!action.contacts.includes(contact))
+        throw new Error(`edit frame references an unknown action contact: ${contact}`);
     }
     exactObject(frame.groundTravel, ['x', 'y'], 'edit frame groundTravel');
     integer(frame.groundTravel.x, 'edit frame groundTravel x', { min: -16384, max: 16384 });
@@ -144,8 +162,9 @@ async function readVerifiedFrame(runRoot, frame) {
     throw new Error('render source frame escaped the run root');
   }
   const stat = await fs.lstat(physical);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new Error('render source frame must be a regular single-link file');
-  if (await sha256File(physical) !== frame.sha256) throw new Error('render source frame hash mismatch');
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1)
+    throw new Error('render source frame must be a regular single-link file');
+  if ((await sha256File(physical)) !== frame.sha256) throw new Error('render source frame hash mismatch');
   return fs.readFile(physical);
 }
 
@@ -155,7 +174,10 @@ async function transformedRgba(bytes, frame, canvas) {
   if (transform) {
     const turns = ((transform.rotationQuarterTurns % 4) + 4) % 4;
     if (turns) {
-      decoded = await sharp(decoded.data, { raw: decoded.info }).rotate(turns * 90).raw().toBuffer({ resolveWithObject: true });
+      decoded = await sharp(decoded.data, { raw: decoded.info })
+        .rotate(turns * 90)
+        .raw()
+        .toBuffer({ resolveWithObject: true });
     }
     if (transform.scale !== 1) {
       decoded = await sharp(decoded.data, { raw: decoded.info })
@@ -216,6 +238,11 @@ export async function renderEditRevision({ run, project, source, edit, allowGlob
     canvas: structuredClone(source.canvas),
     frames: renderedFrames
   };
-  const written = await writeImmutableJson({ root: run.root, relative: `${root}/manifest.json`, value: manifest, reuse: true });
+  const written = await writeImmutableJson({
+    root: run.root,
+    relative: `${root}/manifest.json`,
+    value: manifest,
+    reuse: true
+  });
   return deepFreeze({ ...manifest, path: written.relative, sha256: written.sha256 });
 }

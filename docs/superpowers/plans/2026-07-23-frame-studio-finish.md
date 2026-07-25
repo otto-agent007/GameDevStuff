@@ -24,10 +24,12 @@
 ### Task 1: Pure review-state model
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/studio/review-state.mjs`
 - Create: `skills/game-character-pipeline/tests/review-state.test.mjs`
 
 **Interfaces:**
+
 - Produces: `cloneFrameState(frames) -> Frame[]`
 - Produces: `activeIndices(frames) -> number[]`
 - Produces: `playbackIndices(frames, range) -> number[]`
@@ -91,7 +93,7 @@ const SPEEDS = new Set([0.25, 0.5, 1, 2]);
 export const cloneFrameState = (frames) => structuredClone(frames ?? []);
 
 export const activeIndices = (frames) =>
-  (frames ?? []).flatMap((frame, index) => frame.included !== false ? [index] : []);
+  (frames ?? []).flatMap((frame, index) => (frame.included !== false ? [index] : []));
 
 export function playbackIndices(frames, range = {}) {
   const start = Number.isInteger(range.in) ? range.in : 0;
@@ -131,6 +133,7 @@ git commit -m "feat: model frame studio review state"
 ### Task 2: Immutable A/B auditioning
 
 **Files:**
+
 - Modify: `skills/game-character-pipeline/studio/index.html`
 - Modify: `skills/game-character-pipeline/studio/app.mjs`
 - Modify: `skills/game-character-pipeline/studio/markers.mjs`
@@ -139,6 +142,7 @@ git commit -m "feat: model frame studio review state"
 - Test: `skills/game-character-pipeline/tests/browser/frame-studio.spec.mjs`
 
 **Interfaces:**
+
 - Consumes: `cloneFrameState(frames)`
 - Produces: `markerAuthoring.setDisabled(disabled)`
 - Produces: `FrameTimeline.readOnly`
@@ -185,8 +189,14 @@ Add a `review-card` containing native buttons with `aria-pressed`, plus revision
     <button id="review-b" type="button" aria-pressed="true">Review B</button>
   </div>
   <dl class="review-state-list">
-    <div><dt>A</dt><dd id="review-a-state"></dd></div>
-    <div><dt>B</dt><dd id="review-b-state"></dd></div>
+    <div>
+      <dt>A</dt>
+      <dd id="review-a-state"></dd>
+    </div>
+    <div>
+      <dt>B</dt>
+      <dd id="review-b-state"></dd>
+    </div>
   </dl>
 </section>
 ```
@@ -217,6 +227,7 @@ git commit -m "feat: add frame studio A/B auditioning"
 ### Task 3: Review speed and inclusive loop range
 
 **Files:**
+
 - Modify: `skills/game-character-pipeline/studio/index.html`
 - Modify: `skills/game-character-pipeline/studio/app.mjs`
 - Modify: `skills/game-character-pipeline/studio/timeline.mjs`
@@ -224,6 +235,7 @@ git commit -m "feat: add frame studio A/B auditioning"
 - Test: `skills/game-character-pipeline/tests/browser/frame-studio.spec.mjs`
 
 **Interfaces:**
+
 - Consumes: `playbackIndices(frames, range)`, `nextPlaybackIndex(indices, currentIndex)`, `reviewDelay(durationMs, speed)`
 - Produces: `FrameTimeline.rangeIn` and `FrameTimeline.rangeOut`
 
@@ -271,12 +283,14 @@ git commit -m "feat: add frame studio review range controls"
 ### Task 4: Proportional timing bars and timeline duration editing
 
 **Files:**
+
 - Modify: `skills/game-character-pipeline/studio/timeline.mjs`
 - Modify: `skills/game-character-pipeline/studio/app.mjs`
 - Modify: `skills/game-character-pipeline/studio/styles.css`
 - Test: `skills/game-character-pipeline/tests/browser/frame-studio.spec.mjs`
 
 **Interfaces:**
+
 - Produces: `frame-duration` event `{ index, durationMs }`
 
 - [x] **Step 1: Write failing browser tests**
@@ -300,7 +314,7 @@ For each timeline row, render:
 ```html
 <label class="timeline-duration-field">
   <span>Timing</span>
-  <input type="number" min="1" max="65535" step="1">
+  <input type="number" min="1" max="65535" step="1" />
 </label>
 <span class="timing-bar" aria-hidden="true"><span></span></span>
 ```
@@ -329,6 +343,7 @@ git commit -m "feat: visualize frame studio timing"
 ### Task 5: Motion-path and grounding diagnostics
 
 **Files:**
+
 - Create: `skills/game-character-pipeline/studio/motion-diagnostics.mjs`
 - Create: `skills/game-character-pipeline/tests/motion-diagnostics.test.mjs`
 - Modify: `skills/game-character-pipeline/studio/index.html`
@@ -338,6 +353,7 @@ git commit -m "feat: visualize frame studio timing"
 - Test: `skills/game-character-pipeline/tests/browser/frame-studio.spec.mjs`
 
 **Interfaces:**
+
 - Produces: `analyzeMotion(frames, canvas) -> { rootPath, footPaths, issues }`
 - Produces: `renderMotionDiagnostics(root, analysis, onSelect)`
 
@@ -394,10 +410,12 @@ git commit -m "feat: diagnose frame studio motion"
 ### Task 6: Full rendered verification and documentation
 
 **Files:**
+
 - Modify: `skills/game-character-pipeline/references/frame-studio.md`
 - Modify: `docs/superpowers/plans/2026-07-23-frame-studio-finish.md`
 
 **Interfaces:**
+
 - Consumes all prior tasks.
 
 - [x] **Step 1: Document completed review controls**

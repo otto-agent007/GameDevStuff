@@ -48,7 +48,10 @@ test('motion analysis plots active world-space root and planted-foot paths', () 
     { frameIndex: 0, frameId: 'contact-a', x: 4, y: 10 },
     { frameIndex: 2, frameId: 'contact-b', x: 4, y: 10 }
   ]);
-  assert.equal(analysis.issues.some(({ type }) => type === 'foot-slide'), false);
+  assert.equal(
+    analysis.issues.some(({ type }) => type === 'foot-slide'),
+    false
+  );
 });
 
 test('motion analysis reports continuous foot slide and missing authored markers', () => {

@@ -29,7 +29,8 @@ export async function decodePngArtifact({ run, sourceRelative, frameId, duration
   const source = path.join(run.root, ...sourceRelative.split('/'));
   const bytes = await fs.readFile(source);
   const metadata = await sharp(bytes, { limitInputPixels: 268435456 }).metadata();
-  if (metadata.format !== 'png' || (metadata.pages ?? 1) !== 1) throw new Error('PNG sequence source must be one PNG image');
+  if (metadata.format !== 'png' || (metadata.pages ?? 1) !== 1)
+    throw new Error('PNG sequence source must be one PNG image');
   const { data, info } = await sharp(bytes, { limitInputPixels: 268435456 })
     .ensureAlpha()
     .raw()
@@ -93,12 +94,14 @@ export async function decodePngSequence({ manifest, run, files }) {
       relative: `source/png-sequence/frames/${definition.id}.png`
     });
     sources.push({ id: definition.id, sha256: copied.sha256 });
-    decoded.push(await decodePngArtifact({
-      run,
-      sourceRelative: copied.relative,
-      frameId: definition.id,
-      durationMs: definition.durationMs
-    }));
+    decoded.push(
+      await decodePngArtifact({
+        run,
+        sourceRelative: copied.relative,
+        frameId: definition.id,
+        durationMs: definition.durationMs
+      })
+    );
   }
 
   const [first] = decoded;

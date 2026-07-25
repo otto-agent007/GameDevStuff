@@ -74,6 +74,7 @@
 ### Task 1: Shared State Authentication and Configuration Provenance
 
 **Files:**
+
 - Create: `skills/pixel-sprite-animation-pipeline/scripts/lib/state-auth.mjs`
 - Create: `skills/pixel-sprite-animation-pipeline/tests/state-auth.test.mjs`
 - Modify: `skills/pixel-sprite-animation-pipeline/scripts/lib/config.mjs`
@@ -82,6 +83,7 @@
 - Modify: `skills/pixel-sprite-animation-pipeline/tests/contract.test.mjs`
 
 **Interfaces:**
+
 - Produces: `stableHash(value)`, `writeSignedState({ projectDir, file, domain, payload, createKey })`, and `readSignedState({ projectDir, file, domain })`.
 - Produces: `loadConfigWithProvenance(options) -> { config, provenance: { snapperExecutable: 'default'|'profile'|'override' } }`.
 - Preserves: `loadConfig(options) -> config` and all existing correction-contract behavior.
@@ -92,8 +94,16 @@
 test('signed state is domain-separated and fails after payload tampering', async () => {
   const projectDir = await secureProject('state-auth-');
   const file = path.join(projectDir, '.pixel-sprite-pipeline', 'receipt.json');
-  await writeSignedState({ projectDir, file, domain: 'pixel-sprite-snap/v1', payload: { runId: 'run-1' }, createKey: true });
-  assert.deepEqual((await readSignedState({ projectDir, file, domain: 'pixel-sprite-snap/v1' })).payload, { runId: 'run-1' });
+  await writeSignedState({
+    projectDir,
+    file,
+    domain: 'pixel-sprite-snap/v1',
+    payload: { runId: 'run-1' },
+    createKey: true
+  });
+  assert.deepEqual((await readSignedState({ projectDir, file, domain: 'pixel-sprite-snap/v1' })).payload, {
+    runId: 'run-1'
+  });
   const changed = JSON.parse(await fs.readFile(file, 'utf8'));
   changed.payload.runId = 'run-2';
   await fs.writeFile(file, JSON.stringify(changed));
@@ -103,7 +113,10 @@ test('signed state is domain-separated and fails after payload tampering', async
 test('config records whether snapper executable was explicitly selected', async () => {
   const plain = await loadConfigWithProvenance({ cwd: fixtureDir });
   assert.equal(plain.provenance.snapperExecutable, 'default');
-  const explicit = await loadConfigWithProvenance({ cwd: fixtureDir, overrides: { snapper: { executable: '/trusted/snapper' } } });
+  const explicit = await loadConfigWithProvenance({
+    cwd: fixtureDir,
+    overrides: { snapper: { executable: '/trusted/snapper' } }
+  });
   assert.equal(explicit.provenance.snapperExecutable, 'override');
 });
 ```
@@ -118,12 +131,19 @@ Expected: FAIL because `state-auth.mjs` and `loadConfigWithProvenance` do not ex
 
 ```js
 export function stableHash(value) {
-  return crypto.createHash('sha256').update(JSON.stringify(stable(value))).digest('hex');
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(stable(value)))
+    .digest('hex');
 }
 
 export async function writeSignedState({ projectDir, file, domain, payload, createKey = false }) {
   const key = await signingKey(projectDir, { create: createKey });
-  const signature = crypto.createHmac('sha256', key).update(`${domain}\0`).update(JSON.stringify(stable(payload))).digest('hex');
+  const signature = crypto
+    .createHmac('sha256', key)
+    .update(`${domain}\0`)
+    .update(JSON.stringify(stable(payload)))
+    .digest('hex');
   const document = { version: 1, payload, signature };
   await atomicNew(file, `${JSON.stringify(document, null, 2)}\n`);
   return { document, sha256: stableHash(document) };
@@ -132,10 +152,15 @@ export async function writeSignedState({ projectDir, file, domain, payload, crea
 export async function readSignedState({ projectDir, file, domain }) {
   const key = await signingKey(projectDir);
   const document = JSON.parse(await fs.readFile(file, 'utf8'));
-  const expected = crypto.createHmac('sha256', key).update(`${domain}\0`).update(JSON.stringify(stable(document.payload))).digest('hex');
+  const expected = crypto
+    .createHmac('sha256', key)
+    .update(`${domain}\0`)
+    .update(JSON.stringify(stable(document.payload)))
+    .digest('hex');
   const left = Buffer.from(document.signature ?? '', 'hex');
   const right = Buffer.from(expected, 'hex');
-  if (document.version !== 1 || left.length !== right.length || !crypto.timingSafeEqual(left, right)) throw new Error('signed state signature mismatch');
+  if (document.version !== 1 || left.length !== right.length || !crypto.timingSafeEqual(left, right))
+    throw new Error('signed state signature mismatch');
   return { ...document, sha256: stableHash(document) };
 }
 ```
@@ -148,9 +173,15 @@ Move the current ownership, mode, link-count, symlink, concurrent-key-creation, 
 export async function loadConfigWithProvenance({ cwd, profilePath, overrides = {} }) {
   const selected = profilePath ?? path.join(cwd, '.pixel-sprite-pipeline', 'profile.yaml');
   const profile = await readProfile(selected);
-  const source = Object.hasOwn(overrides.snapper ?? {}, 'executable') ? 'override'
-    : Object.hasOwn(profile.snapper ?? {}, 'executable') ? 'profile' : 'default';
-  return { config: validateConfig(merge(merge(DEFAULT_CONFIG, profile), overrides)), provenance: deepFreeze({ snapperExecutable: source }) };
+  const source = Object.hasOwn(overrides.snapper ?? {}, 'executable')
+    ? 'override'
+    : Object.hasOwn(profile.snapper ?? {}, 'executable')
+      ? 'profile'
+      : 'default';
+  return {
+    config: validateConfig(merge(merge(DEFAULT_CONFIG, profile), overrides)),
+    provenance: deepFreeze({ snapperExecutable: source })
+  };
 }
 
 export async function loadConfig(options) {
@@ -176,6 +207,7 @@ git commit -m "refactor: share authenticated pipeline state"
 ### Task 2: Tool Manifest, Platform Mapping, and Truthful Binary Identity
 
 **Files:**
+
 - Create: `skills/pixel-sprite-animation-pipeline/scripts/lib/tool-manifest.mjs`
 - Create: `skills/pixel-sprite-animation-pipeline/scripts/lib/tool-identity.mjs`
 - Create: `skills/pixel-sprite-animation-pipeline/tests/tool-manifest.test.mjs`
@@ -185,6 +217,7 @@ git commit -m "refactor: share authenticated pipeline state"
 - Modify: `skills/pixel-sprite-animation-pipeline/tests/snapper.test.mjs`
 
 **Interfaces:**
+
 - Produces: `validateToolManifest(document)`, `platformKey({ platform, arch })`, and `selectToolAsset(manifest, platform)`.
 - Produces: `resolvePixelSnapper({ projectDir, config, configProvenance, manifest, env, pathValue })`.
 - Produces identity `{ origin, path, physicalPath, size, sha256, version, helpSha256, fixtureRgbaSha256, pinnedReleaseTag, upstreamCommit }`.
@@ -237,7 +270,8 @@ export function platformKey({ platform = process.platform, arch = process.arch }
 
 export function validateToolManifest(input) {
   assertClosedObject(input, ['schemaVersion', 'release', 'upstream', 'build', 'fixture', 'assets']);
-  if (input.schemaVersion !== 1 || !FULL_SHA.test(input.upstream.commit) || !FULL_SHA.test(input.build.workflowCommit)) throw new Error('invalid pinned Pixel Snapper manifest');
+  if (input.schemaVersion !== 1 || !FULL_SHA.test(input.upstream.commit) || !FULL_SHA.test(input.build.workflowCommit))
+    throw new Error('invalid pinned Pixel Snapper manifest');
   for (const target of Object.values(TARGETS)) validateAsset(input.assets[target], target);
   return deepFreeze(structuredClone(input));
 }
@@ -248,12 +282,22 @@ The fixture manifest uses 64-character synthetic hashes and local fixture archiv
 - [ ] **Step 4: Implement deterministic resolution and identity inspection**
 
 ```js
-export async function resolvePixelSnapper({ projectDir, config, configProvenance, manifest, env = process.env, pathValue = env.PATH ?? '' }) {
+export async function resolvePixelSnapper({
+  projectDir,
+  config,
+  configProvenance,
+  manifest,
+  env = process.env,
+  pathValue = env.PATH ?? ''
+}) {
   const candidates = candidateList({ projectDir, config, configProvenance, manifest, env, pathValue });
   for (const candidate of candidates) {
     if (candidate.explicit) return inspectPixelSnapperBinary({ ...candidate, manifest });
-    try { return await inspectPixelSnapperBinary({ ...candidate, manifest }); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    try {
+      return await inspectPixelSnapperBinary({ ...candidate, manifest });
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
   }
   return null;
 }
@@ -261,12 +305,26 @@ export async function resolvePixelSnapper({ projectDir, config, configProvenance
 export async function inspectPixelSnapperBinary({ path: selected, origin, managed, manifest }) {
   const secure = await secureExecutable(selected, { managedRoot: managed?.root });
   const sha = await sha256(secure.physicalPath);
-  if (managed && (secure.stat.size !== managed.asset.executableSize || sha !== managed.asset.executableSha256)) throw new Error('managed Pixel Snapper hash mismatch');
+  if (managed && (secure.stat.size !== managed.asset.executableSize || sha !== managed.asset.executableSha256))
+    throw new Error('managed Pixel Snapper hash mismatch');
   const version = probe(secure.physicalPath, ['--version']);
   const help = probe(secure.physicalPath, ['--help']);
   const fixtureRgbaSha256 = await runFixtureProbe(secure.physicalPath, manifest.fixture);
-  const pinned = Object.values(manifest.assets).find((asset) => asset.executableSha256 === sha && asset.executableSize === secure.stat.size);
-  return { origin, path: selected, physicalPath: secure.physicalPath, size: secure.stat.size, sha256: sha, version: version.stdout.trim(), helpSha256: hashText(help.stdout), fixtureRgbaSha256, pinnedReleaseTag: pinned ? manifest.release.tag : null, upstreamCommit: pinned ? manifest.upstream.commit : null };
+  const pinned = Object.values(manifest.assets).find(
+    (asset) => asset.executableSha256 === sha && asset.executableSize === secure.stat.size
+  );
+  return {
+    origin,
+    path: selected,
+    physicalPath: secure.physicalPath,
+    size: secure.stat.size,
+    sha256: sha,
+    version: version.stdout.trim(),
+    helpSha256: hashText(help.stdout),
+    fixtureRgbaSha256,
+    pinnedReleaseTag: pinned ? manifest.release.tag : null,
+    upstreamCommit: pinned ? manifest.upstream.commit : null
+  };
 }
 ```
 
@@ -292,6 +350,7 @@ git commit -m "feat: resolve verified Pixel Snapper identities"
 ### Task 3: Bounded Download and Safe Archive Extraction
 
 **Files:**
+
 - Modify: `skills/pixel-sprite-animation-pipeline/package.json`
 - Modify: `skills/pixel-sprite-animation-pipeline/npm-shrinkwrap.json`
 - Create: `skills/pixel-sprite-animation-pipeline/scripts/lib/download.mjs`
@@ -300,6 +359,7 @@ git commit -m "feat: resolve verified Pixel Snapper identities"
 - Create: `skills/pixel-sprite-animation-pipeline/tests/archive.test.mjs`
 
 **Interfaces:**
+
 - Produces: `downloadPinnedAsset({ url, expectedSize, expectedSha256, fetchImpl, output })`.
 - Produces: `inspectArchive({ bytes, format, expectedFiles, limits })` and `extractInspectedArchive({ inspection, outputDir })`.
 
@@ -318,8 +378,14 @@ test('download rejects downgrade and foreign redirect hosts', async () => {
 });
 
 test('archive preflight writes nothing for a case-fold collision', async () => {
-  const bytes = zipFixture([{ name: 'Tool.exe', data: 'a' }, { name: 'tool.exe', data: 'b' }]);
-  assert.throws(() => inspectArchive({ bytes, format: 'zip', expectedFiles: ['tool.exe'], limits: LIMITS }), /case-fold collision/);
+  const bytes = zipFixture([
+    { name: 'Tool.exe', data: 'a' },
+    { name: 'tool.exe', data: 'b' }
+  ]);
+  assert.throws(
+    () => inspectArchive({ bytes, format: 'zip', expectedFiles: ['tool.exe'], limits: LIMITS }),
+    /case-fold collision/
+  );
   assert.deepEqual(await fs.readdir(outputDir), []);
 });
 
@@ -341,7 +407,10 @@ export async function downloadPinnedAsset({ url, expectedSize, expectedSha256, f
   let current = approvedInitialUrl(url);
   for (let redirects = 0; redirects <= 3; redirects += 1) {
     const response = await fetchImpl(current, { redirect: 'manual' });
-    if (REDIRECTS.has(response.status)) { current = approvedRedirect(current, response.headers.get('location'), redirects); continue; }
+    if (REDIRECTS.has(response.status)) {
+      current = approvedRedirect(current, response.headers.get('location'), redirects);
+      continue;
+    }
     if (!response.ok || !response.body) throw new Error(`Pixel Snapper download failed: HTTP ${response.status}`);
     const handle = await fs.open(output, 'wx', 0o600);
     const hash = crypto.createHash('sha256');
@@ -349,10 +418,13 @@ export async function downloadPinnedAsset({ url, expectedSize, expectedSha256, f
     try {
       for await (const chunk of response.body) {
         size += chunk.length;
-        if (size > 25 * 1024 * 1024 || size > expectedSize) throw new Error('Pixel Snapper archive exceeded pinned size');
-        hash.update(chunk); await handle.write(chunk);
+        if (size > 25 * 1024 * 1024 || size > expectedSize)
+          throw new Error('Pixel Snapper archive exceeded pinned size');
+        hash.update(chunk);
+        await handle.write(chunk);
       }
-      if (size !== expectedSize || hash.digest('hex') !== expectedSha256) throw new Error('Pixel Snapper archive size or checksum mismatch');
+      if (size !== expectedSize || hash.digest('hex') !== expectedSha256)
+        throw new Error('Pixel Snapper archive size or checksum mismatch');
     } catch (error) {
       await handle.close();
       await fs.rm(output, { force: true });
@@ -370,7 +442,13 @@ export async function downloadPinnedAsset({ url, expectedSize, expectedSha256, f
 `inspectArchive` collects metadata and bounded entry buffers in memory, normalizes every path, validates all entries and the complete expected file set, then returns an opaque frozen inspection. No output path is opened until the whole archive passes. `extractInspectedArchive` writes each approved regular file with `flag: 'wx'`, mode `0700` for the executable and `0600` for data files.
 
 ```js
-const DEFAULT_LIMITS = Object.freeze({ entries: 16, compressed: 25 << 20, total: 100 << 20, perFile: 50 << 20, ratio: 100 });
+const DEFAULT_LIMITS = Object.freeze({
+  entries: 16,
+  compressed: 25 << 20,
+  total: 100 << 20,
+  perFile: 50 << 20,
+  ratio: 100
+});
 
 function validateEntry(entry, seen) {
   const name = normalizePortable(entry.name);
@@ -398,6 +476,7 @@ git commit -m "feat: securely download Pixel Snapper archives"
 ### Task 4: Concurrent-Safe Setup and `setup-snapper` CLI
 
 **Files:**
+
 - Create: `skills/pixel-sprite-animation-pipeline/scripts/lib/setup-lock.mjs`
 - Create: `skills/pixel-sprite-animation-pipeline/scripts/lib/setup-snapper.mjs`
 - Create: `skills/pixel-sprite-animation-pipeline/tests/setup-lock.test.mjs`
@@ -407,6 +486,7 @@ git commit -m "feat: securely download Pixel Snapper archives"
 - Modify: `.gitignore`
 
 **Interfaces:**
+
 - Produces: `withSetupLock({ projectDir, releaseTag, operation, now, processProbe })`.
 - Produces: `setupPixelSnapper({ projectDir, manifestPath, fetchImpl, force }) -> { status, executable, identity, receipt }`.
 - Adds CLI: `pixel-sprite-pipeline setup-snapper [--project-dir PATH] [--force]`.
@@ -437,12 +517,21 @@ Expected: FAIL with missing setup modules and command.
 - [ ] **Step 3: Implement the atomic setup lock**
 
 ```js
-export async function withSetupLock({ projectDir, releaseTag, operation, now = Date.now, processProbe = defaultProcessProbe }) {
+export async function withSetupLock({
+  projectDir,
+  releaseTag,
+  operation,
+  now = Date.now,
+  processProbe = defaultProcessProbe
+}) {
   const lock = path.join(projectDir, '.pixel-sprite-pipeline', 'tools', '.locks', safeTag(releaseTag));
   const owner = { pid: process.pid, createdAt: now(), nonce: crypto.randomUUID() };
   await acquireDirectoryLock(lock, owner, { now, processProbe, staleMs: 10 * 60_000, waitMs: 30_000 });
-  try { return await operation(); }
-  finally { await releaseOwnedLock(lock, owner); }
+  try {
+    return await operation();
+  } finally {
+    await releaseOwnedLock(lock, owner);
+  }
 }
 ```
 
@@ -455,30 +544,52 @@ export async function setupPixelSnapper({ projectDir, manifestPath, fetchImpl = 
   const manifest = await loadToolManifest(manifestPath);
   const target = platformKey();
   const asset = selectToolAsset(manifest, target);
-  return withSetupLock({ projectDir, releaseTag: manifest.release.tag, operation: async () => {
-    const finalDir = installationDir(projectDir, manifest.release.tag, target);
-    if (!force && await exists(finalDir)) return verifyInstalledTool({ finalDir, manifest, asset });
-    const stage = await createInstallStage(projectDir, manifest.release.tag);
-    try {
-      const archive = await downloadPinnedAsset({ url: asset.url, expectedSize: asset.archiveSize, expectedSha256: asset.archiveSha256, fetchImpl, output: path.join(stage, 'download') });
-      const inspection = await inspectDownloadedArchive(archive, asset);
-      await extractInspectedArchive({ inspection, outputDir: path.join(stage, 'content') });
-      const identity = await verifyStagedExecutable({ stage, manifest, asset });
-      const receipt = await writeInstallationReceipt({ stage, manifest, asset, identity });
-      await publishInstallation({ stage, finalDir, force });
-      return { status: 'installed', executable: installedExecutable(finalDir, asset), identity, receipt };
-    } catch (error) { await cleanupInstallStage(stage); throw error; }
-  }});
+  return withSetupLock({
+    projectDir,
+    releaseTag: manifest.release.tag,
+    operation: async () => {
+      const finalDir = installationDir(projectDir, manifest.release.tag, target);
+      if (!force && (await exists(finalDir))) return verifyInstalledTool({ finalDir, manifest, asset });
+      const stage = await createInstallStage(projectDir, manifest.release.tag);
+      try {
+        const archive = await downloadPinnedAsset({
+          url: asset.url,
+          expectedSize: asset.archiveSize,
+          expectedSha256: asset.archiveSha256,
+          fetchImpl,
+          output: path.join(stage, 'download')
+        });
+        const inspection = await inspectDownloadedArchive(archive, asset);
+        await extractInspectedArchive({ inspection, outputDir: path.join(stage, 'content') });
+        const identity = await verifyStagedExecutable({ stage, manifest, asset });
+        const receipt = await writeInstallationReceipt({ stage, manifest, asset, identity });
+        await publishInstallation({ stage, finalDir, force });
+        return { status: 'installed', executable: installedExecutable(finalDir, asset), identity, receipt };
+      } catch (error) {
+        await cleanupInstallStage(stage);
+        throw error;
+      }
+    }
+  });
 }
 ```
 
 - [ ] **Step 5: Add the CLI command and ignored state**
 
 ```js
-program.command('setup-snapper')
+program
+  .command('setup-snapper')
   .option('--project-dir <path>')
   .option('--force')
-  .action(async (options) => print(await setupPixelSnapper({ projectDir: resolveCwd(options), manifestPath: packagedToolManifest(), force: options.force === true })));
+  .action(async (options) =>
+    print(
+      await setupPixelSnapper({
+        projectDir: resolveCwd(options),
+        manifestPath: packagedToolManifest(),
+        force: options.force === true
+      })
+    )
+  );
 ```
 
 Ensure `.pixel-sprite-pipeline/tools/` remains ignored and no setup path is included by `npm pack --dry-run`.
@@ -499,6 +610,7 @@ git commit -m "feat: install pinned Pixel Snapper binaries"
 ### Task 5: Verified Snap Receipts and Honest Manual Handoffs
 
 **Files:**
+
 - Create: `skills/pixel-sprite-animation-pipeline/scripts/lib/snap-receipt.mjs`
 - Create: `skills/pixel-sprite-animation-pipeline/tests/snap-receipt.test.mjs`
 - Modify: `skills/pixel-sprite-animation-pipeline/scripts/lib/snapper.mjs`
@@ -507,6 +619,7 @@ git commit -m "feat: install pinned Pixel Snapper binaries"
 - Modify: `skills/pixel-sprite-animation-pipeline/tests/e2e.test.mjs`
 
 **Interfaces:**
+
 - Produces: `writeSnapReceipt({ projectDir, run, contract, inputs, outputs, args, identity })`.
 - Produces: `writeManualHandoffReceipt({ projectDir, run, handoff, inputs, outputs })`.
 - Produces: `verifySnapReceipt({ projectDir, file, expectedRun, expectedContract })`.
@@ -543,15 +656,43 @@ const SNAP_DOMAIN = 'pixel-sprite-snap-receipt/v1';
 const MANUAL_DOMAIN = 'pixel-sprite-manual-handoff-receipt/v1';
 
 export async function writeSnapReceipt({ projectDir, run, contract, inputs, outputs, args, identity }) {
-  const payload = { version: 1, origin: identity.origin, toolProvenanceVerified: true, run: await runBinding(run), animationContractSha256: contract.sha256, inputs: await records(inputs), outputs: await records(outputs), arguments: [...args], binary: identity, createdAt: new Date().toISOString() };
+  const payload = {
+    version: 1,
+    origin: identity.origin,
+    toolProvenanceVerified: true,
+    run: await runBinding(run),
+    animationContractSha256: contract.sha256,
+    inputs: await records(inputs),
+    outputs: await records(outputs),
+    arguments: [...args],
+    binary: identity,
+    createdAt: new Date().toISOString()
+  };
   const file = path.join(run.outputDir, 'snap-receipt.json');
-  return { ...(await writeSignedState({ projectDir, file, domain: SNAP_DOMAIN, payload, createKey: true })), path: file };
+  return {
+    ...(await writeSignedState({ projectDir, file, domain: SNAP_DOMAIN, payload, createKey: true })),
+    path: file
+  };
 }
 
 export async function writeManualHandoffReceipt({ projectDir, run, handoff, inputs, outputs }) {
-  const payload = { version: 1, origin: 'manual-handoff', toolProvenanceVerified: false, run: await runBinding(run), handoffSha256: await sha256(handoff), inputs: await records(inputs), outputs: await records(outputs), arguments: null, binary: null, createdAt: new Date().toISOString() };
+  const payload = {
+    version: 1,
+    origin: 'manual-handoff',
+    toolProvenanceVerified: false,
+    run: await runBinding(run),
+    handoffSha256: await sha256(handoff),
+    inputs: await records(inputs),
+    outputs: await records(outputs),
+    arguments: null,
+    binary: null,
+    createdAt: new Date().toISOString()
+  };
   const file = path.join(run.outputDir, 'manual-handoff-receipt.json');
-  return { ...(await writeSignedState({ projectDir, file, domain: MANUAL_DOMAIN, payload, createKey: true })), path: file };
+  return {
+    ...(await writeSignedState({ projectDir, file, domain: MANUAL_DOMAIN, payload, createKey: true })),
+    path: file
+  };
 }
 ```
 
@@ -575,6 +716,7 @@ git commit -m "feat: authenticate Pixel Snapper batches"
 ### Task 6: Animation Contract and Post-Snap Frame Approval
 
 **Files:**
+
 - Create: `skills/pixel-sprite-animation-pipeline/scripts/lib/animation-contract.mjs`
 - Create: `skills/pixel-sprite-animation-pipeline/scripts/lib/frame-approval.mjs`
 - Create: `skills/pixel-sprite-animation-pipeline/tests/animation-contract.test.mjs`
@@ -582,6 +724,7 @@ git commit -m "feat: authenticate Pixel Snapper batches"
 - Modify: `skills/pixel-sprite-animation-pipeline/scripts/cli.mjs`
 
 **Interfaces:**
+
 - Produces: `loadAnimationContract(file) -> { document, sha256 }`.
 - Produces: `writeFrameApproval({ projectDir, runDir, contract, snapReceipt, frames, approvals, version })`.
 - Produces: `verifyFrameApproval({ projectDir, file, contract, snapReceipt })`.
@@ -598,8 +741,17 @@ test('private-project contract rejects implicit timing, palette, or landmark sem
 test('frame approval is created only after snap and covers every ordered output hash', async () => {
   const approval = await writeFrameApproval(frameApprovalFixture);
   assert.equal(approval.document.payload.snapReceiptSha256, frameApprovalFixture.snapReceipt.sha256);
-  assert.deepEqual(approval.document.payload.frames.map((item) => item.landmark), [{ x: 61, y: 109 }, { x: 62, y: 110 }]);
-  await assert.rejects(writeFrameApproval({ ...frameApprovalFixture, approvals: frameApprovalFixture.approvals.slice(1) }), /approval for every snapped frame/);
+  assert.deepEqual(
+    approval.document.payload.frames.map((item) => item.landmark),
+    [
+      { x: 61, y: 109 },
+      { x: 62, y: 110 }
+    ]
+  );
+  await assert.rejects(
+    writeFrameApproval({ ...frameApprovalFixture, approvals: frameApprovalFixture.approvals.slice(1) }),
+    /approval for every snapped frame/
+  );
 });
 ```
 
@@ -616,7 +768,12 @@ export async function loadAnimationContract(file) {
   const document = JSON.parse(await fs.readFile(file, 'utf8'));
   assertExactKeys(document, ['version', 'anchor', 'sizes', 'pivot', 'baseline', 'palette', 'clips', 'review']);
   assert.equal(document.version, 1);
-  assert.deepEqual(document.sizes, { canonical: [128, 128], generation: [1024, 1024], runtime: [256, 256], pixelSize: 8 });
+  assert.deepEqual(document.sizes, {
+    canonical: [128, 128],
+    generation: [1024, 1024],
+    runtime: [256, 256],
+    pixelSize: 8
+  });
   validatePalette(document.palette);
   validateClips(document.clips);
   return deepFreeze({ document, sha256: stableHash(document) });
@@ -630,9 +787,18 @@ export async function loadAnimationContract(file) {
 ```js
 export async function writeFrameApproval({ projectDir, runDir, contract, snapReceipt, approvals, version }) {
   const outputs = snapReceipt.document.payload.outputs;
-  if (!Number.isInteger(version) || version < 1 || approvals.length !== outputs.length) throw new Error('frame approval requires one approval for every snapped frame');
+  if (!Number.isInteger(version) || version < 1 || approvals.length !== outputs.length)
+    throw new Error('frame approval requires one approval for every snapped frame');
   const frames = outputs.map((output, index) => validateApproval(approvals[index], output, contract.document.clips));
-  const payload = { version: 1, approvalVersion: version, animationContractSha256: contract.sha256, snapReceiptSha256: snapReceipt.sha256, frames, approvedBy: approvals[0].approvedBy, createdAt: new Date().toISOString() };
+  const payload = {
+    version: 1,
+    approvalVersion: version,
+    animationContractSha256: contract.sha256,
+    snapReceiptSha256: snapReceipt.sha256,
+    frames,
+    approvedBy: approvals[0].approvedBy,
+    createdAt: new Date().toISOString()
+  };
   const file = path.join(runDir, `frame-approval-${String(version).padStart(2, '0')}.json`);
   return writeSignedState({ projectDir, file, domain: 'pixel-sprite-frame-approval/v1', payload, createKey: true });
 }
@@ -658,12 +824,14 @@ git commit -m "feat: define authenticated animation approvals"
 ### Task 7: Landmark-Stable Normalization
 
 **Files:**
+
 - Modify: `skills/pixel-sprite-animation-pipeline/scripts/lib/normalize.mjs`
 - Modify: `skills/pixel-sprite-animation-pipeline/tests/normalize.test.mjs`
 - Modify: `skills/pixel-sprite-animation-pipeline/scripts/lib/validate.mjs`
 - Modify: `skills/pixel-sprite-animation-pipeline/tests/validate.test.mjs`
 
 **Interfaces:**
+
 - Changes: `normalizeFrames({ inputs, outputDir, config, scaleFactor, landmarks })` requires one `{ frameId, source: {x,y}, target: {x,y} }` per frame when an animation contract is present.
 - Adds measurement fields: `frameId`, `sourceLandmark`, `canonicalLandmark`, `landmarkDrift`.
 
@@ -672,9 +840,27 @@ git commit -m "feat: define authenticated animation approvals"
 ```js
 test('authored roots stay fixed when pose bounds change', async () => {
   const { frames, landmarks } = await makeExtendedLimbFrames();
-  const result = await normalizeFrames({ inputs: frames, landmarks, outputDir, config: DEFAULT_CONFIG, scaleFactor: 1 });
-  assert.deepEqual(result.measurements.map((item) => item.canonicalLandmark), [{ x: 64, y: 112 }, { x: 64, y: 112 }]);
-  assert.deepEqual(result.measurements.map((item) => item.landmarkDrift), [{ x: 0, y: 0 }, { x: 0, y: 0 }]);
+  const result = await normalizeFrames({
+    inputs: frames,
+    landmarks,
+    outputDir,
+    config: DEFAULT_CONFIG,
+    scaleFactor: 1
+  });
+  assert.deepEqual(
+    result.measurements.map((item) => item.canonicalLandmark),
+    [
+      { x: 64, y: 112 },
+      { x: 64, y: 112 }
+    ]
+  );
+  assert.deepEqual(
+    result.measurements.map((item) => item.landmarkDrift),
+    [
+      { x: 0, y: 0 },
+      { x: 0, y: 0 }
+    ]
+  );
   assert.equal(await torsoX(result.frames[0]), await torsoX(result.frames[1]));
 });
 ```
@@ -696,7 +882,8 @@ const left = landmark.target.x - scaledLandmark.x;
 const top = landmark.target.y - scaledLandmark.y;
 const right = left + scaled.width;
 const bottom = top + scaled.height;
-if (left < 0 || top < 0 || right > config.canonical.width || bottom > config.canonical.height) throw new Error(`frame ${landmark.frameId} exceeds canonical cell at approved landmark`);
+if (left < 0 || top < 0 || right > config.canonical.width || bottom > config.canonical.height)
+  throw new Error(`frame ${landmark.frameId} exceeds canonical cell at approved landmark`);
 const canonicalLandmark = { x: left + scaledLandmark.x, y: top + scaledLandmark.y };
 const landmarkDrift = { x: canonicalLandmark.x - landmark.target.x, y: canonicalLandmark.y - landmark.target.y };
 ```
@@ -723,6 +910,7 @@ git commit -m "feat: normalize animation frames by authored landmarks"
 ### Task 8: Contract-Driven Clip Export and Validation
 
 **Files:**
+
 - Modify: `skills/pixel-sprite-animation-pipeline/scripts/lib/export.mjs`
 - Modify: `skills/pixel-sprite-animation-pipeline/scripts/lib/validate.mjs`
 - Modify: `skills/pixel-sprite-animation-pipeline/tests/export.test.mjs`
@@ -730,6 +918,7 @@ git commit -m "feat: normalize animation frames by authored landmarks"
 - Modify: `skills/pixel-sprite-animation-pipeline/scripts/cli.mjs`
 
 **Interfaces:**
+
 - Produces: `exportContractAnimation({ normalized, contract, outputDir, config, columns }) -> { clips, metadata }`.
 - Each clip returns ordered runtime frames, sheet, preview, exact durations, and loop mode.
 
@@ -738,7 +927,10 @@ git commit -m "feat: normalize animation frames by authored landmarks"
 ```js
 test('contract export preserves frame order and nonuniform durations', async () => {
   const result = await exportContractAnimation(contractFixture);
-  assert.deepEqual(result.clips.run.frames.map((item) => item.id), ['run-00', 'run-01', 'run-02']);
+  assert.deepEqual(
+    result.clips.run.frames.map((item) => item.id),
+    ['run-00', 'run-01', 'run-02']
+  );
   assert.deepEqual(result.clips.run.durations, [80, 90, 110]);
   assert.equal(result.clips.run.loopMode, 'loop');
   assert.deepEqual((await sharp(result.clips.run.preview, { animated: true }).metadata()).delay, [80, 90, 110]);
@@ -760,7 +952,19 @@ export async function exportContractAnimation({ normalized, contract, outputDir,
   for (const clip of contract.document.clips) {
     const frames = clip.frames.map((frame) => requiredFrame(byId, frame.id));
     const durations = clip.frames.map((frame) => frame.durationMs);
-    clips[clip.id] = { ...(await exportAnimation({ frames, durations, outputDir: path.join(outputDir, clip.id), config, columns, name: clip.id })), frames: clip.frames.map((frame, index) => ({ id: frame.id, file: frames[index] })), durations, loopMode: clip.loopMode };
+    clips[clip.id] = {
+      ...(await exportAnimation({
+        frames,
+        durations,
+        outputDir: path.join(outputDir, clip.id),
+        config,
+        columns,
+        name: clip.id
+      })),
+      frames: clip.frames.map((frame, index) => ({ id: frame.id, file: frames[index] })),
+      durations,
+      loopMode: clip.loopMode
+    };
   }
   return { clips, metadata: await writeContractIndex(outputDir, contract, normalized, clips) };
 }
@@ -790,12 +994,14 @@ git commit -m "feat: export animation clips from approved contracts"
 ### Task 9: Guided End-to-End Receipt and Approval State Machine
 
 **Files:**
+
 - Modify: `skills/pixel-sprite-animation-pipeline/scripts/cli.mjs`
 - Modify: `skills/pixel-sprite-animation-pipeline/scripts/lib/learning.mjs`
 - Modify: `skills/pixel-sprite-animation-pipeline/tests/e2e.test.mjs`
 - Modify: `skills/pixel-sprite-animation-pipeline/tests/repair.test.mjs`
 
 **Interfaces:**
+
 - Guided run states add `awaiting-frame-approval` between snapped frames and normalization.
 - Run manifests bind the animation contract at creation; they remain immutable afterward.
 - Downstream artifacts record selected snap-receipt and frame-approval hashes.
@@ -836,7 +1042,12 @@ const approvalHandoff = {
   state: 'awaiting-frame-approval',
   animationContractSha256: contract.sha256,
   snapReceiptSha256: snapReceipt.sha256,
-  frames: snapReceipt.document.payload.outputs.map((item, index) => ({ id: contractFrames[index].id, path: portablePath(runDir, item.path), sha256: item.sha256, landmarkSemantic: contractFrames[index].landmarkSemantic }))
+  frames: snapReceipt.document.payload.outputs.map((item, index) => ({
+    id: contractFrames[index].id,
+    path: portablePath(runDir, item.path),
+    sha256: item.sha256,
+    landmarkSemantic: contractFrames[index].landmarkSemantic
+  }))
 };
 ```
 
@@ -860,6 +1071,7 @@ git commit -m "feat: gate animation delivery on signed approvals"
 ### Task 10: Five-Target Binary Release Workflow
 
 **Files:**
+
 - Create: `.github/workflows/pixel-snapper-release.yml`
 - Create: `skills/pixel-sprite-animation-pipeline/scripts/release/package-pixel-snapper.mjs`
 - Create: `skills/pixel-sprite-animation-pipeline/scripts/release/assemble-release.mjs`
@@ -869,6 +1081,7 @@ git commit -m "feat: gate animation delivery on signed approvals"
 - Create: `skills/pixel-sprite-animation-pipeline/tests/release-tools.test.mjs`
 
 **Interfaces:**
+
 - Workflow inputs: `upstream_tag`, `upstream_commit` (40 hex), and `release_tag` matching `pixel-snapper-v` plus a semantic version and `-commit.` plus the first seven source-SHA characters.
 - Build artifacts contain binary, upstream license, `THIRD-PARTY-NOTICES`, `pixel-snapper.spdx.json`, and `target-metadata.json`.
 - `assemble-release.mjs` emits `checksums.json`, `build-metadata.json`, and the production tool manifest.
@@ -902,8 +1115,10 @@ Expected: FAIL with missing release scripts.
 const REQUIRED_TARGETS = ['windows-x64', 'macos-x64', 'macos-arm64', 'linux-x64', 'linux-arm64'];
 for (const target of REQUIRED_TARGETS) if (!records.has(target)) throw new Error(`missing release target: ${target}`);
 for (const record of records.values()) {
-  if (record.fixture.rgbaSha256 !== expectedFixtureHash) throw new Error(`fixture RGBA hash mismatch: ${record.target}`);
-  assertFullSha(record.upstreamCommit); assertFullSha(record.workflowCommit);
+  if (record.fixture.rgbaSha256 !== expectedFixtureHash)
+    throw new Error(`fixture RGBA hash mismatch: ${record.target}`);
+  assertFullSha(record.upstreamCommit);
+  assertFullSha(record.workflowCommit);
 }
 ```
 
@@ -954,6 +1169,7 @@ Expected: one immutable GameDevStuff release with five platform archives, checks
 ### Task 11: Production Manifest, Documentation, CI, and private-project acceptance
 
 **Files:**
+
 - Create: `skills/pixel-sprite-animation-pipeline/references/pixel-snapper-tool-manifest.json`
 - Modify: `skills/pixel-sprite-animation-pipeline/package.json`
 - Modify: `skills/pixel-sprite-animation-pipeline/SKILL.md`
@@ -966,6 +1182,7 @@ Expected: one immutable GameDevStuff release with five platform archives, checks
 - Create privately, do not commit: `examples/private/project/frame-approval-request.json`
 
 **Interfaces:**
+
 - The packaged skill discovers the production manifest relative to `scripts/cli.mjs`.
 - CI installs a fixture release through injected transport; post-release verification installs the real current target asset.
 - Private acceptance produces a non-public signed report and public pass/fail measurements only.
@@ -983,7 +1200,10 @@ test('packed skill includes manifest and license but no binaries or private appr
   const files = await packedFileList();
   assert(files.includes('package/references/pixel-snapper-tool-manifest.json'));
   assert(files.includes('package/references/pixel-snapper-upstream.LICENSE'));
-  assert.equal(files.some((file) => /\.exe$|examples\/private|frame-approval-\d+\.json$/.test(file)), false);
+  assert.equal(
+    files.some((file) => /\.exe$|examples\/private|frame-approval-\d+\.json$/.test(file)),
+    false
+  );
 });
 ```
 

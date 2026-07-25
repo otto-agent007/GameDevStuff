@@ -48,10 +48,7 @@ test('pose-board scenarios preserve recovery, approval, and privacy boundaries',
     scenarios.some(({ expectedExitClass }) => expectedExitClass === 0),
     true
   );
-  assert.equal(
-    scenarios.filter(({ expectedExitClass }) => expectedExitClass === 4).length,
-    4
-  );
+  assert.equal(scenarios.filter(({ expectedExitClass }) => expectedExitClass === 4).length, 4);
 });
 
 test('the skill directly links every operational reference and packages them', async () => {
@@ -63,7 +60,10 @@ test('the skill directly links every operational reference and packages them', a
   assert.deepEqual(packageDocument.files.includes('references/'), true);
   for (const reference of references) {
     await fs.access(path.join(packageRoot, 'references', reference));
-    assert.match(skill, new RegExp(`\\[references/${reference.replace('.', '\\.')}\\]\\(references/${reference.replace('.', '\\.')}\\)`));
+    assert.match(
+      skill,
+      new RegExp(`\\[references/${reference.replace('.', '\\.')}\\]\\(references/${reference.replace('.', '\\.')}\\)`)
+    );
   }
 });
 

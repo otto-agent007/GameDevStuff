@@ -41,20 +41,44 @@ test('video intake derives nonuniform durations from presentation timestamps', a
     run,
     ffmpegPath: fakeFfmpeg
   });
-  assert.deepEqual(result.frames.map(({ timestampMs }) => timestampMs), expected.timestampsMs);
-  assert.deepEqual(result.frames.map(({ durationMs }) => durationMs), expected.durationsMs);
-  assert.equal(result.frames.every(({ width }) => width === expected.width), true);
-  assert.equal(result.frames.every(({ height }) => height === expected.height), true);
-  assert.equal(result.diagnostics.some(({ code }) => code === 'VARIABLE_FRAME_RATE'), true);
-  assert.equal(result.diagnostics.some(({ code }) => code === 'DUPLICATE_FRAME'), true);
-  assert.equal(result.diagnostics.some(({ code }) => code === 'EMPTY_FRAME'), true);
+  assert.deepEqual(
+    result.frames.map(({ timestampMs }) => timestampMs),
+    expected.timestampsMs
+  );
+  assert.deepEqual(
+    result.frames.map(({ durationMs }) => durationMs),
+    expected.durationsMs
+  );
+  assert.equal(
+    result.frames.every(({ width }) => width === expected.width),
+    true
+  );
+  assert.equal(
+    result.frames.every(({ height }) => height === expected.height),
+    true
+  );
+  assert.equal(
+    result.diagnostics.some(({ code }) => code === 'VARIABLE_FRAME_RATE'),
+    true
+  );
+  assert.equal(
+    result.diagnostics.some(({ code }) => code === 'DUPLICATE_FRAME'),
+    true
+  );
+  assert.equal(
+    result.diagnostics.some(({ code }) => code === 'EMPTY_FRAME'),
+    true
+  );
 
   const retried = await decodeVideo({
     source: path.join(fixtureRoot, 'variable-rate.webm'),
     run,
     ffmpegPath: fakeFfmpeg
   });
-  assert.deepEqual(retried.frames.map(({ sha256 }) => sha256), result.frames.map(({ sha256 }) => sha256));
+  assert.deepEqual(
+    retried.frames.map(({ sha256 }) => sha256),
+    result.frames.map(({ sha256 }) => sha256)
+  );
 });
 
 test('video intake rejects missing presentation timestamps', async (t) => {
@@ -74,7 +98,10 @@ test('media tool inspection binds executable bytes and rejects a changed probe',
   const parent = await fs.mkdtemp(path.join(os.tmpdir(), 'game-character-changing-tool-'));
   t.after(() => fs.rm(parent, { recursive: true, force: true }));
   const changing = path.join(parent, 'ffmpeg.mjs');
-  await fs.writeFile(changing, `import fs from 'node:fs';\nprocess.stdout.write('ffmpeg version changing\\n');\nfs.appendFileSync(process.argv[1], '\\n');\n`);
+  await fs.writeFile(
+    changing,
+    `import fs from 'node:fs';\nprocess.stdout.write('ffmpeg version changing\\n');\nfs.appendFileSync(process.argv[1], '\\n');\n`
+  );
   await fs.chmod(changing, 0o700);
   await assert.rejects(inspectMediaTool(changing, 'ffmpeg'), /tool identity changed/);
 });
@@ -101,11 +128,16 @@ test('CLI emits the structured media-tool handoff on stdout with exit 2', async 
     await execFile(process.execPath, [
       cliPath,
       'intake',
-      '--project-dir', projectRoot,
-      '--action', 'idle',
-      '--kind', 'webm',
-      '--source', path.join(fixtureRoot, 'variable-rate.webm'),
-      '--ffmpeg', path.join(fixtureRoot, 'absent-ffmpeg')
+      '--project-dir',
+      projectRoot,
+      '--action',
+      'idle',
+      '--kind',
+      'webm',
+      '--source',
+      path.join(fixtureRoot, 'variable-rate.webm'),
+      '--ffmpeg',
+      path.join(fixtureRoot, 'absent-ffmpeg')
     ]);
   } catch (error) {
     failure = error;
@@ -119,24 +151,31 @@ test('CLI emits the structured media-tool handoff on stdout with exit 2', async 
   const resumed = await execFile(process.execPath, [
     cliPath,
     'intake',
-    '--resume', handoff.runId,
-    '--project-dir', projectRoot,
-    '--action', 'idle',
-    '--kind', 'webm',
-    '--source', path.join(fixtureRoot, 'variable-rate.webm'),
-    '--ffmpeg', fakeFfmpeg
+    '--resume',
+    handoff.runId,
+    '--project-dir',
+    projectRoot,
+    '--action',
+    'idle',
+    '--kind',
+    'webm',
+    '--source',
+    path.join(fixtureRoot, 'variable-rate.webm'),
+    '--ffmpeg',
+    fakeFfmpeg
   ]);
   const result = JSON.parse(resumed.stdout);
   assert.equal(result.status, 'intake-complete');
-  const report = JSON.parse(await fs.readFile(path.join(
-    projectRoot,
-    '.game-character-pipeline',
-    'runs',
-    handoff.runId,
-    'reports',
-    'source.json'
-  ), 'utf8'));
-  assert.deepEqual(report.frames.map(({ timestampMs }) => timestampMs), [0, 40, 140, 180]);
+  const report = JSON.parse(
+    await fs.readFile(
+      path.join(projectRoot, '.game-character-pipeline', 'runs', handoff.runId, 'reports', 'source.json'),
+      'utf8'
+    )
+  );
+  assert.deepEqual(
+    report.frames.map(({ timestampMs }) => timestampMs),
+    [0, 40, 140, 180]
+  );
 });
 
 test('video intake rejects decode corruption and immutable source changes', async (t) => {
@@ -144,7 +183,10 @@ test('video intake rejects decode corruption and immutable source changes', asyn
   const corruptSource = path.join(corrupt.parent, 'corrupt.webm');
   await fs.copyFile(path.join(fixtureRoot, 'variable-rate.webm'), corruptSource);
   await fs.appendFile(corruptSource, Buffer.from('corrupt'));
-  await assert.rejects(decodeVideo({ source: corruptSource, run: corrupt.run, ffmpegPath: fakeFfmpeg }), /decode corruption/);
+  await assert.rejects(
+    decodeVideo({ source: corruptSource, run: corrupt.run, ffmpegPath: fakeFfmpeg }),
+    /decode corruption/
+  );
 
   const changed = await freshRun(t);
   const changedSource = path.join(changed.parent, 'changed.webm');

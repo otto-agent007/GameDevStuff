@@ -42,15 +42,29 @@ async function sequenceFixture(t) {
 
 test('PNG intake preserves explicit order, alpha, duplicates, and nonuniform durations', async (t) => {
   const { manifestFile, run } = await sequenceFixture(t);
-  registerSourceAdapter('png-sequence', ({ source, run: selectedRun }) => decodePngSequence({ manifest: source, run: selectedRun }));
+  registerSourceAdapter('png-sequence', ({ source, run: selectedRun }) =>
+    decodePngSequence({ manifest: source, run: selectedRun })
+  );
   const result = await decodeMotionSource({ kind: 'png-sequence', source: manifestFile, run, options: {} });
 
-  assert.deepEqual(result.frames.map((frame) => frame.durationMs), [80, 120, 200]);
-  assert.deepEqual(result.frames.map((frame) => frame.id), ['step-contact', 'step-pass', 'step-contact-2']);
-  assert.deepEqual(result.frames.map((frame) => frame.timestampMs), [0, 80, 200]);
+  assert.deepEqual(
+    result.frames.map((frame) => frame.durationMs),
+    [80, 120, 200]
+  );
+  assert.deepEqual(
+    result.frames.map((frame) => frame.id),
+    ['step-contact', 'step-pass', 'step-contact-2']
+  );
+  assert.deepEqual(
+    result.frames.map((frame) => frame.timestampMs),
+    [0, 80, 200]
+  );
   assert.equal(result.frames[2].duplicateOf, 'step-contact');
   assert.equal(result.alpha, true);
-  assert.equal(result.diagnostics.some(({ code }) => code === 'DUPLICATE_FRAME'), true);
+  assert.equal(
+    result.diagnostics.some(({ code }) => code === 'DUPLICATE_FRAME'),
+    true
+  );
 });
 
 test('PNG intake rejects lexical guessing and omitted timing', async (t) => {

@@ -1,11 +1,11 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="dark">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
     <title>Pose Recovery Studio</title>
-    <link rel="stylesheet" href="/studio/styles.css">
+    <link rel="stylesheet" href="/studio/styles.css" />
     <script type="module" src="/studio/recovery-app.mjs"></script>
   </head>
   <body>
@@ -20,9 +20,7 @@
         </div>
         <div class="revision-actions">
           <span class="stage-chip">Recovery</span>
-          <button class="primary" id="save-recovery" type="button">
-            Save recovery revision
-          </button>
+          <button class="primary" id="save-recovery" type="button">Save recovery revision</button>
         </div>
       </header>
 
@@ -36,7 +34,7 @@
             <span id="component-count">0 components</span>
           </div>
           <div class="recovery-overlay-stage">
-            <img id="recovery-overlay" alt="Pose-board component overlay">
+            <img id="recovery-overlay" alt="Pose-board component overlay" />
           </div>
         </section>
 
@@ -73,8 +71,14 @@
             </div>
           </div>
           <dl class="recovery-hashes">
-            <div><dt>Recovery hash</dt><dd id="recovery-hash">—</dd></div>
-            <div><dt>Selection hash</dt><dd id="selection-hash">Not saved</dd></div>
+            <div>
+              <dt>Recovery hash</dt>
+              <dd id="recovery-hash">—</dd>
+            </div>
+            <div>
+              <dt>Selection hash</dt>
+              <dd id="selection-hash">Not saved</dd>
+            </div>
           </dl>
           <label class="field">
             <span>Approver identity</span>
@@ -85,12 +89,8 @@
             <textarea id="approval-notes" aria-label="Approval notes" rows="3"></textarea>
           </label>
           <div class="approval-actions">
-            <button class="primary" id="approve-recovery" type="button" disabled>
-              Approve recovered sequence
-            </button>
-            <button id="reject-recovery" type="button" disabled>
-              Reject recovered sequence
-            </button>
+            <button class="primary" id="approve-recovery" type="button" disabled>Approve recovered sequence</button>
+            <button id="reject-recovery" type="button" disabled>Reject recovered sequence</button>
           </div>
         </section>
       </main>

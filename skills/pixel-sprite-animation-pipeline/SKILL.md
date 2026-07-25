@@ -5,7 +5,7 @@ description: Use when working from a pixel-art anchor or sprite frames, building
 
 # Pixel Sprite Animation Pipeline
 
-Preserve approved inputs and write every attempt to a new versioned run. Use `node scripts/cli.mjs --help` for command syntax; run `npm ci --omit=dev` in this directory first when dependencies are absent.
+Preserve approved inputs and write every attempt to a new versioned run. Use `node scripts/cli.mjs --help` for command syntax; run `npm ci` at the repository root in a source checkout, or `npm install --omit=dev` in this directory when using an installed or copied bundle and dependencies are absent.
 
 ## Required workflow
 
