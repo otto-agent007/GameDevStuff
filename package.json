@@ -22,7 +22,7 @@
     "package-boundary": "node --test skills/game-character-pipeline/tests/package-boundary.test.mjs skills/pixel-sprite-animation-pipeline/tests/package-boundary.test.mjs"
   },
   "devDependencies": {
-    "@eslint/js": "9.39.5",
+    "@eslint/js": "10.0.1",
     "@playwright/test": "1.61.1",
     "eslint": "9.39.5",
     "globals": "16.5.0",
