@@ -3,7 +3,7 @@ const MAX_FRAMES = 10000;
 
 const crcTable = Array.from({ length: 256 }, (_, value) => {
   let crc = value;
-  for (let bit = 0; bit < 8; bit += 1) crc = (crc & 1) ? (0xedb88320 ^ (crc >>> 1)) : (crc >>> 1);
+  for (let bit = 0; bit < 8; bit += 1) crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
   return crc >>> 0;
 });
 
@@ -66,7 +66,8 @@ function parseApng(input) {
     } else if (type === 'acTL') {
       if (!ihdr || animation || sawIdat || length !== 8) throw new Error('APNG acTL is invalid or out of order');
       animation = { frameCount: data.readUInt32BE(0), plays: data.readUInt32BE(4) };
-      if (animation.frameCount === 0 || animation.frameCount > MAX_FRAMES) throw new Error('APNG declared frame count is invalid');
+      if (animation.frameCount === 0 || animation.frameCount > MAX_FRAMES)
+        throw new Error('APNG declared frame count is invalid');
     } else if (type === 'fcTL') {
       if (!animation || length !== 26) throw new Error('APNG fcTL is invalid or out of order');
       finishFrame();
@@ -80,14 +81,20 @@ function parseApng(input) {
         y: data.readUInt32BE(16)
       };
       const canvas = { width: ihdr.readUInt32BE(0), height: ihdr.readUInt32BE(4) };
-      if (rect.width === 0 || rect.height === 0 || rect.x + rect.width > canvas.width || rect.y + rect.height > canvas.height) {
+      if (
+        rect.width === 0 ||
+        rect.height === 0 ||
+        rect.x + rect.width > canvas.width ||
+        rect.y + rect.height > canvas.height
+      ) {
         throw new Error('APNG frame rectangle exceeds the canvas');
       }
       const numerator = data.readUInt16BE(20);
       const denominator = data.readUInt16BE(22) || 100;
       const exactDuration = (numerator * 1000) / denominator;
       if (numerator === 0) throw new Error('APNG contains a zero frame delay');
-      if (!Number.isInteger(exactDuration) || exactDuration > 65535) throw new Error('APNG frame delay cannot be represented in integer milliseconds');
+      if (!Number.isInteger(exactDuration) || exactDuration > 65535)
+        throw new Error('APNG frame delay cannot be represented in integer milliseconds');
       const dispose = ['none', 'background', 'previous'][data[24]];
       const blend = ['source', 'over'][data[25]];
       if (!dispose || !blend) throw new Error('APNG frame disposal or blend operation is invalid');

@@ -1,0 +1,8 @@
+.superpowers/
+**/node_modules/
+**/generated/
+**/private/
+**/test-results/
+**/playwright-report/
+skills/pixel-sprite-animation-pipeline/references/pixel-snapper-tool-manifest.json
+package-lock.json

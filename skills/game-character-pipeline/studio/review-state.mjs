@@ -3,7 +3,7 @@ const SPEEDS = new Set([0.25, 0.5, 1, 2]);
 export const cloneFrameState = (frames) => structuredClone(frames ?? []);
 
 export const activeIndices = (frames) =>
-  (frames ?? []).flatMap((frame, index) => frame.included !== false ? [index] : []);
+  (frames ?? []).flatMap((frame, index) => (frame.included !== false ? [index] : []));
 
 export function playbackIndices(frames, range = {}) {
   const start = Number.isInteger(range.in) ? range.in : 0;
@@ -27,8 +27,7 @@ function authoredDuration(frame) {
 }
 
 export function sequenceDurationMs(frames, range = {}) {
-  return playbackIndices(frames, range)
-    .reduce((total, index) => total + authoredDuration(frames[index]), 0);
+  return playbackIndices(frames, range).reduce((total, index) => total + authoredDuration(frames[index]), 0);
 }
 
 export function frameStartElapsedMs(frames, frameIndex, range = {}) {

@@ -3,7 +3,13 @@ import path from 'node:path';
 import { Gunzip, Inflate } from 'fflate';
 import { isPathContained } from './path-security.mjs';
 
-const DEFAULT_LIMITS = Object.freeze({ entries: 16, compressed: 25 << 20, total: 100 << 20, perFile: 50 << 20, ratio: 100 });
+const DEFAULT_LIMITS = Object.freeze({
+  entries: 16,
+  compressed: 25 << 20,
+  total: 100 << 20,
+  perFile: 50 << 20,
+  ratio: 100
+});
 const RESERVED_STEM = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i;
 const UTF8 = new TextDecoder('utf-8', { fatal: true });
 const INSPECTIONS = new WeakMap();
@@ -13,7 +19,7 @@ function makeCrcTable() {
   const table = new Uint32Array(256);
   for (let index = 0; index < table.length; index += 1) {
     let value = index;
-    for (let bit = 0; bit < 8; bit += 1) value = (value & 1) ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    for (let bit = 0; bit < 8; bit += 1) value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
     table[index] = value >>> 0;
   }
   return table;
@@ -26,12 +32,20 @@ function crc32(bytes) {
 }
 
 function limitsFor(input) {
-  if (input !== undefined && (!input || typeof input !== 'object' || Array.isArray(input))) throw new Error('invalid archive limits');
+  if (input !== undefined && (!input || typeof input !== 'object' || Array.isArray(input)))
+    throw new Error('invalid archive limits');
   const limits = { ...DEFAULT_LIMITS, ...(input ?? {}) };
   for (const key of ['entries', 'compressed', 'total', 'perFile']) {
-    if (!Number.isSafeInteger(limits[key]) || limits[key] < 1 || limits[key] > DEFAULT_LIMITS[key]) throw new Error('invalid archive limits');
+    if (!Number.isSafeInteger(limits[key]) || limits[key] < 1 || limits[key] > DEFAULT_LIMITS[key])
+      throw new Error('invalid archive limits');
   }
-  if (typeof limits.ratio !== 'number' || !Number.isFinite(limits.ratio) || limits.ratio <= 0 || limits.ratio > DEFAULT_LIMITS.ratio) throw new Error('invalid archive limits');
+  if (
+    typeof limits.ratio !== 'number' ||
+    !Number.isFinite(limits.ratio) ||
+    limits.ratio <= 0 ||
+    limits.ratio > DEFAULT_LIMITS.ratio
+  )
+    throw new Error('invalid archive limits');
   if (Object.keys(limits).some((key) => !Object.hasOwn(DEFAULT_LIMITS, key))) throw new Error('invalid archive limits');
   return Object.freeze(limits);
 }
@@ -51,7 +65,12 @@ function normalizePortable(original) {
   const portable = original.replaceAll('\\', '/');
   if (portable.startsWith('/') || /^[A-Za-z]:/.test(portable) || portable.includes(':')) unsafeName(original);
   const components = portable.split('/');
-  if (components.some((component) => component === '' || component === '.' || component === '..' || /[. ]$/.test(component))) unsafeName(original);
+  if (
+    components.some(
+      (component) => component === '' || component === '.' || component === '..' || /[. ]$/.test(component)
+    )
+  )
+    unsafeName(original);
   for (const component of components) {
     const stem = component.split('.')[0].replace(/[. ]+$/g, '');
     if (RESERVED_STEM.test(stem)) unsafeName(original);
@@ -60,7 +79,8 @@ function normalizePortable(original) {
 }
 
 function validateExpectedFiles(expectedFiles) {
-  if (!Array.isArray(expectedFiles) || expectedFiles.length === 0) throw new Error('archive expected file set mismatch');
+  if (!Array.isArray(expectedFiles) || expectedFiles.length === 0)
+    throw new Error('archive expected file set mismatch');
   const seen = new Set();
   const names = [];
   for (const expected of expectedFiles) {
@@ -101,7 +121,8 @@ function enforceArchiveTotals(entries, compressedSize, limits) {
     total += entry.size;
     if (!Number.isSafeInteger(total) || total > limits.total) throw new Error('archive total size limit exceeded');
   }
-  if (total > 0 && total / Math.max(compressedSize, 1) > limits.ratio) throw new Error('archive compression ratio limit exceeded');
+  if (total > 0 && total / Math.max(compressedSize, 1) > limits.ratio)
+    throw new Error('archive compression ratio limit exceeded');
   return total;
 }
 
@@ -145,8 +166,16 @@ function zipMetadata(bytes, limits) {
   const count = u16(bytes, eocd + 10);
   const centralSize = u32(bytes, eocd + 12);
   const centralOffset = u32(bytes, eocd + 16);
-  if (disk !== 0 || centralDisk !== 0 || diskEntries !== count || count === 0xffff || centralSize === 0xffffffff ||
-      centralOffset === 0xffffffff || centralOffset + centralSize !== eocd || count > limits.entries) {
+  if (
+    disk !== 0 ||
+    centralDisk !== 0 ||
+    diskEntries !== count ||
+    count === 0xffff ||
+    centralSize === 0xffffffff ||
+    centralOffset === 0xffffffff ||
+    centralOffset + centralSize !== eocd ||
+    count > limits.entries
+  ) {
     if (count > limits.entries) throw new Error('archive entry limit exceeded');
     throw new Error('invalid ZIP archive');
   }
@@ -168,14 +197,25 @@ function zipMetadata(bytes, limits) {
     const external = u32(bytes, offset + 38);
     const localOffset = u32(bytes, offset + 42);
     const next = offset + 46 + nameLength + extraLength + commentLength;
-    if (nameLength === 0 || next > eocd || startDisk !== 0 || compressedSize === 0xffffffff || size === 0xffffffff ||
-        localOffset === 0xffffffff || (flags & 1) !== 0 || ![0, 8].includes(method)) throw new Error('invalid ZIP archive');
+    if (
+      nameLength === 0 ||
+      next > eocd ||
+      startDisk !== 0 ||
+      compressedSize === 0xffffffff ||
+      size === 0xffffffff ||
+      localOffset === 0xffffffff ||
+      (flags & 1) !== 0 ||
+      ![0, 8].includes(method)
+    )
+      throw new Error('invalid ZIP archive');
     const original = decodeZipName(bytes.subarray(offset + 46, offset + 46 + nameLength), flags);
     const unixType = (external >>> 16) & 0o170000;
-    if (original.endsWith('/') || (external & 0x10) !== 0 || (unixType !== 0 && unixType !== 0o100000)) unsafeName(original);
+    if (original.endsWith('/') || (external & 0x10) !== 0 || (unixType !== 0 && unixType !== 0o100000))
+      unsafeName(original);
     const name = validateEntryName(original, seen);
     if (size > limits.perFile) throw new Error('archive per-file size limit exceeded');
-    if (size > 0 && size / Math.max(compressedSize, 1) > limits.ratio) throw new Error('archive compression ratio limit exceeded');
+    if (size > 0 && size / Math.max(compressedSize, 1) > limits.ratio)
+      throw new Error('archive compression ratio limit exceeded');
     entries.push({
       name,
       original,
@@ -186,7 +226,7 @@ function zipMetadata(bytes, limits) {
       compressedSize,
       size,
       localOffset,
-      executable: /\.exe$/i.test(name) || (((external >>> 16) & 0o111) !== 0)
+      executable: /\.exe$/i.test(name) || ((external >>> 16) & 0o111) !== 0
     });
     offset = next;
   }
@@ -199,8 +239,12 @@ function zipDataDescriptorEnd(bytes, entry, dataEnd, centralOffset) {
   if ((entry.flags & 0x08) === 0) return dataEnd;
   let offset = dataEnd;
   if (offset + 4 <= centralOffset && u32(bytes, offset) === 0x08074b50) offset += 4;
-  if (offset + 12 > centralOffset || u32(bytes, offset) !== entry.checksum ||
-      u32(bytes, offset + 4) !== entry.compressedSize || u32(bytes, offset + 8) !== entry.size) {
+  if (
+    offset + 12 > centralOffset ||
+    u32(bytes, offset) !== entry.checksum ||
+    u32(bytes, offset + 4) !== entry.compressedSize ||
+    u32(bytes, offset + 8) !== entry.size
+  ) {
     throw new Error('invalid ZIP archive');
   }
   return offset + 12;
@@ -223,10 +267,18 @@ function preflightZipLocalEntries(bytes, entries, centralOffset) {
     const dataEnd = dataStart + entry.compressedSize;
     const descriptor = (flags & 0x08) !== 0;
     const localMetadataMatches = descriptor
-      ? [localChecksum, localCompressedSize, localSize].every((value, index) => value === 0 || value === [entry.checksum, entry.compressedSize, entry.size][index])
+      ? [localChecksum, localCompressedSize, localSize].every(
+          (value, index) => value === 0 || value === [entry.checksum, entry.compressedSize, entry.size][index]
+        )
       : localChecksum === entry.checksum && localCompressedSize === entry.compressedSize && localSize === entry.size;
-    if (dataEnd > centralOffset || flags !== entry.flags || method !== entry.method || !localMetadataMatches ||
-        nameLength !== entry.rawName.length || !bytes.subarray(nameStart, nameStart + nameLength).equals(entry.rawName)) {
+    if (
+      dataEnd > centralOffset ||
+      flags !== entry.flags ||
+      method !== entry.method ||
+      !localMetadataMatches ||
+      nameLength !== entry.rawName.length ||
+      !bytes.subarray(nameStart, nameStart + nameLength).equals(entry.rawName)
+    ) {
       throw new Error('invalid ZIP archive');
     }
     const rangeEnd = zipDataDescriptorEnd(bytes, entry, dataEnd, centralOffset);
@@ -285,7 +337,7 @@ function inflateZipEntries(entries, limits) {
 }
 
 function boundedGunzip(bytes, limits) {
-  const overhead = (limits.entries * 1024) + 1024;
+  const overhead = limits.entries * 1024 + 1024;
   const maximum = Math.min(limits.total + overhead, Math.ceil(bytes.length * limits.ratio) + overhead);
   const chunks = [];
   let size = 0;
@@ -296,7 +348,7 @@ function boundedGunzip(bytes, limits) {
   });
   try {
     for (let offset = 0; offset < bytes.length; offset += 64 * 1024) {
-      const end = Math.min(offset + (64 * 1024), bytes.length);
+      const end = Math.min(offset + 64 * 1024, bytes.length);
       gunzip.push(bytes.subarray(offset, end), end === bytes.length);
     }
   } catch (error) {
@@ -349,7 +401,8 @@ function parseTar(bytes, compressedSize, limits) {
     if (offset + 512 > bytes.length) throw new Error('invalid tar.gz archive');
     if (isZeroBlock(bytes, offset)) {
       if (offset + 1024 > bytes.length || !isZeroBlock(bytes, offset + 512)) throw new Error('invalid tar.gz archive');
-      for (let index = offset + 1024; index < bytes.length; index += 1) if (bytes[index] !== 0) throw new Error('invalid tar.gz archive');
+      for (let index = offset + 1024; index < bytes.length; index += 1)
+        if (bytes[index] !== 0) throw new Error('invalid tar.gz archive');
       ended = true;
       break;
     }
@@ -368,8 +421,14 @@ function parseTar(bytes, compressedSize, limits) {
     const paddedSize = Math.ceil(size / 512) * 512;
     const next = dataStart + paddedSize;
     if (next > bytes.length) throw new Error('invalid tar.gz archive');
-    for (let index = dataStart + size; index < next; index += 1) if (bytes[index] !== 0) throw new Error('invalid tar.gz archive');
-    entries.push({ name, size, executable: (mode & 0o111) !== 0, data: Buffer.from(bytes.subarray(dataStart, dataStart + size)) });
+    for (let index = dataStart + size; index < next; index += 1)
+      if (bytes[index] !== 0) throw new Error('invalid tar.gz archive');
+    entries.push({
+      name,
+      size,
+      executable: (mode & 0o111) !== 0,
+      data: Buffer.from(bytes.subarray(dataStart, dataStart + size))
+    });
     offset = next;
   }
   if (!ended) throw new Error('invalid tar.gz archive');
@@ -402,7 +461,10 @@ export function inspectArchive({ bytes: input, format, expectedFiles: expectedIn
   else throw new Error(`unsupported archive format: ${String(format)}`);
 
   const inspection = Object.freeze({ format, files: Object.freeze(entries.map(({ name }) => name)) });
-  INSPECTIONS.set(inspection, entries.map((entry) => Object.freeze({ ...entry, data: Buffer.from(entry.data) })));
+  INSPECTIONS.set(
+    inspection,
+    entries.map((entry) => Object.freeze({ ...entry, data: Buffer.from(entry.data) }))
+  );
   return inspection;
 }
 
@@ -425,10 +487,13 @@ async function verifySecureParent(fsImpl, parent, expectedIdentity) {
   const parsed = path.parse(resolved);
   let current = parsed.root;
   const components = resolved.slice(parsed.root.length).split(path.sep).filter(Boolean);
-  const paths = [current, ...components.map((component) => {
-    current = path.join(current, component);
-    return current;
-  })];
+  const paths = [
+    current,
+    ...components.map((component) => {
+      current = path.join(current, component);
+      return current;
+    })
+  ];
   for (const candidate of paths) {
     let info;
     try {
@@ -441,7 +506,10 @@ async function verifySecureParent(fsImpl, parent, expectedIdentity) {
   const info = await fsImpl.lstat(resolved);
   const physical = await fsImpl.realpath(resolved);
   const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
-  if ((currentUid !== null && Number.isInteger(info.uid) && info.uid !== currentUid) || (currentUid !== null && (info.mode & 0o022) !== 0)) {
+  if (
+    (currentUid !== null && Number.isInteger(info.uid) && info.uid !== currentUid) ||
+    (currentUid !== null && (info.mode & 0o022) !== 0)
+  ) {
     throw new Error(`unsafe archive output parent: ${resolved}`);
   }
   if (expectedIdentity && (!sameIdentity(info, expectedIdentity) || physical !== expectedIdentity.physical)) {
@@ -483,7 +551,7 @@ async function walkStage(fsImpl, root, relative = '') {
     if (info.isSymbolicLink()) throw new Error('unsafe staged archive entry');
     if (info.isDirectory()) {
       found.push({ name: childRelative, type: 'directory', info });
-      found.push(...await walkStage(fsImpl, root, childRelative));
+      found.push(...(await walkStage(fsImpl, root, childRelative)));
     } else if (info.isFile()) {
       found.push({ name: childRelative, type: 'file', info });
     } else {
@@ -497,8 +565,13 @@ async function verifyStage(fsImpl, stage, identity, entries) {
   const stageInfo = await fsImpl.lstat(stage);
   const physical = await fsImpl.realpath(stage);
   const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
-  if (!stageInfo.isDirectory() || stageInfo.isSymbolicLink() || !sameIdentity(stageInfo, identity) ||
-      (currentUid !== null && (stageInfo.mode & 0o077) !== 0) || (currentUid !== null && Number.isInteger(stageInfo.uid) && stageInfo.uid !== currentUid)) {
+  if (
+    !stageInfo.isDirectory() ||
+    stageInfo.isSymbolicLink() ||
+    !sameIdentity(stageInfo, identity) ||
+    (currentUid !== null && (stageInfo.mode & 0o077) !== 0) ||
+    (currentUid !== null && Number.isInteger(stageInfo.uid) && stageInfo.uid !== currentUid)
+  ) {
     throw new Error('unsafe staged archive directory');
   }
 
@@ -519,8 +592,12 @@ async function verifyStage(fsImpl, stage, identity, entries) {
       if (currentUid !== null && (item.info.mode & 0o077) !== 0) throw new Error('unsafe staged archive directory');
     } else {
       const expectedMode = wanted.entry.executable ? 0o700 : 0o600;
-      if (item.info.nlink !== 1 || item.info.size !== wanted.entry.data.length || (currentUid !== null && (item.info.mode & 0o777) !== expectedMode) ||
-          !Buffer.from(await fsImpl.readFile(candidate)).equals(wanted.entry.data)) {
+      if (
+        item.info.nlink !== 1 ||
+        item.info.size !== wanted.entry.data.length ||
+        (currentUid !== null && (item.info.mode & 0o777) !== expectedMode) ||
+        !Buffer.from(await fsImpl.readFile(candidate)).equals(wanted.entry.data)
+      ) {
         throw new Error('staged archive entry verification failed');
       }
     }
@@ -531,7 +608,7 @@ async function removeOwnedDirectory(fsImpl, target, identity, expectedPhysical) 
   try {
     const info = await fsImpl.lstat(target);
     if (!info.isDirectory() || info.isSymbolicLink() || !sameIdentity(info, identity)) return false;
-    if (await fsImpl.realpath(target) !== expectedPhysical) return false;
+    if ((await fsImpl.realpath(target)) !== expectedPhysical) return false;
     await fsImpl.rm(target, { recursive: true, force: false });
     return true;
   } catch {
@@ -544,8 +621,12 @@ async function verifyOwnedReservation(fsImpl, reservation, expectedIdentity) {
   const info = await fsImpl.lstat(reservation);
   const physical = await fsImpl.realpath(reservation);
   const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
-  if (!info.isDirectory() || info.isSymbolicLink() || (currentUid !== null && (info.mode & 0o077) !== 0) ||
-      (currentUid !== null && Number.isInteger(info.uid) && info.uid !== currentUid)) {
+  if (
+    !info.isDirectory() ||
+    info.isSymbolicLink() ||
+    (currentUid !== null && (info.mode & 0o077) !== 0) ||
+    (currentUid !== null && Number.isInteger(info.uid) && info.uid !== currentUid)
+  ) {
     throw new Error('unsafe archive output reservation');
   }
   if (expectedIdentity && (!sameIdentity(info, expectedIdentity) || physical !== expectedIdentity.physical)) {
@@ -562,8 +643,12 @@ async function transferStageIntoReservation(fsImpl, stage, reservation, reservat
     const info = await fsImpl.lstat(directory);
     const physical = await fsImpl.realpath(directory);
     const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
-    if (!info.isDirectory() || info.isSymbolicLink() || (currentUid !== null && (info.mode & 0o077) !== 0) ||
-        !isPathContained(reservationIdentity.physical, physical)) {
+    if (
+      !info.isDirectory() ||
+      info.isSymbolicLink() ||
+      (currentUid !== null && (info.mode & 0o077) !== 0) ||
+      !isPathContained(reservationIdentity.physical, physical)
+    ) {
       throw new Error('unsafe archive output reservation entry');
     }
   }
@@ -594,7 +679,11 @@ export async function extractInspectedArchive({ inspection, outputDir, fsImpl = 
   let reservationIdentity;
   try {
     stage = await fsImpl.mkdtemp(stagePrefix);
-    if (path.dirname(stage) !== parent || !path.basename(stage).startsWith(path.basename(stagePrefix)) || stage.length <= stagePrefix.length) {
+    if (
+      path.dirname(stage) !== parent ||
+      !path.basename(stage).startsWith(path.basename(stagePrefix)) ||
+      stage.length <= stagePrefix.length
+    ) {
       throw new Error('unsafe staged archive directory');
     }
     const initialStageInfo = await fsImpl.lstat(stage);
@@ -617,14 +706,16 @@ export async function extractInspectedArchive({ inspection, outputDir, fsImpl = 
     await transferStageIntoReservation(fsImpl, stage, output, reservationIdentity, entries);
     await verifyOwnedReservation(fsImpl, output, reservationIdentity);
     await verifyStage(fsImpl, output, reservationIdentity, entries);
-    if (!await removeOwnedDirectory(fsImpl, stage, stageIdentity, stagePhysical)) throw new Error('failed to remove owned archive stage');
+    if (!(await removeOwnedDirectory(fsImpl, stage, stageIdentity, stagePhysical)))
+      throw new Error('failed to remove owned archive stage');
     await verifySecureParent(fsImpl, parent, parentIdentity);
     await verifyOwnedReservation(fsImpl, output, reservationIdentity);
     await verifyStage(fsImpl, output, reservationIdentity, entries);
     return { outputDir: output, files: entries.map((entry) => path.join(output, ...entry.name.split('/'))) };
   } catch (error) {
     if (stageIdentity) await removeOwnedDirectory(fsImpl, stage, stageIdentity, stagePhysical);
-    if (reservationIdentity) await removeOwnedDirectory(fsImpl, output, reservationIdentity, reservationIdentity.physical);
+    if (reservationIdentity)
+      await removeOwnedDirectory(fsImpl, output, reservationIdentity, reservationIdentity.physical);
     throw error;
   }
 }

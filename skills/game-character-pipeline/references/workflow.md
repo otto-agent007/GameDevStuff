@@ -84,10 +84,10 @@ Validation checks deterministic artifacts, engine metadata, integer block scalin
 
 ## Exit classes
 
-| Class | Meaning | Required action |
-| --- | --- | --- |
-| `0` | Requested stage complete | Report the evidence produced |
-| `1` | Invocation or unexpected failure | Correct the command or diagnose the failure |
-| `2` | External generation/import handoff | Return the handoff and wait for the artifact |
-| `3` | Objective contract or validation failure | Stop; correct the source, edit, contract, or output |
-| `4` | Owner review required or rejected | Stop without publishing or integrating |
+| Class | Meaning                                  | Required action                                     |
+| ----- | ---------------------------------------- | --------------------------------------------------- |
+| `0`   | Requested stage complete                 | Report the evidence produced                        |
+| `1`   | Invocation or unexpected failure         | Correct the command or diagnose the failure         |
+| `2`   | External generation/import handoff       | Return the handoff and wait for the artifact        |
+| `3`   | Objective contract or validation failure | Stop; correct the source, edit, contract, or output |
+| `4`   | Owner review required or rejected        | Stop without publishing or integrating              |

@@ -49,9 +49,7 @@ test('CLI rejects an input under a configured forbidden integration root before 
     `integration:\n  projectId: private-project\n  forbiddenIntegrationPaths:\n    - ${forbidden}\n`
   );
 
-  const result = invoke([
-    'prepare', '--input', input, '--output', path.join(allowed, 'prepared'), '--cwd', allowed
-  ]);
+  const result = invoke(['prepare', '--input', input, '--output', path.join(allowed, 'prepared'), '--cwd', allowed]);
   assert.equal(result.status, 1, result.stderr);
   assert.match(result.stderr, /forbidden integration path/);
 });
@@ -61,12 +59,32 @@ async function approvalCliFixture() {
   const runDir = path.join(projectDir, 'run');
   await fs.mkdir(path.join(projectDir, '.pixel-sprite-pipeline'), { recursive: true, mode: 0o700 });
   await fs.mkdir(runDir);
-  const rgba = [[0, 0, 0, 0], [18, 34, 51, 255]];
+  const rgba = [
+    [0, 0, 0, 0],
+    [18, 34, 51, 255]
+  ];
   const document = {
-    version: 1, anchor: { sha256: 'a'.repeat(64), traitReferenceSha256: ['b'.repeat(64)] },
-    sizes: { canonical: [128, 128], generation: [1024, 1024], runtime: [256, 256], pixelSize: 8 }, pivot: { x: 64, y: 112 }, baseline: 111,
+    version: 1,
+    anchor: { sha256: 'a'.repeat(64), traitReferenceSha256: ['b'.repeat(64)] },
+    sizes: { canonical: [128, 128], generation: [1024, 1024], runtime: [256, 256], pixelSize: 8 },
+    pivot: { x: 64, y: 112 },
+    baseline: 111,
     palette: { rgba, sha256: stableHash(rgba), snapperPaletteHex: ['122233'] },
-    clips: [{ id: 'idle', loopMode: 'once', loopTransition: null, frames: [{ id: 'idle-01', pose: 'rest', duration: 100, landmarkSemantic: { name: 'character-root', target: { x: 64, y: 112 } } }] }],
+    clips: [
+      {
+        id: 'idle',
+        loopMode: 'once',
+        loopTransition: null,
+        frames: [
+          {
+            id: 'idle-01',
+            pose: 'rest',
+            duration: 100,
+            landmarkSemantic: { name: 'character-root', target: { x: 64, y: 112 } }
+          }
+        ]
+      }
+    ],
     review: { checkpoints: ['identity'], approvers: ['artist@example.test'] }
   };
   const contractFile = path.join(projectDir, 'animation-contract.json');
@@ -76,13 +94,41 @@ async function approvalCliFixture() {
   const output = path.join(runDir, 'idle-01.png');
   await Promise.all([fs.writeFile(input, 'source'), fs.writeFile(output, 'snapped')]);
   const receipt = await writeSnapReceipt({
-    projectDir, run: { id: 'run-1', outputDir: runDir, manifestSha256: 'c'.repeat(64) }, contract, inputs: [input], outputs: [output], args: ['16'],
-    identity: { origin: 'managed-cache', sha256: 'd'.repeat(64), size: 1, version: '1.2.3', helpSha256: 'e'.repeat(64), fixtureRgbaSha256: 'f'.repeat(64), pinnedReleaseTag: null, upstreamCommit: null }
+    projectDir,
+    run: { id: 'run-1', outputDir: runDir, manifestSha256: 'c'.repeat(64) },
+    contract,
+    inputs: [input],
+    outputs: [output],
+    args: ['16'],
+    identity: {
+      origin: 'managed-cache',
+      sha256: 'd'.repeat(64),
+      size: 1,
+      version: '1.2.3',
+      helpSha256: 'e'.repeat(64),
+      fixtureRgbaSha256: 'f'.repeat(64),
+      pinnedReleaseTag: null,
+      upstreamCommit: null
+    }
   });
   const request = {
     version: 1,
-    frames: [{ id: 'idle-01', path: receipt.document.payload.outputs[0].path, sha256: receipt.document.payload.outputs[0].sha256 }],
-    approvals: [{ frameId: 'idle-01', landmark: { x: 61, y: 109 }, approved: true, approvedBy: 'artist@example.test', checkpoints: ['identity'] }]
+    frames: [
+      {
+        id: 'idle-01',
+        path: receipt.document.payload.outputs[0].path,
+        sha256: receipt.document.payload.outputs[0].sha256
+      }
+    ],
+    approvals: [
+      {
+        frameId: 'idle-01',
+        landmark: { x: 61, y: 109 },
+        approved: true,
+        approvedBy: 'artist@example.test',
+        checkpoints: ['identity']
+      }
+    ]
   };
   const requestFile = path.join(projectDir, 'approval-request.json');
   await fs.writeFile(requestFile, `${JSON.stringify(request)}\n`);
@@ -95,38 +141,71 @@ async function productionCliFixture({ canvasWidth = 13 } = {}) {
   await fs.mkdir(inputsDir);
   const input = path.join(inputsDir, 'walk-contact--actor.png');
   const image = { width: 13, height: 14, channels: 4, data: Buffer.alloc(13 * 14 * 4, 0) };
-  for (let y = 3; y <= 11; y += 1) for (let x = 5; x <= 7; x += 1) image.data.set([20, 30, 60, 255], (y * image.width + x) * 4);
+  for (let y = 3; y <= 11; y += 1)
+    for (let x = 5; x <= 7; x += 1) image.data.set([20, 30, 60, 255], (y * image.width + x) * 4);
   await writeRgba(input, image);
   const discovered = paletteOf(await readRgba(input)).map(({ rgba: color }) => color);
   const rgba = [discovered.find((color) => color[3] === 0), ...discovered.filter((color) => color[3] !== 0)];
-  const opaque = rgba.slice(1).map((color) => color.slice(0, 3).map((component) => component.toString(16).padStart(2, '0')).join(''));
+  const opaque = rgba.slice(1).map((color) =>
+    color
+      .slice(0, 3)
+      .map((component) => component.toString(16).padStart(2, '0'))
+      .join('')
+  );
   const inputSha256 = await sha256(input);
   const document = {
-    version: 2, selectionApprovalSha256: '1'.repeat(64),
+    version: 2,
+    selectionApprovalSha256: '1'.repeat(64),
     character: { id: 'clockwork-courier', anchorSha256: inputSha256 },
     canvas: { width: canvasWidth, height: 14, pivot: { x: 6, y: 11 }, baseline: 11 },
     scale: { integer: 2, runtime: { width: canvasWidth * 2, height: 28 } },
     palette: { rgba, sha256: stableHash(rgba), snapperPaletteHex: opaque },
     tracks: [{ id: 'actor', kind: 'actor', required: true, attachTo: null }],
-    sockets: [], contacts: [],
-    clips: [{ id: 'walk', loopMode: 'once', frames: [{ id: 'walk-contact', semantic: 'contact', duration: 80, tracks: ['actor'], sockets: [], contacts: [], groundTravel: { x: 0, y: 0 } }] }],
+    sockets: [],
+    contacts: [],
+    clips: [
+      {
+        id: 'walk',
+        loopMode: 'once',
+        frames: [
+          {
+            id: 'walk-contact',
+            semantic: 'contact',
+            duration: 80,
+            tracks: ['actor'],
+            sockets: [],
+            contacts: [],
+            groundTravel: { x: 0, y: 0 }
+          }
+        ]
+      }
+    ],
     review: { checkpoints: ['identity', 'landmarks'], approvers: ['owner'] }
   };
   const contractFile = path.join(projectDir, 'animation-contract-v2.json');
   await fs.writeFile(contractFile, `${JSON.stringify(document)}\n`);
-  await fs.writeFile(`${contractFile}.inputs.json`, `${JSON.stringify({
-    version: 1,
-    selectionApprovalSha256: document.selectionApprovalSha256,
-    anchor: { path: 'inputs/walk-contact--actor.png', sha256: inputSha256 },
-    frames: [{ frameId: 'walk-contact', trackId: 'actor', path: 'inputs/walk-contact--actor.png', sha256: inputSha256 }]
-  })}\n`);
+  await fs.writeFile(
+    `${contractFile}.inputs.json`,
+    `${JSON.stringify({
+      version: 1,
+      selectionApprovalSha256: document.selectionApprovalSha256,
+      anchor: { path: 'inputs/walk-contact--actor.png', sha256: inputSha256 },
+      frames: [
+        { frameId: 'walk-contact', trackId: 'actor', path: 'inputs/walk-contact--actor.png', sha256: inputSha256 }
+      ]
+    })}\n`
+  );
   return { projectDir, input, inputSha256, document, contractFile };
 }
 
 async function validationRequest(projectDir) {
   const input = path.join(projectDir, 'pilot anchor.png');
   await makeAnchor(input);
-  const prepared = await prepareAnchor({ input, outputDir: path.join(projectDir, 'prepared'), config: structuredClone(DEFAULT_CONFIG) });
+  const prepared = await prepareAnchor({
+    input,
+    outputDir: path.join(projectDir, 'prepared'),
+    config: structuredClone(DEFAULT_CONFIG)
+  });
   const normalized = await normalizeFrames({
     inputs: [prepared.canonicalTransparent],
     outputDir: path.join(projectDir, 'normalized'),
@@ -150,7 +229,22 @@ async function validationRequest(projectDir) {
 test('CLI exposes every independently callable pipeline stage', () => {
   const result = invoke(['--help']);
   assert.equal(result.status, 0, result.stderr);
-  for (const command of ['setup-snapper', 'inspect', 'prepare', 'snap', 'normalize', 'export', 'validate', 'correct', 'promote-profile', 'propose-rule', 'run', 'contract', 'approve-frames', 'produce-contract']) {
+  for (const command of [
+    'setup-snapper',
+    'inspect',
+    'prepare',
+    'snap',
+    'normalize',
+    'export',
+    'validate',
+    'correct',
+    'promote-profile',
+    'propose-rule',
+    'run',
+    'contract',
+    'approve-frames',
+    'produce-contract'
+  ]) {
     assert.match(result.stdout, new RegExp(`\\b${command}\\b`));
   }
 });
@@ -161,13 +255,37 @@ test('contract inspect and approve-frames consume only explicit contract and lan
   assert.equal(inspected.status, 0, inspected.stderr);
   assert.equal(json(inspected.stdout).sha256.length, 64);
 
-  const approved = invoke(['approve-frames', '--contract', value.contractFile, '--snap-receipt', value.receipt.path, '--approval-request', value.requestFile, '--version', '1', '--project-dir', value.projectDir]);
+  const approved = invoke([
+    'approve-frames',
+    '--contract',
+    value.contractFile,
+    '--snap-receipt',
+    value.receipt.path,
+    '--approval-request',
+    value.requestFile,
+    '--version',
+    '1',
+    '--project-dir',
+    value.projectDir
+  ]);
   assert.equal(approved.status, 0, approved.stderr);
   assert.match(json(approved.stdout).path, /frame-approval-01\.json$/);
 
   const implicit = path.join(value.projectDir, 'implicit-request.json');
   await fs.writeFile(implicit, JSON.stringify({ version: 1, approvals: [] }));
-  const rejected = invoke(['approve-frames', '--contract', value.contractFile, '--snap-receipt', value.receipt.path, '--approval-request', implicit, '--version', '2', '--project-dir', value.projectDir]);
+  const rejected = invoke([
+    'approve-frames',
+    '--contract',
+    value.contractFile,
+    '--snap-receipt',
+    value.receipt.path,
+    '--approval-request',
+    implicit,
+    '--version',
+    '2',
+    '--project-dir',
+    value.projectDir
+  ]);
   assert.equal(rejected.status, 1);
   assert.match(json(rejected.stderr).error, /frames|approval request/i);
 });
@@ -176,29 +294,88 @@ test('contract export CLI uses only contract timing and rejects a conflicting du
   const projectDir = await tempProject('sprite contract export cli ');
   const anchor = path.join(projectDir, 'anchor.png');
   await makeAnchor(anchor);
-  const prepared = await prepareAnchor({ input: anchor, outputDir: path.join(projectDir, 'prepared'), config: structuredClone(DEFAULT_CONFIG) });
-  const normalized = await normalizeFrames({ inputs: [prepared.canonicalTransparent], outputDir: path.join(projectDir, 'normalized'), config: structuredClone(DEFAULT_CONFIG), scaleFactor: 1 });
+  const prepared = await prepareAnchor({
+    input: anchor,
+    outputDir: path.join(projectDir, 'prepared'),
+    config: structuredClone(DEFAULT_CONFIG)
+  });
+  const normalized = await normalizeFrames({
+    inputs: [prepared.canonicalTransparent],
+    outputDir: path.join(projectDir, 'normalized'),
+    config: structuredClone(DEFAULT_CONFIG),
+    scaleFactor: 1
+  });
   const palette = paletteOf(await readRgba(normalized.frames[0])).map(({ rgba }) => rgba);
-  const opaque = palette.slice(1).map((rgba) => rgba.slice(0, 3).map((component) => component.toString(16).padStart(2, '0')).join(''));
+  const opaque = palette.slice(1).map((rgba) =>
+    rgba
+      .slice(0, 3)
+      .map((component) => component.toString(16).padStart(2, '0'))
+      .join('')
+  );
   const document = {
-    version: 1, anchor: { sha256: 'a'.repeat(64), traitReferenceSha256: ['b'.repeat(64)] },
-    sizes: { canonical: [128, 128], generation: [1024, 1024], runtime: [256, 256], pixelSize: 8 }, pivot: { x: 64, y: 112 }, baseline: 111,
+    version: 1,
+    anchor: { sha256: 'a'.repeat(64), traitReferenceSha256: ['b'.repeat(64)] },
+    sizes: { canonical: [128, 128], generation: [1024, 1024], runtime: [256, 256], pixelSize: 8 },
+    pivot: { x: 64, y: 112 },
+    baseline: 111,
     palette: { rgba: palette, sha256: stableHash(palette), snapperPaletteHex: opaque },
-    clips: [{ id: 'idle', loopMode: 'once', loopTransition: null, frames: [{ id: 'idle-01', pose: 'rest', duration: 137, landmarkSemantic: { name: 'character-root', target: { x: 64, y: 112 } } }] }],
+    clips: [
+      {
+        id: 'idle',
+        loopMode: 'once',
+        loopTransition: null,
+        frames: [
+          {
+            id: 'idle-01',
+            pose: 'rest',
+            duration: 137,
+            landmarkSemantic: { name: 'character-root', target: { x: 64, y: 112 } }
+          }
+        ]
+      }
+    ],
     review: { checkpoints: ['identity'], approvers: ['artist@example.test'] }
   };
-  normalized.measurements[0] = { ...normalized.measurements[0], frameId: 'idle-01', sourceLandmark: { x: 6, y: 12 }, canonicalLandmark: { x: 64, y: 112 }, landmarkDrift: { x: 0, y: 0 } };
+  normalized.measurements[0] = {
+    ...normalized.measurements[0],
+    frameId: 'idle-01',
+    sourceLandmark: { x: 6, y: 12 },
+    canonicalLandmark: { x: 64, y: 112 },
+    landmarkDrift: { x: 0, y: 0 }
+  };
   const contractFile = path.join(projectDir, 'animation-contract.json');
   const normalizationFile = path.join(projectDir, 'normalization.json');
   await fs.writeFile(contractFile, `${JSON.stringify(document)}\n`);
   await fs.writeFile(normalizationFile, `${JSON.stringify(normalized)}\n`);
 
-  const conflict = invoke(['export', '--contract', contractFile, '--normalization', normalizationFile, '--frame-approval-sha256', 'c'.repeat(64), '--duration', '100', '--output', path.join(projectDir, 'conflict')]);
+  const conflict = invoke([
+    'export',
+    '--contract',
+    contractFile,
+    '--normalization',
+    normalizationFile,
+    '--frame-approval-sha256',
+    'c'.repeat(64),
+    '--duration',
+    '100',
+    '--output',
+    path.join(projectDir, 'conflict')
+  ]);
   assert.equal(conflict.status, 1);
   assert.match(json(conflict.stderr).error, /duration.*contract|contract.*duration/i);
 
   const output = path.join(projectDir, 'runtime');
-  const result = invoke(['export', '--contract', contractFile, '--normalization', normalizationFile, '--frame-approval-sha256', 'c'.repeat(64), '--output', output]);
+  const result = invoke([
+    'export',
+    '--contract',
+    contractFile,
+    '--normalization',
+    normalizationFile,
+    '--frame-approval-sha256',
+    'c'.repeat(64),
+    '--output',
+    output
+  ]);
   assert.equal(result.status, 0, result.stderr);
   const exported = json(result.stdout);
   assert.deepEqual(exported.clips.idle.durations, [137]);
@@ -209,7 +386,18 @@ test('contract export CLI uses only contract timing and rejects a conflicting du
 test('produce-contract emits structured manual and post-snap owner handoffs', async () => {
   const manual = await productionCliFixture({ canvasWidth: 12 });
   const manualOutput = path.join(manual.projectDir, 'production');
-  const first = invoke(['produce-contract', '--contract', manual.contractFile, '--project-dir', manual.projectDir, '--output', manualOutput], { env: { PATH: '' } });
+  const first = invoke(
+    [
+      'produce-contract',
+      '--contract',
+      manual.contractFile,
+      '--project-dir',
+      manual.projectDir,
+      '--output',
+      manualOutput
+    ],
+    { env: { PATH: '' } }
+  );
   assert.equal(first.status, 2, first.stderr);
   const manualResponse = json(first.stdout);
   assert.equal(manualResponse.next.kind, 'pixel-snapper-manual');
@@ -224,11 +412,34 @@ test('produce-contract emits structured manual and post-snap owner handoffs', as
   await fs.copyFile(review.input, snapped);
   const contract = await loadAnimationContract(review.contractFile);
   const receipt = await writeSnapReceipt({
-    projectDir: review.projectDir, run: { id: null, outputDir: snapDir, manifestSha256: '2'.repeat(64) }, contract,
-    inputs: [review.input], outputs: [snapped], args: ['16'],
-    identity: { origin: 'managed-cache', sha256: '3'.repeat(64), size: 1, version: '1.2.3', helpSha256: '4'.repeat(64), fixtureRgbaSha256: '5'.repeat(64), pinnedReleaseTag: null, upstreamCommit: null }
+    projectDir: review.projectDir,
+    run: { id: null, outputDir: snapDir, manifestSha256: '2'.repeat(64) },
+    contract,
+    inputs: [review.input],
+    outputs: [snapped],
+    args: ['16'],
+    identity: {
+      origin: 'managed-cache',
+      sha256: '3'.repeat(64),
+      size: 1,
+      version: '1.2.3',
+      helpSha256: '4'.repeat(64),
+      fixtureRgbaSha256: '5'.repeat(64),
+      pinnedReleaseTag: null,
+      upstreamCommit: null
+    }
   });
-  const second = invoke(['produce-contract', '--contract', review.contractFile, '--project-dir', review.projectDir, '--output', path.join(review.projectDir, 'production'), '--snap-receipt', receipt.path]);
+  const second = invoke([
+    'produce-contract',
+    '--contract',
+    review.contractFile,
+    '--project-dir',
+    review.projectDir,
+    '--output',
+    path.join(review.projectDir, 'production'),
+    '--snap-receipt',
+    receipt.path
+  ]);
   assert.equal(second.status, 4, second.stderr);
   const reviewResponse = json(second.stdout);
   assert.equal(reviewResponse.next.kind, 'post-snap-frame-approval');
@@ -313,7 +524,10 @@ test('objective blockers take exit 3 priority when subjective review failures co
 test('validate rejects malformed and unknown request fields without evaluating data as code', async () => {
   const projectDir = await tempProject();
   const request = path.join(projectDir, 'bad.json');
-  await fs.writeFile(request, JSON.stringify({ version: 1, anchorReport: {}, normalized: {}, exported: {}, operation: 'process.exit(0)' }));
+  await fs.writeFile(
+    request,
+    JSON.stringify({ version: 1, anchorReport: {}, normalized: {}, exported: {}, operation: 'process.exit(0)' })
+  );
   const result = invoke(['validate', '--request', request]);
   assert.equal(result.status, 1);
   assert.equal(result.stdout, '');
@@ -347,10 +561,20 @@ test('guided run creates a versioned generation handoff and resumes inside the s
   assert.ok(json(persisted).next.argv.includes(handoff.runId));
   assert.equal('command' in json(persisted).next, false);
 
-  const resumed = invoke([
-    'run', '--resume', handoff.runId, '--resume-token', handoff.resumeToken,
-    '--frame', frame, '--project-dir', projectDir
-  ], { env: { PATH: '' } });
+  const resumed = invoke(
+    [
+      'run',
+      '--resume',
+      handoff.runId,
+      '--resume-token',
+      handoff.resumeToken,
+      '--frame',
+      frame,
+      '--project-dir',
+      projectDir
+    ],
+    { env: { PATH: '' } }
+  );
   assert.equal(resumed.status, 2, resumed.stderr);
   const snapHandoff = json(resumed.stdout);
   assert.equal(snapHandoff.status, 'manual-handoff');
@@ -359,13 +583,30 @@ test('guided run creates a versioned generation handoff and resumes inside the s
   assert.ok(snapHandoff.next.argv.includes('--resume'));
   assert.equal(snapHandoff.next.cwd, projectDir);
 
-  const replay = invoke(['run', '--resume', handoff.runId, '--resume-token', handoff.resumeToken, '--frame', frame, '--project-dir', projectDir]);
+  const replay = invoke([
+    'run',
+    '--resume',
+    handoff.runId,
+    '--resume-token',
+    handoff.resumeToken,
+    '--frame',
+    frame,
+    '--project-dir',
+    projectDir
+  ]);
   assert.equal(replay.status, 1);
   assert.match(json(replay.stderr).error, /already consumed/i);
 
   const finished = invoke([
-    'run', '--resume', snapHandoff.runId, '--resume-token', snapHandoff.resumeToken,
-    '--snapped-frame', frame, '--project-dir', projectDir
+    'run',
+    '--resume',
+    snapHandoff.runId,
+    '--resume-token',
+    snapHandoff.resumeToken,
+    '--snapped-frame',
+    frame,
+    '--project-dir',
+    projectDir
   ]);
   assert.equal(finished.status, 4, finished.stderr);
   const completed = json(finished.stdout);
@@ -406,7 +647,17 @@ test('resume rejects an edited canonical handoff and a changed referenced artifa
       const document = JSON.parse(await fs.readFile(initial.handoffPath, 'utf8'));
       await fs.appendFile(path.join(path.dirname(initial.handoffPath), document.references.matrix.path), 'tamper');
     }
-    const result = invoke(['run', '--resume', initial.runId, '--resume-token', initial.resumeToken, '--frame', frame, '--project-dir', projectDir]);
+    const result = invoke([
+      'run',
+      '--resume',
+      initial.runId,
+      '--resume-token',
+      initial.resumeToken,
+      '--frame',
+      frame,
+      '--project-dir',
+      projectDir
+    ]);
     assert.equal(result.status, 1);
     assert.match(json(result.stderr).error, /handoff.*hash|artifact.*hash/i);
   }
@@ -426,14 +677,37 @@ test('resume rejects symlinked run artifacts and never trusts an edited handoff 
   try {
     await fs.symlink(backup, matrix);
   } catch (error) {
-    if (error.code === 'EPERM') { t.skip('symlinks unavailable'); return; }
+    if (error.code === 'EPERM') {
+      t.skip('symlinks unavailable');
+      return;
+    }
     throw error;
   }
-  const result = invoke(['run', '--resume', initial.runId, '--resume-token', initial.resumeToken, '--frame', frame, '--project-dir', projectDir]);
+  const result = invoke([
+    'run',
+    '--resume',
+    initial.runId,
+    '--resume-token',
+    initial.resumeToken,
+    '--frame',
+    frame,
+    '--project-dir',
+    projectDir
+  ]);
   assert.equal(result.status, 1);
   assert.match(json(result.stderr).error, /symlink|regular.*file/i);
 
-  const callerDocument = invoke(['run', '--resume', initial.handoffPath, '--resume-token', initial.resumeToken, '--frame', frame, '--project-dir', projectDir]);
+  const callerDocument = invoke([
+    'run',
+    '--resume',
+    initial.handoffPath,
+    '--resume-token',
+    initial.resumeToken,
+    '--frame',
+    frame,
+    '--project-dir',
+    projectDir
+  ]);
   assert.equal(callerDocument.status, 1);
   assert.match(json(callerDocument.stderr).error, /run ID/i);
 });
@@ -449,44 +723,105 @@ test('manual snapped-frame resume requires exact count and publishes the batch a
   const distinct = await readRgba(second);
   distinct.data.set([20, 30, 60, 255], (3 * distinct.width + 4) * 4);
   await writeRgba(second, distinct);
-  const snap = json(invoke(['run', '--input', input, '--frame', first, '--frame', second, '--project-dir', projectDir], {
-    env: { PATH: '' }
-  }).stdout);
+  const snap = json(
+    invoke(['run', '--input', input, '--frame', first, '--frame', second, '--project-dir', projectDir], {
+      env: { PATH: '' }
+    }).stdout
+  );
   const runDir = path.dirname(snap.handoffPath);
 
-  const short = invoke(['run', '--resume', snap.runId, '--resume-token', snap.resumeToken, '--snapped-frame', first, '--project-dir', projectDir]);
+  const short = invoke([
+    'run',
+    '--resume',
+    snap.runId,
+    '--resume-token',
+    snap.resumeToken,
+    '--snapped-frame',
+    first,
+    '--project-dir',
+    projectDir
+  ]);
   assert.equal(short.status, 1);
   assert.match(json(short.stderr).error, /exactly 2 snapped frames/i);
   await assert.rejects(fs.lstat(path.join(runDir, 'snapped')), { code: 'ENOENT' });
 
   const missing = path.join(projectDir, 'missing.png');
-  const partial = invoke(['run', '--resume', snap.runId, '--resume-token', snap.resumeToken, '--snapped-frame', first, '--snapped-frame', missing, '--project-dir', projectDir]);
+  const partial = invoke([
+    'run',
+    '--resume',
+    snap.runId,
+    '--resume-token',
+    snap.resumeToken,
+    '--snapped-frame',
+    first,
+    '--snapped-frame',
+    missing,
+    '--project-dir',
+    projectDir
+  ]);
   assert.equal(partial.status, 1);
   await assert.rejects(fs.lstat(path.join(runDir, 'snapped')), { code: 'ENOENT' });
-  assert.deepEqual((await fs.readdir(runDir)).filter((name) => name.includes('snapped-stage')), []);
+  assert.deepEqual(
+    (await fs.readdir(runDir)).filter((name) => name.includes('snapped-stage')),
+    []
+  );
 
-  const retry = invoke(['run', '--resume', snap.runId, '--resume-token', snap.resumeToken, '--snapped-frame', first, '--snapped-frame', second, '--project-dir', projectDir]);
+  const retry = invoke([
+    'run',
+    '--resume',
+    snap.runId,
+    '--resume-token',
+    snap.resumeToken,
+    '--snapped-frame',
+    first,
+    '--snapped-frame',
+    second,
+    '--project-dir',
+    projectDir
+  ]);
   assert.equal(retry.status, 4, retry.stderr);
   assert.equal(json(retry.stdout).validation.passed, true);
-  assert.deepEqual((await fs.readdir(path.join(runDir, 'snapped'))).sort(), ['frame-00-snapped.png', 'frame-01-snapped.png']);
+  assert.deepEqual((await fs.readdir(path.join(runDir, 'snapped'))).sort(), [
+    'frame-00-snapped.png',
+    'frame-01-snapped.png'
+  ]);
 });
 
 test('generated batch keeps an unverified external Pixel Snapper in manual handoff mode', async (t) => {
-  if (process.platform === 'win32') { t.skip('POSIX executable fixture'); return; }
+  if (process.platform === 'win32') {
+    t.skip('POSIX executable fixture');
+    return;
+  }
   const projectDir = await tempProject();
   const input = path.join(projectDir, 'anchor.png');
   const frame = path.join(projectDir, 'generated.png');
   const fake = path.join(projectDir, 'fake snapper.js');
   await makeAnchor(input);
   await makeAnchor(frame);
-  await fs.writeFile(fake, `#!/usr/bin/env node\nconst fs=require('node:fs');const a=process.argv.slice(2);if(a[0]==='--version'){console.log('spritefusion-pixel-snapper 1.0.0');process.exit(0)}if(a[0]==='--help'){console.log('USAGE: spritefusion-pixel-snapper INPUT OUTPUT SIZE');process.exit(0)}fs.copyFileSync(a[0],a[1]);\n`);
+  await fs.writeFile(
+    fake,
+    `#!/usr/bin/env node\nconst fs=require('node:fs');const a=process.argv.slice(2);if(a[0]==='--version'){console.log('spritefusion-pixel-snapper 1.0.0');process.exit(0)}if(a[0]==='--help'){console.log('USAGE: spritefusion-pixel-snapper INPUT OUTPUT SIZE');process.exit(0)}fs.copyFileSync(a[0],a[1]);\n`
+  );
   await fs.chmod(fake, 0o755);
   const initial = json(invoke(['run', '--input', input, '--project-dir', projectDir]).stdout);
-  const args = ['run', '--resume', initial.runId, '--resume-token', initial.resumeToken, '--frame', frame, '--project-dir', projectDir];
+  const args = [
+    'run',
+    '--resume',
+    initial.runId,
+    '--resume-token',
+    initial.resumeToken,
+    '--frame',
+    frame,
+    '--project-dir',
+    projectDir
+  ];
   const result = invoke(args, { env: { PIXEL_SNAPPER_BIN: fake } });
   assert.equal(result.status, 2, result.stderr);
   assert.equal(json(result.stdout).status, 'manual-handoff');
-  assert.deepEqual((await fs.readdir(path.dirname(initial.handoffPath))).filter((name) => name.includes('snapped-stage')), []);
+  assert.deepEqual(
+    (await fs.readdir(path.dirname(initial.handoffPath))).filter((name) => name.includes('snapped-stage')),
+    []
+  );
 });
 
 test('manual snapped batch is authenticated and reusable after downstream normalization failure', async () => {
@@ -495,13 +830,25 @@ test('manual snapped batch is authenticated and reusable after downstream normal
   const frame = path.join(projectDir, 'frame.png');
   await makeAnchor(input);
   await makeAnchor(frame);
-  const snap = json(invoke(['run', '--input', input, '--frame', frame, '--project-dir', projectDir], {
-    env: { PATH: '' }
-  }).stdout);
+  const snap = json(
+    invoke(['run', '--input', input, '--frame', frame, '--project-dir', projectDir], {
+      env: { PATH: '' }
+    }).stdout
+  );
   const runDir = path.dirname(snap.handoffPath);
   const normalizedBlocker = path.join(runDir, 'normalized');
   await fs.writeFile(normalizedBlocker, 'temporary blocker');
-  const args = ['run', '--resume', snap.runId, '--resume-token', snap.resumeToken, '--snapped-frame', frame, '--project-dir', projectDir];
+  const args = [
+    'run',
+    '--resume',
+    snap.runId,
+    '--resume-token',
+    snap.resumeToken,
+    '--snapped-frame',
+    frame,
+    '--project-dir',
+    projectDir
+  ];
   const first = invoke(args);
   assert.equal(first.status, 1);
   assert.deepEqual(await fs.readdir(path.join(runDir, 'snapped')), ['frame-00-snapped.png']);
@@ -535,13 +882,25 @@ test('identical retry reuses normalized and exported artifacts after a transient
   const frame = path.join(projectDir, 'frame.png');
   await makeAnchor(input);
   await makeAnchor(frame);
-  const snap = json(invoke(['run', '--input', input, '--frame', frame, '--project-dir', projectDir], {
-    env: { PATH: '' }
-  }).stdout);
+  const snap = json(
+    invoke(['run', '--input', input, '--frame', frame, '--project-dir', projectDir], {
+      env: { PATH: '' }
+    }).stdout
+  );
   const runDir = path.dirname(snap.handoffPath);
   const reportBlocker = path.join(runDir, 'report.json');
   await fs.mkdir(reportBlocker);
-  const args = ['run', '--resume', snap.runId, '--resume-token', snap.resumeToken, '--snapped-frame', frame, '--project-dir', projectDir];
+  const args = [
+    'run',
+    '--resume',
+    snap.runId,
+    '--resume-token',
+    snap.resumeToken,
+    '--snapped-frame',
+    frame,
+    '--project-dir',
+    projectDir
+  ];
   const first = invoke(args);
   assert.equal(first.status, 1);
   assert.ok((await fs.lstat(path.join(runDir, 'normalized'))).isDirectory());
@@ -565,10 +924,22 @@ test('failed validation records evidence without consuming the retry transition'
   const changed = await readRgba(frame);
   changed.data.set([255, 0, 0, 255], (5 * changed.width + 5) * 4);
   await writeRgba(frame, changed);
-  const snap = json(invoke(['run', '--input', input, '--frame', frame, '--project-dir', projectDir], {
-    env: { PATH: '' }
-  }).stdout);
-  const args = ['run', '--resume', snap.runId, '--resume-token', snap.resumeToken, '--snapped-frame', frame, '--project-dir', projectDir];
+  const snap = json(
+    invoke(['run', '--input', input, '--frame', frame, '--project-dir', projectDir], {
+      env: { PATH: '' }
+    }).stdout
+  );
+  const args = [
+    'run',
+    '--resume',
+    snap.runId,
+    '--resume-token',
+    snap.resumeToken,
+    '--snapped-frame',
+    frame,
+    '--project-dir',
+    projectDir
+  ];
   const first = invoke(args);
   assert.equal(first.status, 4, first.stderr);
   assert.equal(json(first.stdout).validation.passed, false);
@@ -595,7 +966,10 @@ test('setup-snapper CLI forwards project-dir and force only through explicit in-
   const calls = [];
   const program = createProgram({
     manifestPath: '/explicit/test/manifest.json',
-    setupPixelSnapperImpl: async (options) => { calls.push(options); return { status: 'installed' }; },
+    setupPixelSnapperImpl: async (options) => {
+      calls.push(options);
+      return { status: 'installed' };
+    },
     printImpl: () => {}
   });
   await program.parseAsync(['node', 'pixel-sprite-pipeline', 'setup-snapper', '--project-dir', projectDir, '--force']);
@@ -610,12 +984,18 @@ test('hostile environment variables cannot replace production setup manifest or 
   const projectDir = await tempProject('hostile setup env ');
   const fakeManifest = path.join(projectDir, 'fake.json');
   const fakeArchive = path.join(projectDir, 'fake.tar.gz');
-  const productionManifest = JSON.parse(await fs.readFile(path.join(packageDir, 'references', 'pixel-snapper-tool-manifest.json'), 'utf8'));
+  const productionManifest = JSON.parse(
+    await fs.readFile(path.join(packageDir, 'references', 'pixel-snapper-tool-manifest.json'), 'utf8')
+  );
   await fs.writeFile(fakeManifest, '{}');
   await fs.writeFile(fakeArchive, 'fake');
-  const result = invoke(['setup-snapper', '--project-dir', projectDir], { env: {
-    NODE_ENV: 'test', PIXEL_SNAPPER_TEST_MANIFEST: fakeManifest, PIXEL_SNAPPER_TEST_ARCHIVE: fakeArchive
-  } });
+  const result = invoke(['setup-snapper', '--project-dir', projectDir], {
+    env: {
+      NODE_ENV: 'test',
+      PIXEL_SNAPPER_TEST_MANIFEST: fakeManifest,
+      PIXEL_SNAPPER_TEST_ARCHIVE: fakeArchive
+    }
+  });
   assert.equal(result.status, 0, result.stderr);
   const installed = json(result.stdout);
   assert.equal(installed.identity.pinnedReleaseTag, productionManifest.release.tag);
@@ -624,11 +1004,14 @@ test('hostile environment variables cannot replace production setup manifest or 
   assert.equal(await fs.readFile(fakeArchive, 'utf8'), 'fake');
   const receipt = JSON.parse(await fs.readFile(installed.receipt, 'utf8'));
   assert.equal(receipt.releaseTag, productionManifest.release.tag);
-  assert.deepEqual(receipt.installedFiles.map((item) => item.path), [
-    productionManifest.assets[receipt.target].executable,
-    'LICENSE-Pixel-Snapper',
-    'THIRD-PARTY-NOTICES',
-    'pixel-snapper.spdx.json',
-    'target-metadata.json'
-  ]);
+  assert.deepEqual(
+    receipt.installedFiles.map((item) => item.path),
+    [
+      productionManifest.assets[receipt.target].executable,
+      'LICENSE-Pixel-Snapper',
+      'THIRD-PARTY-NOTICES',
+      'pixel-snapper.spdx.json',
+      'target-metadata.json'
+    ]
+  );
 });

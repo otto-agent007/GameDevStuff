@@ -199,12 +199,12 @@ Exports include individual transparent PNG frames, transparent spritesheets, eng
 
 Donor work is pinned, license-reviewed, and adopted by concept or isolated component. No donor becomes the architecture.
 
-| Donor | Pin | License | Candidate contribution |
-|---|---|---|---|
-| `openai/skills` `hatch-pet` | `49f948faa9258a0c61caceaf225e179651397431` | Apache-2.0 | run manifests, canonical sources, layout guides, scoped repair, contact sheets, deterministic validation |
-| `0x0funky/agent-sprite-forge` | `64fd0b57d3f2ae117ef0a95e4c2decc25b4c9dd2` | MIT | anchor sheets, identity locking, body/effect separation, scale profiles, cross-action checks, engine contracts |
-| `kyh/vibedgames` | `902ec9e2c42d799446631b9dfb3162b3c61fbc17` | MIT | pose-board prompting, animated-sprite concepts, chroma cleanup, sequence-wide pixel snapping |
-| `notque/vexjoy-agent` | `8b07c8eecf0d56d72f00fb44d2d41d4d54e8c4c1` | MIT | video frame intake, selection, timing metadata, QA artifacts |
+| Donor                         | Pin                                        | License    | Candidate contribution                                                                                         |
+| ----------------------------- | ------------------------------------------ | ---------- | -------------------------------------------------------------------------------------------------------------- |
+| `openai/skills` `hatch-pet`   | `49f948faa9258a0c61caceaf225e179651397431` | Apache-2.0 | run manifests, canonical sources, layout guides, scoped repair, contact sheets, deterministic validation       |
+| `0x0funky/agent-sprite-forge` | `64fd0b57d3f2ae117ef0a95e4c2decc25b4c9dd2` | MIT        | anchor sheets, identity locking, body/effect separation, scale profiles, cross-action checks, engine contracts |
+| `kyh/vibedgames`              | `902ec9e2c42d799446631b9dfb3162b3c61fbc17` | MIT        | pose-board prompting, animated-sprite concepts, chroma cleanup, sequence-wide pixel snapping                   |
+| `notque/vexjoy-agent`         | `8b07c8eecf0d56d72f00fb44d2d41d4d54e8c4c1` | MIT        | video frame intake, selection, timing metadata, QA artifacts                                                   |
 
 Before code is imported, an implementation plan must identify the exact file, useful behavior, rejected behavior, license obligation, and whether GameDevStuff will copy, adapt, or independently implement it. Copied or materially adapted code receives per-file provenance and its required license notice.
 

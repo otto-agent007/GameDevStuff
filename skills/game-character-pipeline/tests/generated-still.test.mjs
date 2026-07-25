@@ -63,19 +63,29 @@ test('generated intake rejects a copied canonical handoff outside the run', asyn
   const copiedPath = path.join(parent, 'copied-handoff.json');
   await fs.copyFile(handoff.path, copiedPath);
 
-  await assert.rejects(
-    loadGenerationHandoff({ file: copiedPath, run }),
-    /immutable generation handoff/
-  );
+  await assert.rejects(loadGenerationHandoff({ file: copiedPath, run }), /immutable generation handoff/);
 });
 
 test('CLI exits 2 with a structured generation handoff and resumes it', async (t) => {
   const { projectRoot, generatedPng } = await generatedFixture(t);
   let handoffError;
   try {
-    await execFile(process.execPath, [
-      cliPath, 'intake', '--project-dir', projectRoot, '--action', 'unlock', '--kind', 'generated-still', '--pose', 'key-turn'
-    ], { cwd: packageDir });
+    await execFile(
+      process.execPath,
+      [
+        cliPath,
+        'intake',
+        '--project-dir',
+        projectRoot,
+        '--action',
+        'unlock',
+        '--kind',
+        'generated-still',
+        '--pose',
+        'key-turn'
+      ],
+      { cwd: packageDir }
+    );
   } catch (error) {
     handoffError = error;
   }
@@ -84,7 +94,9 @@ test('CLI exits 2 with a structured generation handoff and resumes it', async (t
   assert.equal(handoff.status, 'awaiting-generated-image');
   assert.equal(handoff.next.cwd, projectRoot);
 
-  const argv = handoff.next.argv.map((value) => value === '<GENERATED_IMAGE>' ? generatedPng : value === '<DURATION_MS>' ? '140' : value);
+  const argv = handoff.next.argv.map((value) =>
+    value === '<GENERATED_IMAGE>' ? generatedPng : value === '<DURATION_MS>' ? '140' : value
+  );
   const resumed = await execFile(argv[0], argv.slice(1), { cwd: handoff.next.cwd });
   const result = JSON.parse(resumed.stdout);
   assert.equal(result.status, 'intake-complete');

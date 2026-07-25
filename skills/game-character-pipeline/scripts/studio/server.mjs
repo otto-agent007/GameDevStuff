@@ -7,14 +7,7 @@ import { renderReviewRevision, verifyApproval, writeApproval } from '../lib/appr
 import { writeRevision } from '../lib/artifacts.mjs';
 import { validateEditManifest } from '../lib/edits.mjs';
 import { loadInitializedProject, loadRun } from '../lib/run-contract.mjs';
-import {
-  exactObject,
-  portableId,
-  portableRelativePath,
-  sha256File,
-  sha256Value,
-  uniqueList
-} from '../lib/schema.mjs';
+import { exactObject, portableId, portableRelativePath, sha256File, sha256Value, uniqueList } from '../lib/schema.mjs';
 
 const HASH = /^[a-f0-9]{64}$/;
 const BODY_LIMIT = 1024 * 1024;
@@ -74,7 +67,12 @@ async function sendStatic(response, pathname) {
 }
 
 function plainObject(value, label) {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype
+  ) {
     throw new HttpError(400, `${label} must be a JSON object`);
   }
   return value;
@@ -116,17 +114,20 @@ async function readCanonicalJson(file, root, label) {
   const selected = path.resolve(file);
   contained(runRoot, selected, label);
   const stat = await fs.lstat(selected);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new Error(`${label} must be a regular single-link file`);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1)
+    throw new Error(`${label} must be a regular single-link file`);
   const physical = await fs.realpath(selected);
   contained(runRoot, physical, label);
   const document = JSON.parse(await fs.readFile(physical, 'utf8'));
-  if (await sha256File(physical) !== sha256Value(document)) throw new Error(`${label} must use canonical immutable JSON`);
+  if ((await sha256File(physical)) !== sha256Value(document))
+    throw new Error(`${label} must use canonical immutable JSON`);
   return document;
 }
 
 function validateReviewManifest(document) {
   const manifest = structuredClone(document);
-  if (!manifest || typeof manifest !== 'object' || !Array.isArray(manifest.frames)) throw new Error('review manifest must contain frames');
+  if (!manifest || typeof manifest !== 'object' || !Array.isArray(manifest.frames))
+    throw new Error('review manifest must contain frames');
   uniqueList(manifest.frames, 'review manifest frames', { key: ({ id }) => id });
   for (const frame of manifest.frames) {
     portableId(frame.id, 'review frame ID');
@@ -137,11 +138,10 @@ function validateReviewManifest(document) {
 }
 
 async function loadReviewManifest(run, stage, supplied) {
-  if (stage === 'post-snap' && supplied === undefined) throw new Error('post-snap studio stage requires a review manifest');
+  if (stage === 'post-snap' && supplied === undefined)
+    throw new Error('post-snap studio stage requires a review manifest');
   if (supplied && typeof supplied === 'object') return validateReviewManifest(supplied);
-  const file = supplied === undefined
-    ? path.join(run.root, 'reports', 'source.json')
-    : path.resolve(supplied);
+  const file = supplied === undefined ? path.join(run.root, 'reports', 'source.json') : path.resolve(supplied);
   return validateReviewManifest(await readCanonicalJson(file, run.root, 'review manifest'));
 }
 
@@ -150,10 +150,11 @@ async function verifyFrame(runRoot, frame) {
   const selected = path.join(root, ...frame.path.split('/'));
   contained(root, selected, 'review frame');
   const stat = await fs.lstat(selected);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new HttpError(409, 'review frame is not an immutable file');
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1)
+    throw new HttpError(409, 'review frame is not an immutable file');
   const physical = await fs.realpath(selected);
   contained(root, physical, 'review frame');
-  if (await sha256File(physical) !== frame.sha256) throw new HttpError(409, 'frame hash mismatch');
+  if ((await sha256File(physical)) !== frame.sha256) throw new HttpError(409, 'frame hash mismatch');
   return physical;
 }
 
@@ -175,10 +176,15 @@ async function loadEditState(run, stage, sourceSha256) {
     .filter((name) => new RegExp(`^${stem}-\\d{4}\\.json$`).test(name))
     .sort();
   for (const [index, name] of names.entries()) {
-    if (name !== `${stem}-${String(index + 1).padStart(4, '0')}.json`) throw new Error('studio edit revisions are not contiguous');
+    if (name !== `${stem}-${String(index + 1).padStart(4, '0')}.json`)
+      throw new Error('studio edit revisions are not contiguous');
     const file = path.join(run.root, 'edits', name);
     const document = await readCanonicalJson(file, run.root, 'studio edit revision');
-    exactObject(document, ['schemaVersion', 'kind', 'runId', 'stage', 'sourceSha256', 'previousSha256', 'edit'], 'studio edit revision');
+    exactObject(
+      document,
+      ['schemaVersion', 'kind', 'runId', 'stage', 'sourceSha256', 'previousSha256', 'edit'],
+      'studio edit revision'
+    );
     if (
       document.schemaVersion !== 1 ||
       document.kind !== 'studio-edit' ||
@@ -186,7 +192,8 @@ async function loadEditState(run, stage, sourceSha256) {
       document.stage !== stage ||
       document.sourceSha256 !== sourceSha256 ||
       document.previousSha256 !== state.editSha256
-    ) throw new Error('studio edit revision chain is invalid');
+    )
+      throw new Error('studio edit revision chain is invalid');
     state = {
       editRevision: index + 1,
       editSha256: await sha256File(file),
@@ -246,18 +253,22 @@ export async function startStudioServer({
     };
   }
   const validatedComparisonWorkingEdit = comparisonWorkingEdit
-    ? validateEditManifest({
-        ...structuredClone(comparisonWorkingEdit),
-        projectSha256: project.sha256,
-        sourceSha256
-      }, { project, source })
+    ? validateEditManifest(
+        {
+          ...structuredClone(comparisonWorkingEdit),
+          projectSha256: project.sha256,
+          sourceSha256
+        },
+        { project, source }
+      )
     : null;
   const serialize = serialQueue();
   let origin;
 
   const server = http.createServer(async (request, response) => {
     try {
-      if (request.headers.host !== origin.slice('http://'.length)) throw new HttpError(403, 'request Host is not the studio origin');
+      if (request.headers.host !== origin.slice('http://'.length))
+        throw new HttpError(403, 'request Host is not the studio origin');
       const url = new URL(request.url, origin);
       const pathname = url.pathname;
 
@@ -311,9 +322,7 @@ export async function startStudioServer({
         const edit = await readJson(request);
         const result = await serialize(async () => {
           requireMutationHeaders(request, origin, editState.editSha256);
-          const validated = stage === 'post-snap'
-            ? validateEditManifest(edit, { project, source })
-            : edit;
+          const validated = stage === 'post-snap' ? validateEditManifest(edit, { project, source }) : edit;
           const document = {
             schemaVersion: 1,
             kind: 'studio-edit',
@@ -323,7 +332,12 @@ export async function startStudioServer({
             previousSha256: editState.editSha256,
             edit: validated
           };
-          const written = await writeRevision({ root: run.root, area: 'edits', stem: editStem(stage), value: document });
+          const written = await writeRevision({
+            root: run.root,
+            area: 'edits',
+            stem: editStem(stage),
+            value: document
+          });
           editState = { editRevision: written.revision, editSha256: written.sha256, edit: validated };
           return written;
         });
@@ -335,7 +349,8 @@ export async function startStudioServer({
       if (editRevisionMatch) {
         if (request.method !== 'GET') throw methodError('GET');
         const revision = Number(editRevisionMatch[1]);
-        if (revision < 1 || revision > editState.editRevision) throw new HttpError(404, 'studio edit revision does not exist');
+        if (revision < 1 || revision > editState.editRevision)
+          throw new HttpError(404, 'studio edit revision does not exist');
         const file = path.join(run.root, 'edits', `${editStem(stage)}-${String(revision).padStart(4, '0')}.json`);
         const document = await readCanonicalJson(file, run.root, 'studio edit revision');
         sendJson(response, 200, { revision, sha256: await sha256File(file), edit: document.edit });
@@ -344,7 +359,8 @@ export async function startStudioServer({
 
       if (pathname === '/api/approval') {
         if (request.method !== 'POST') throw methodError('POST');
-        if (stage === 'post-snap') throw new HttpError(409, 'post-snap decisions require the signed frame approval workflow');
+        if (stage === 'post-snap')
+          throw new HttpError(409, 'post-snap decisions require the signed frame approval workflow');
         const approval = await readJson(request);
         exactObject(approval, ['approver', 'decision', 'notes'], 'studio approval request');
         const result = await serialize(async () => {
@@ -370,7 +386,8 @@ export async function startStudioServer({
 
       if (pathname === '/api/render') {
         if (request.method !== 'POST') throw methodError('POST');
-        if (stage === 'post-snap') throw new HttpError(409, 'post-snap review must stop before normalization or export');
+        if (stage === 'post-snap')
+          throw new HttpError(409, 'post-snap review must stop before normalization or export');
         const body = await readJson(request);
         exactObject(body, [], 'studio render request');
         const result = await serialize(async () => {
@@ -421,7 +438,7 @@ export async function startStudioServer({
       if (closed) return;
       closed = true;
       await new Promise((resolve, reject) => {
-        server.close((error) => error ? reject(error) : resolve());
+        server.close((error) => (error ? reject(error) : resolve()));
         server.closeIdleConnections?.();
         server.closeAllConnections?.();
       });

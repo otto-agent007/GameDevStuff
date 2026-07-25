@@ -55,12 +55,23 @@ async function readSingleLinkFile(file, label) {
   }
   try {
     const before = await handle.stat();
-    if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1 || lexical.dev !== before.dev || lexical.ino !== before.ino) {
+    if (
+      !before.isFile() ||
+      before.isSymbolicLink() ||
+      before.nlink !== 1 ||
+      lexical.dev !== before.dev ||
+      lexical.ino !== before.ino
+    ) {
       throw new Error(`${label} must be a regular single-link file`);
     }
     const bytes = await handle.readFile();
     const after = await handle.stat();
-    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || after.size !== bytes.length) {
+    if (
+      before.dev !== after.dev ||
+      before.ino !== after.ino ||
+      before.size !== after.size ||
+      after.size !== bytes.length
+    ) {
       throw new Error(`${label} changed while it was captured`);
     }
     return { bytes, stat: after, sha256: bytesHash(bytes) };

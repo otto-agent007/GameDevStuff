@@ -38,7 +38,11 @@ export async function createGenerationHandoff({ project, run, actionId, poseId, 
         'return one transparent lossless PNG candidate, not a spritesheet or pose board'
       ]
     },
-    anchors: project.document.character.anchors.map(({ id, path: anchorPath, sha256 }) => ({ id, path: anchorPath, sha256 })),
+    anchors: project.document.character.anchors.map(({ id, path: anchorPath, sha256 }) => ({
+      id,
+      path: anchorPath,
+      sha256
+    })),
     canvas: project.document.canvas,
     scale: project.document.scale,
     palette: project.document.palette
@@ -56,14 +60,22 @@ export async function createGenerationHandoff({ project, run, actionId, poseId, 
       process.execPath,
       selectedCli,
       'intake',
-      '--resume', run.id,
-      '--project-dir', project.root,
-      '--action', actionId,
-      '--kind', 'generated-still',
-      '--pose', poseId,
-      '--handoff', written.path,
-      '--generated-image', '<GENERATED_IMAGE>',
-      '--duration-ms', '<DURATION_MS>'
+      '--resume',
+      run.id,
+      '--project-dir',
+      project.root,
+      '--action',
+      actionId,
+      '--kind',
+      'generated-still',
+      '--pose',
+      poseId,
+      '--handoff',
+      written.path,
+      '--generated-image',
+      '<GENERATED_IMAGE>',
+      '--duration-ms',
+      '<DURATION_MS>'
     ]
   };
   return { ...written, next };
@@ -86,7 +98,19 @@ async function verifyGenerationHandoff(handoff, run) {
   if (sha256Value(document) !== handoff.sha256) throw new Error('generation handoff hash mismatch');
   exactObject(
     document,
-    ['schemaVersion', 'kind', 'runId', 'projectSha256', 'actionId', 'poseId', 'prompt', 'anchors', 'canvas', 'scale', 'palette'],
+    [
+      'schemaVersion',
+      'kind',
+      'runId',
+      'projectSha256',
+      'actionId',
+      'poseId',
+      'prompt',
+      'anchors',
+      'canvas',
+      'scale',
+      'palette'
+    ],
     'generation handoff'
   );
   if (
@@ -95,7 +119,8 @@ async function verifyGenerationHandoff(handoff, run) {
     document.runId !== run.id ||
     document.projectSha256 !== run.document.projectSha256 ||
     document.actionId !== run.document.sourceRequest.actionId
-  ) throw new Error('generation handoff binding mismatch');
+  )
+    throw new Error('generation handoff binding mismatch');
   portableId(document.poseId, 'generation handoff pose ID');
   return document;
 }
@@ -103,7 +128,12 @@ async function verifyGenerationHandoff(handoff, run) {
 export async function loadGenerationHandoff({ file, run }) {
   const pathValue = path.resolve(file);
   const document = JSON.parse(await fs.readFile(pathValue, 'utf8'));
-  const handoff = { path: pathValue, relative: path.relative(run.root, pathValue).replaceAll('\\', '/'), sha256: sha256Value(document), document };
+  const handoff = {
+    path: pathValue,
+    relative: path.relative(run.root, pathValue).replaceAll('\\', '/'),
+    sha256: sha256Value(document),
+    document
+  };
   await verifyGenerationHandoff(handoff, run);
   return handoff;
 }
@@ -136,18 +166,20 @@ export async function importGeneratedCandidate({ handoff, source, run, durationM
     canvas: { width: decoded.width, height: decoded.height },
     alpha: decoded.alpha,
     timeBase: { numerator: 1, denominator: 1000 },
-    frames: [{
-      index: 0,
-      id: document.poseId,
-      path: decoded.output.relative,
-      sha256: decoded.output.sha256,
-      width: decoded.width,
-      height: decoded.height,
-      timestampMs: 0,
-      durationMs,
-      sourceRect: { x: 0, y: 0, width: decoded.width, height: decoded.height },
-      duplicateOf: null
-    }],
+    frames: [
+      {
+        index: 0,
+        id: document.poseId,
+        path: decoded.output.relative,
+        sha256: decoded.output.sha256,
+        width: decoded.width,
+        height: decoded.height,
+        timestampMs: 0,
+        durationMs,
+        sourceRect: { x: 0, y: 0, width: decoded.width, height: decoded.height },
+        duplicateOf: null
+      }
+    ],
     diagnostics,
     approval: null
   };

@@ -32,10 +32,24 @@ function approvedInitialUrl(value) {
   const parsed = parseUrl(value, message);
   const parts = parsed.pathname.split('/').filter(Boolean);
   const decoded = parts.map(canonicalSegment);
-  if (parsed.protocol !== 'https:' || parsed.hostname !== 'github.com' || parsed.username || parsed.password || parsed.port ||
-      parsed.search || parsed.hash || parts.length !== 6 || decoded.some((part) => part === null) ||
-      decoded[0] !== 'otto-agent007' || decoded[1] !== 'GameDevStuff' || decoded[2] !== 'releases' ||
-      decoded[3] !== 'download' || !RELEASE_TAG.test(decoded[4]) || decoded[5].includes('/') || decoded[5].includes('\\')) {
+  if (
+    parsed.protocol !== 'https:' ||
+    parsed.hostname !== 'github.com' ||
+    parsed.username ||
+    parsed.password ||
+    parsed.port ||
+    parsed.search ||
+    parsed.hash ||
+    parts.length !== 6 ||
+    decoded.some((part) => part === null) ||
+    decoded[0] !== 'otto-agent007' ||
+    decoded[1] !== 'GameDevStuff' ||
+    decoded[2] !== 'releases' ||
+    decoded[3] !== 'download' ||
+    !RELEASE_TAG.test(decoded[4]) ||
+    decoded[5].includes('/') ||
+    decoded[5].includes('\\')
+  ) {
     throw new Error(message);
   }
   return { parsed, revision: RELEASE_TAG.exec(decoded[4])[1] };
@@ -51,18 +65,30 @@ function approvedRedirect(current, location) {
     throw new Error(message);
   }
   const githubRelease = next.hostname === 'github.com' && next.pathname === current.pathname && !next.search;
-  const releaseAsset = next.hostname === 'release-assets.githubusercontent.com' && next.pathname.startsWith('/github-production-release-asset/');
-  if (next.protocol !== 'https:' || next.username || next.password || next.port || next.hash || (!githubRelease && !releaseAsset)) {
+  const releaseAsset =
+    next.hostname === 'release-assets.githubusercontent.com' &&
+    next.pathname.startsWith('/github-production-release-asset/');
+  if (
+    next.protocol !== 'https:' ||
+    next.username ||
+    next.password ||
+    next.port ||
+    next.hash ||
+    (!githubRelease && !releaseAsset)
+  ) {
     throw new Error(message);
   }
   return next;
 }
 
 function validateRequest({ upstreamCommit, expectedSize, expectedSha256, output }) {
-  if (typeof upstreamCommit !== 'string' || !FULL_COMMIT.test(upstreamCommit)) throw new Error('invalid pinned Pixel Snapper upstream commit');
-  if (!Number.isSafeInteger(expectedSize) || expectedSize < 1) throw new Error('invalid pinned Pixel Snapper archive size');
+  if (typeof upstreamCommit !== 'string' || !FULL_COMMIT.test(upstreamCommit))
+    throw new Error('invalid pinned Pixel Snapper upstream commit');
+  if (!Number.isSafeInteger(expectedSize) || expectedSize < 1)
+    throw new Error('invalid pinned Pixel Snapper archive size');
   if (expectedSize > MAX_ARCHIVE_SIZE) throw new Error('Pixel Snapper archive exceeded maximum size');
-  if (typeof expectedSha256 !== 'string' || !SHA256.test(expectedSha256)) throw new Error('invalid pinned Pixel Snapper archive checksum');
+  if (typeof expectedSha256 !== 'string' || !SHA256.test(expectedSha256))
+    throw new Error('invalid pinned Pixel Snapper archive checksum');
   if (typeof output !== 'string' || output.length === 0) throw new Error('invalid Pixel Snapper download output');
 }
 
@@ -77,7 +103,14 @@ async function writeChunk(handle, chunk) {
   return bytes;
 }
 
-export async function downloadPinnedAsset({ url, upstreamCommit, expectedSize, expectedSha256, fetchImpl = fetch, output }) {
+export async function downloadPinnedAsset({
+  url,
+  upstreamCommit,
+  expectedSize,
+  expectedSha256,
+  fetchImpl = fetch,
+  output
+}) {
   validateRequest({ upstreamCommit, expectedSize, expectedSha256, output });
   if (typeof fetchImpl !== 'function') throw new Error('invalid Pixel Snapper fetch implementation');
   const approved = approvedInitialUrl(url);

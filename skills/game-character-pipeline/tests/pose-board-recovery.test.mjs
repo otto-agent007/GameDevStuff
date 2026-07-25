@@ -3,14 +3,8 @@ import crypto from 'node:crypto';
 import test from 'node:test';
 import sharp from 'sharp';
 
-import {
-  poseBoardContractHash,
-  validatePoseBoardContract
-} from '../scripts/lib/pose-board-contract.mjs';
-import {
-  analyzePoseBoard,
-  renderRecoveredCandidate
-} from '../scripts/lib/pose-board-recovery.mjs';
+import { poseBoardContractHash, validatePoseBoardContract } from '../scripts/lib/pose-board-contract.mjs';
+import { analyzePoseBoard, renderRecoveredCandidate } from '../scripts/lib/pose-board-recovery.mjs';
 
 function validContract(overrides = {}) {
   return {
@@ -39,10 +33,7 @@ test('pose-board recovery contract is closed, immutable, and hash-bound', () => 
   assert.match(poseBoardContractHash(selected), /^[a-f0-9]{64}$/);
   assert.equal(poseBoardContractHash(selected), poseBoardContractHash(structuredClone(input)));
 
-  assert.throws(
-    () => validatePoseBoardContract(validContract({ connectivity: 8 })),
-    /connectivity/
-  );
+  assert.throws(() => validatePoseBoardContract(validContract({ connectivity: 8 })), /connectivity/);
   assert.throws(
     () => validatePoseBoardContract({ ...validContract(), surprise: true }),
     /unknown pose-board recovery contract field: surprise/
@@ -51,71 +42,88 @@ test('pose-board recovery contract is closed, immutable, and hash-bound', () => 
 
 test('pose-board recovery contract rejects unsafe nested values and duplicate grouping', () => {
   assert.throws(
-    () => validatePoseBoardContract(validContract({
-      background: {
-        mode: 'color',
-        rgba: [0, 255, 0, 255],
-        tolerance: 8,
-        surprise: true
-      }
-    })),
+    () =>
+      validatePoseBoardContract(
+        validContract({
+          background: {
+            mode: 'color',
+            rgba: [0, 255, 0, 255],
+            tolerance: 8,
+            surprise: true
+          }
+        })
+      ),
     /unknown pose-board background field: surprise/
   );
   assert.throws(
-    () => validatePoseBoardContract(validContract({
-      background: { mode: 'color', rgba: [0, 255, 0], tolerance: 8 }
-    })),
+    () =>
+      validatePoseBoardContract(
+        validContract({
+          background: { mode: 'color', rgba: [0, 255, 0], tolerance: 8 }
+        })
+      ),
     /RGBA/
   );
+  assert.throws(() => validatePoseBoardContract(validContract({ padding: 4096 })), /padding/);
   assert.throws(
-    () => validatePoseBoardContract(validContract({ padding: 4096 })),
-    /padding/
-  );
-  assert.throws(
-    () => validatePoseBoardContract(validContract({
-      expectedCandidates: { min: 9, max: 8 }
-    })),
+    () =>
+      validatePoseBoardContract(
+        validContract({
+          expectedCandidates: { min: 9, max: 8 }
+        })
+      ),
     /candidate count range/
   );
   assert.throws(
-    () => validatePoseBoardContract(validContract({
-      groups: [
-        { id: 'actor-one', componentIds: ['component-0001'] },
-        { id: 'actor-two', componentIds: ['component-0001'] }
-      ]
-    })),
+    () =>
+      validatePoseBoardContract(
+        validContract({
+          groups: [
+            { id: 'actor-one', componentIds: ['component-0001'] },
+            { id: 'actor-two', componentIds: ['component-0001'] }
+          ]
+        })
+      ),
     /component membership must be unique/
   );
 });
 
 test('pose-board recovery contract closes optional chroma spill removal', () => {
-  const selected = validatePoseBoardContract(validContract({
-    background: {
-      mode: 'border',
-      tolerance: 8,
-      spill: { minimumDominance: 24 }
-    }
-  }));
+  const selected = validatePoseBoardContract(
+    validContract({
+      background: {
+        mode: 'border',
+        tolerance: 8,
+        spill: { minimumDominance: 24 }
+      }
+    })
+  );
   assert.deepEqual(selected.background.spill, { minimumDominance: 24 });
   assert.equal(Object.isFrozen(selected.background.spill), true);
   assert.throws(
-    () => validatePoseBoardContract(validContract({
-      background: {
-        mode: 'border',
-        tolerance: 8,
-        spill: { minimumDominance: 0 }
-      }
-    })),
+    () =>
+      validatePoseBoardContract(
+        validContract({
+          background: {
+            mode: 'border',
+            tolerance: 8,
+            spill: { minimumDominance: 0 }
+          }
+        })
+      ),
     /minimumDominance/
   );
   assert.throws(
-    () => validatePoseBoardContract(validContract({
-      background: {
-        mode: 'border',
-        tolerance: 8,
-        spill: { minimumDominance: 24, surprise: true }
-      }
-    })),
+    () =>
+      validatePoseBoardContract(
+        validContract({
+          background: {
+            mode: 'border',
+            tolerance: 8,
+            spill: { minimumDominance: 24, surprise: true }
+          }
+        })
+      ),
     /unknown pose-board chroma spill field: surprise/
   );
 });
@@ -123,7 +131,7 @@ test('pose-board recovery contract closes optional chroma spill removal', () => 
 const BACKGROUND = [0, 255, 0, 255];
 
 function writePixel(pixels, width, x, y, rgba) {
-  pixels.set(rgba, ((y * width) + x) * 4);
+  pixels.set(rgba, (y * width + x) * 4);
 }
 
 async function syntheticBoard({ darkSpill = false } = {}) {
@@ -133,13 +141,30 @@ async function syntheticBoard({ darkSpill = false } = {}) {
   for (let offset = 0; offset < pixels.length; offset += 4) pixels.set(BACKGROUND, offset);
 
   // Candidate one deliberately crosses the nominal x=6 grid boundary.
-  for (const [x, y] of [[4, 1], [5, 1], [6, 1], [7, 1], [5, 2], [6, 2]]) {
+  for (const [x, y] of [
+    [4, 1],
+    [5, 1],
+    [6, 1],
+    [7, 1],
+    [5, 2],
+    [6, 2]
+  ]) {
     writePixel(pixels, width, x, y, [214, 30, 42, 255]);
   }
-  for (const [x, y] of [[0, 4], [1, 4], [2, 4], [1, 5]]) {
+  for (const [x, y] of [
+    [0, 4],
+    [1, 4],
+    [2, 4],
+    [1, 5]
+  ]) {
     writePixel(pixels, width, x, y, [44, 77, 221, 255]);
   }
-  for (const [x, y] of [[9, 5], [10, 5], [9, 6], [10, 6]]) {
+  for (const [x, y] of [
+    [9, 5],
+    [10, 5],
+    [9, 6],
+    [10, 6]
+  ]) {
     writePixel(pixels, width, x, y, [248, 198, 34, 255]);
   }
 
@@ -161,17 +186,12 @@ test('pose-board analysis recovers whole crossing-boundary components determinis
 
   assert.equal(analysis.width, 12);
   assert.equal(analysis.height, 8);
-  assert.deepEqual(analysis.components.map(({ id }) => id), [
-    'component-0001',
-    'component-0002',
-    'component-0003'
-  ]);
+  assert.deepEqual(
+    analysis.components.map(({ id }) => id),
+    ['component-0001', 'component-0002', 'component-0003']
+  );
   assert.equal(analysis.ignoredNoise.length, 2);
-  assert.deepEqual(analysis.proposedOrder, [
-    'candidate-0001',
-    'candidate-0002',
-    'candidate-0003'
-  ]);
+  assert.deepEqual(analysis.proposedOrder, ['candidate-0001', 'candidate-0002', 'candidate-0003']);
   assert.deepEqual(
     analysis.candidates.map(({ componentIds }) => componentIds),
     [['component-0001'], ['component-0002'], ['component-0003']]
@@ -209,7 +229,7 @@ test('pose-board analysis supports dominant-border background and enforces limit
   await assert.rejects(
     analyzePoseBoard({
       bytes: source.bytes,
-      contract: validContract({ maxDecodedRgbaBytes: (12 * 8 * 4) - 1 })
+      contract: validContract({ maxDecodedRgbaBytes: 12 * 8 * 4 - 1 })
     }),
     /decoded RGBA exceeds/
   );
@@ -265,10 +285,12 @@ test('pose-board grouping uses whole components and exact candidate rendering', 
   const analysis = await analyzePoseBoard({
     bytes: source.bytes,
     contract: validContract({
-      groups: [{
-        id: 'actor-and-prop',
-        componentIds: ['component-0002', 'component-0003']
-      }]
+      groups: [
+        {
+          id: 'actor-and-prop',
+          componentIds: ['component-0002', 'component-0003']
+        }
+      ]
     })
   });
 
@@ -287,10 +309,7 @@ test('pose-board grouping uses whole components and exact candidate rendering', 
   });
   assert.equal(rendered.width, 8);
   assert.equal(rendered.height, 6);
-  assert.equal(
-    rendered.sha256,
-    crypto.createHash('sha256').update(rendered.bytes).digest('hex')
-  );
+  assert.equal(rendered.sha256, crypto.createHash('sha256').update(rendered.bytes).digest('hex'));
   assert.deepEqual(rendered.componentIds, ['component-0001']);
   assert.deepEqual(rendered.placement, {
     sourceBounds: { left: 4, top: 1, right: 7, bottom: 2, width: 4, height: 2 },
@@ -300,18 +319,16 @@ test('pose-board grouping uses whole components and exact candidate rendering', 
   const decoded = await sharp(rendered.bytes).ensureAlpha().raw().toBuffer();
   for (let y = 0; y < rendered.height; y += 1) {
     for (let x = 0; x < rendered.width; x += 1) {
-      const outputOffset = ((y * rendered.width) + x) * 4;
+      const outputOffset = (y * rendered.width + x) * 4;
       const outputPixel = [...decoded.subarray(outputOffset, outputOffset + 4)];
       const sourceX = x - rendered.placement.outputOffset.x + rendered.placement.sourceBounds.left;
       const sourceY = y - rendered.placement.outputOffset.y + rendered.placement.sourceBounds.top;
-      const selected = analysis.components[0].pixels.some(
-        (pixel) => pixel.x === sourceX && pixel.y === sourceY
-      );
+      const selected = analysis.components[0].pixels.some((pixel) => pixel.x === sourceX && pixel.y === sourceY);
       if (!selected) {
         assert.deepEqual(outputPixel, [0, 0, 0, 0]);
         continue;
       }
-      const sourceOffset = ((sourceY * source.width) + sourceX) * 4;
+      const sourceOffset = (sourceY * source.width + sourceX) * 4;
       assert.deepEqual(outputPixel, [...source.pixels.subarray(sourceOffset, sourceOffset + 4)]);
     }
   }

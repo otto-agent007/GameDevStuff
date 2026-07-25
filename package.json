@@ -1,0 +1,34 @@
+{
+  "name": "game-dev-stuff",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Auditable install-by-copy game-asset workflow skill bundles.",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "workspaces": [
+    "skills/game-character-pipeline",
+    "skills/pixel-sprite-animation-pipeline"
+  ],
+  "scripts": {
+    "test": "npm run test:workspace && npm run test:workspaces",
+    "test:workspace": "node --test tests/*.test.mjs",
+    "test:workspaces": "npm run test --workspaces --if-present",
+    "lint": "eslint .",
+    "format:check": "prettier --check .",
+    "format:write": "prettier --write .",
+    "browser": "npm run test:browser --workspace=game-character-pipeline",
+    "acceptance": "npm run acceptance --workspace=game-character-pipeline",
+    "package-boundary": "node --test skills/game-character-pipeline/tests/package-boundary.test.mjs skills/pixel-sprite-animation-pipeline/tests/package-boundary.test.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@playwright/test": "1.61.1",
+    "eslint": "9.39.5",
+    "globals": "16.5.0",
+    "prettier": "3.9.6"
+  },
+  "optionalDependencies": {
+    "@img/sharp-win32-x64": "0.35.3"
+  }
+}

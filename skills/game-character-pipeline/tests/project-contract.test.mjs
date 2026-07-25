@@ -30,7 +30,10 @@ test('project contract binds one global scale and explicit action behavior', asy
   assert.equal(project.scale.integer, 2);
   assert.deepEqual(
     project.actions.map(({ id, loopMode }) => [id, loopMode]),
-    [['idle', 'loop'], ['unlock', 'hold-last']]
+    [
+      ['idle', 'loop'],
+      ['unlock', 'hold-last']
+    ]
   );
   assert.equal(Object.isFrozen(project), true);
   assert.equal(Object.isFrozen(project.actions[0].sources), true);
@@ -53,7 +56,10 @@ test('project contract accepts an actor-only project without sockets or contacts
 
   const project = validateProjectContract(input);
 
-  assert.deepEqual(project.tracks.map(({ id }) => id), ['actor']);
+  assert.deepEqual(
+    project.tracks.map(({ id }) => id),
+    ['actor']
+  );
   assert.deepEqual(project.sockets, []);
   assert.deepEqual(project.contacts, []);
 });
@@ -92,7 +98,10 @@ test('project contract closes palette, IDs, references, source kinds, and loop m
 test('project contract binds scale, canvas, attachment, contact, and approval invariants', async () => {
   const scale = await validProject();
   scale.scale.runtime.width = 191;
-  assert.throws(() => validateProjectContract(scale), /runtime dimensions must equal canvas dimensions times global scale/);
+  assert.throws(
+    () => validateProjectContract(scale),
+    /runtime dimensions must equal canvas dimensions times global scale/
+  );
 
   const attachment = await validProject();
   attachment.tracks[1].attachTo = 'missing';

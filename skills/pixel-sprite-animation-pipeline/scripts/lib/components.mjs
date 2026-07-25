@@ -76,42 +76,41 @@ export function connectedComponents(image, isForeground) {
   const seen = new Uint8Array(image.width * image.height);
   const components = [];
 
-  for (let y = 0; y < image.height; y += 1) for (let x = 0; x < image.width; x += 1) {
-    const start = y * image.width + x;
-    if (seen[start] || !isForeground(x, y)) continue;
+  for (let y = 0; y < image.height; y += 1)
+    for (let x = 0; x < image.width; x += 1) {
+      const start = y * image.width + x;
+      if (seen[start] || !isForeground(x, y)) continue;
 
-    const pending = [[x, y]];
-    const pixels = [];
-    seen[start] = 1;
-    while (pending.length > 0) {
-      const [currentX, currentY] = pending.pop();
-      pixels.push([currentX, currentY]);
-      for (const [nextX, nextY] of [
-        [currentX - 1, currentY],
-        [currentX + 1, currentY],
-        [currentX, currentY - 1],
-        [currentX, currentY + 1]
-      ]) {
-        if (nextX < 0 || nextY < 0 || nextX >= image.width || nextY >= image.height) continue;
-        const next = nextY * image.width + nextX;
-        if (!seen[next] && isForeground(nextX, nextY)) {
-          seen[next] = 1;
-          pending.push([nextX, nextY]);
+      const pending = [[x, y]];
+      const pixels = [];
+      seen[start] = 1;
+      while (pending.length > 0) {
+        const [currentX, currentY] = pending.pop();
+        pixels.push([currentX, currentY]);
+        for (const [nextX, nextY] of [
+          [currentX - 1, currentY],
+          [currentX + 1, currentY],
+          [currentX, currentY - 1],
+          [currentX, currentY + 1]
+        ]) {
+          if (nextX < 0 || nextY < 0 || nextX >= image.width || nextY >= image.height) continue;
+          const next = nextY * image.width + nextX;
+          if (!seen[next] && isForeground(nextX, nextY)) {
+            seen[next] = 1;
+            pending.push([nextX, nextY]);
+          }
         }
       }
+      components.push(pixels);
     }
-    components.push(pixels);
-  }
 
   return components.sort((a, b) => b.length - a.length);
 }
 
 export async function extractPrimaryComponent(file, options = {}) {
-  const image = options.image ?? await readRgba(file);
+  const image = options.image ?? (await readRgba(file));
   const alphaThreshold = options.alphaThreshold ?? 0;
-  const isForeground = options.isForeground ?? ((x, y) => (
-    image.data[(y * image.width + x) * 4 + 3] > alphaThreshold
-  ));
+  const isForeground = options.isForeground ?? ((x, y) => image.data[(y * image.width + x) * 4 + 3] > alphaThreshold);
   const components = connectedComponents(image, isForeground);
   if (components.length === 0) throw new Error(`frame ${file} contains no foreground`);
 

@@ -4,18 +4,18 @@ Validation reads the produced PNG, JSON, and WebP artifacts and compares them wi
 
 ## Automatic deterministic actions
 
-| Failure | Action |
-|---|---|
-| `CANVAS_SIZE` | Re-pad the unchanged native foreground. |
-| `NON_INTEGER_SCALE` | Re-export from the nearest canonical ancestor with an equal integer scale on both axes. |
-| `INTERMEDIATE_COLORS` | Re-export with nearest-neighbor pixel blocks. |
-| `BACKGROUND_REMAINS` | Re-key with the recorded background color and tolerance. |
-| `PIVOT_DRIFT`, `BASELINE_DRIFT` | Re-align to the shared configured pivot. |
-| `GLOBAL_SCALE_DRIFT` | Re-normalize the set with one integer scale. |
-| `FRAME_BLEED` | Re-pad or rebuild the affected sheet cell. |
-| Metadata-only `FRAME_COUNT` or `SOURCE_HASH_MISMATCH` with a trusted artifact | Re-export metadata from the independently verified artifact. |
-| `TIMING_MISMATCH`, `METADATA_MISMATCH` | Re-export metadata from verified artifacts. |
-| `PREVIEW_MISMATCH` | Re-export the animated preview. |
+| Failure                                                                       | Action                                                                                  |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `CANVAS_SIZE`                                                                 | Re-pad the unchanged native foreground.                                                 |
+| `NON_INTEGER_SCALE`                                                           | Re-export from the nearest canonical ancestor with an equal integer scale on both axes. |
+| `INTERMEDIATE_COLORS`                                                         | Re-export with nearest-neighbor pixel blocks.                                           |
+| `BACKGROUND_REMAINS`                                                          | Re-key with the recorded background color and tolerance.                                |
+| `PIVOT_DRIFT`, `BASELINE_DRIFT`                                               | Re-align to the shared configured pivot.                                                |
+| `GLOBAL_SCALE_DRIFT`                                                          | Re-normalize the set with one integer scale.                                            |
+| `FRAME_BLEED`                                                                 | Re-pad or rebuild the affected sheet cell.                                              |
+| Metadata-only `FRAME_COUNT` or `SOURCE_HASH_MISMATCH` with a trusted artifact | Re-export metadata from the independently verified artifact.                            |
+| `TIMING_MISMATCH`, `METADATA_MISMATCH`                                        | Re-export metadata from verified artifacts.                                             |
+| `PREVIEW_MISMATCH`                                                            | Re-export the animated preview.                                                         |
 
 Automatic operations are allowlisted and reversible. The complete batch is preflighted before a correction directory is created. A batch is staged, receives a versioned manifest, and is atomically moved into a numbered `correction-NN` directory. An output path outside that directory, a path/symlink/hard-link alias of an input, an unavailable operation, or any operation error rejects the batch and removes its staging directory. Equivalent work is identified by operation, target, and failed input; it shares one execution while every original failure keeps a traceable action record.
 
@@ -35,11 +35,11 @@ One deterministic execution may serve equivalent failures, but every original fa
 
 ## User-review actions
 
-| Failure | Action |
-|---|---|
+| Failure         | Action                                                                          |
+| --------------- | ------------------------------------------------------------------------------- |
 | `PALETTE_DRIFT` | Preview a nearest-palette remap and ask whether meaningful detail is preserved. |
-| `LOOP_SEAM` | Review timing or a possible transition frame. |
-| Unknown code | Stop for review; never infer a new automatic operation. |
+| `LOOP_SEAM`     | Review timing or a possible transition frame.                                   |
+| Unknown code    | Stop for review; never infer a new automatic operation.                         |
 
 Frame-count and source-hash failures are not automatically metadata problems. Metadata may be regenerated only when the failure is confined to metadata and an independently trusted artifact establishes the correct value. Runtime count disagreements, changed source files, anchor hash changes, and ambiguous provenance stop for review.
 
@@ -47,11 +47,11 @@ Stop whenever more than one artistically valid correction exists, palette remapp
 
 ## Generative-retry actions
 
-| Failure | Action |
-|---|---|
-| `CLIPPED_FOREGROUND` | Regenerate only the affected frame with more padding. |
-| `IDENTITY_DRIFT` | Regenerate only the affected frame from the locked anchor. |
-| `DUPLICATE_POSE` | Regenerate only the duplicate pose. |
+| Failure              | Action                                                     |
+| -------------------- | ---------------------------------------------------------- |
+| `CLIPPED_FOREGROUND` | Regenerate only the affected frame with more padding.      |
+| `IDENTITY_DRIFT`     | Regenerate only the affected frame from the locked anchor. |
+| `DUPLICATE_POSE`     | Regenerate only the duplicate pose.                        |
 
 Identity, pose duplication, and loop quality are artistic or semantic checks. They stay human/generative-gated unless the run supplies explicit review evidence; deterministic pixel metrics must not claim to prove identity.
 

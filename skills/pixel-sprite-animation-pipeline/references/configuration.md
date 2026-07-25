@@ -21,10 +21,10 @@ palette:
   mode: preserve-anchor
 background:
   mode: border
-  color: null                 # or { r: 0, g: 255, b: 0, a: 255 }
-  tolerance: 0                # maximum per-channel RGB difference
+  color: null # or { r: 0, g: 255, b: 0, a: 255 }
+  tolerance: 0 # maximum per-channel RGB difference
 foreground:
-  retentionPolicy: all       # all | largest | reject-multiple
+  retentionPolicy: all # all | largest | reject-multiple
   minimumComponentPixels: 1
 snapper:
   executable: spritefusion-pixel-snapper

@@ -44,7 +44,10 @@ test('immutable copy rejects symlinks, hard links, traversal, and linked targets
   const hardAlias = path.join(root, 'hard-alias.bin');
   await fs.writeFile(hardSource, 'hard');
   await fs.link(hardSource, hardAlias);
-  await assert.rejects(copyImmutable({ source: hardSource, root, relative: 'source/b.bin' }), /regular single-link file/);
+  await assert.rejects(
+    copyImmutable({ source: hardSource, root, relative: 'source/b.bin' }),
+    /regular single-link file/
+  );
   await assert.rejects(copyImmutable({ source: outside, root, relative: '../escape.bin' }), /portable relative path/);
 
   const published = await copyImmutable({ source: outside, root, relative: 'source/c.bin' });
@@ -68,7 +71,10 @@ test('revision writes use canonical JSON and allocate immutable sequence numbers
 
 test('revision writes reject unsafe areas and stems before creating files', async (t) => {
   const root = await sandbox(t);
-  await assert.rejects(writeRevision({ root, area: '../outside', stem: 'edit', value: {} }), /revision area is invalid/);
+  await assert.rejects(
+    writeRevision({ root, area: '../outside', stem: 'edit', value: {} }),
+    /revision area is invalid/
+  );
   await assert.rejects(writeRevision({ root, area: 'edits', stem: 'CON', value: {} }), /portable ID/);
   assert.deepEqual(await fs.readdir(root), []);
 });

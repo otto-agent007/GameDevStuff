@@ -77,7 +77,7 @@ jobs:
       - name: Set up locked Node runtime
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 20.19.6
+          node-version: 22.12.0
 
       - name: Verify approved source, tag, minimum fixture, and exact license bytes
         shell: bash
@@ -176,9 +176,9 @@ jobs:
       - name: Set up locked Node runtime
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 20.19.6
+          node-version: 22.12.0
           cache: npm
-          cache-dependency-path: release-tools/skills/pixel-sprite-animation-pipeline/npm-shrinkwrap.json
+          cache-dependency-path: release-tools/package-lock.json
 
       - name: Verify upstream tag and source commit
         shell: bash
@@ -192,7 +192,7 @@ jobs:
       - name: Install release-tool dependencies
         shell: bash
         run: npm ci --ignore-scripts
-        working-directory: release-tools/skills/pixel-sprite-animation-pipeline
+        working-directory: release-tools
 
       - name: Install locked Rust toolchain and target
         shell: bash
@@ -293,14 +293,13 @@ jobs:
       - name: Set up locked Node runtime
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 20.19.6
+          node-version: 22.12.0
           cache: npm
-          cache-dependency-path: skills/pixel-sprite-animation-pipeline/npm-shrinkwrap.json
+          cache-dependency-path: package-lock.json
 
       - name: Install release-tool dependencies
         shell: bash
         run: npm ci --ignore-scripts
-        working-directory: skills/pixel-sprite-animation-pipeline
 
       - name: Download all untrusted build artifacts without execution
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
