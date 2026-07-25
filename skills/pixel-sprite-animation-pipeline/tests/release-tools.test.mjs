@@ -615,17 +615,18 @@ test('workflow policy is pinned, least-privileged, native, locked and publish ne
     }))
   );
   const pins = [...source.matchAll(/uses:\s*([^\s]+)/g)].map((match) => match[1]);
+  const allowedActions = [
+    'actions/attest',
+    'actions/checkout',
+    'actions/download-artifact',
+    'actions/setup-node',
+    'actions/upload-artifact'
+  ];
   assert.ok(pins.length >= 5);
+  assert.deepEqual([...new Set(pins.map((pin) => pin.split('@', 1)[0]))].sort(), allowedActions);
   assert.ok(
-    pins.every((pin) =>
-      [
-        'actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5',
-        'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
-        'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
-        'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093',
-        'actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26'
-      ].includes(pin)
-    )
+    pins.every((pin) => /^[^@\s]+@[a-f0-9]{40}$/.test(pin)),
+    `every release action must use a full SHA, received: ${pins.join(', ')}`
   );
   for (const required of [
     'rustup toolchain install 1.88.0',
@@ -665,6 +666,14 @@ test('workflow policy is pinned, least-privileged, native, locked and publish ne
     attributes,
     /^skills\/pixel-sprite-animation-pipeline\/references\/pixel-snapper-upstream\.LICENSE -text$/m
   );
+});
+
+test('release policy tests do not pin a Dependabot-managed action revision', async () => {
+  const source = await fs.readFile(
+    path.join(ROOT, 'skills/pixel-sprite-animation-pipeline/tests/release-tools.test.mjs'),
+    'utf8'
+  );
+  assert.doesNotMatch(source, /actions\/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093/);
 });
 
 test('release workflow verifies committed license bytes independent of checkout line endings', async () => {
