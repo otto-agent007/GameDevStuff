@@ -2,6 +2,10 @@
 
 Auditable game-asset workflows for Codex. This repository contains two install-by-copy skill bundles; neither is published to npm.
 
+[![Skills CI](https://github.com/otto-agent007/GameDevStuff/actions/workflows/skills.yml/badge.svg?branch=main)](https://github.com/otto-agent007/GameDevStuff/actions/workflows/skills.yml) [![Pixel Snapper release](https://github.com/otto-agent007/GameDevStuff/actions/workflows/pixel-snapper-release.yml/badge.svg?branch=main)](https://github.com/otto-agent007/GameDevStuff/actions/workflows/pixel-snapper-release.yml)
+
+Read the [Documentation index](docs/README.md) for shipped features, their plans, and supporting designs.
+
 ## Skills
 
 - **Game Character Pipeline** orchestrates character-animation intake, Frame Studio review, approvals, deterministic production, validation, and audit evidence.
@@ -31,6 +35,10 @@ node skills/pixel-sprite-animation-pipeline/scripts/cli.mjs --help
 ```
 
 Run `npm run package-boundary` to inspect both install-by-copy package boundaries. An installed or copied bundle has no root lockfile, so install only its runtime dependencies with `npm install --omit=dev` from that bundle directory before use.
+
+## Skill releases
+
+Both skills are versioned and released together as immutable GitHub Release assets named `skills-vX.Y.Z`. They are install-by-copy bundles, not npm packages: download both `.tgz` files and `SHA256SUMS` from the release, verify `sha256sum -c SHA256SUMS`, then copy or install each bundle where it will run. Maintainers dispatch **Skills release** from `main` with the exact shared version after updating `CHANGELOG.md`; the protected publish environment approves the release.
 
 ## Exit classes
 

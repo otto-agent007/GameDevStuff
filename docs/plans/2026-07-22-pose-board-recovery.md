@@ -670,8 +670,8 @@ Run:
 
 ```bash
 rg -n -i "private-audit|private character|forbidden integration root|/tmp/|/mnt/" \
-  skills/game-character-pipeline docs/superpowers/specs/2026-07-22-pose-board-recovery-design.md \
-  docs/superpowers/plans/2026-07-22-pose-board-recovery.md
+  skills/game-character-pipeline docs/specs/2026-07-22-pose-board-recovery-design.md \
+  docs/plans/2026-07-22-pose-board-recovery.md
 git status --short
 ```
 

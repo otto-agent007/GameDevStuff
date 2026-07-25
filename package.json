@@ -1,7 +1,7 @@
 {
   "name": "game-dev-stuff",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Auditable install-by-copy game-asset workflow skill bundles.",
   "engines": {
     "node": ">=22.12.0"
@@ -19,6 +19,7 @@
     "format:write": "prettier --write .",
     "browser": "npm run test:browser --workspace=game-character-pipeline",
     "acceptance": "npm run acceptance --workspace=game-character-pipeline",
+    "coverage": "npm run coverage --workspace=game-character-pipeline && npm run coverage --workspace=pixel-sprite-animation-pipeline",
     "package-boundary": "node --test skills/game-character-pipeline/tests/package-boundary.test.mjs skills/pixel-sprite-animation-pipeline/tests/package-boundary.test.mjs"
   },
   "devDependencies": {

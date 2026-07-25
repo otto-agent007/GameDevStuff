@@ -1,6 +1,6 @@
 ---
 name: game-character-pipeline
-description: Use when a user needs to create, import, recover, review, produce, validate, or audit game-character sprite animation from an approved anchor, character brief, chroma-key pose board, PNG sequence, animated GIF, APNG, WebP, video, or generated still, including Frame Studio, pivots, sockets, contacts, Pixel Snapper, engine export, reproducibility, or private production audits.
+description: Use for auditable character-animation intake, Frame Studio review, and engine-neutral sprite exports.
 ---
 
 # Game Character Pipeline
